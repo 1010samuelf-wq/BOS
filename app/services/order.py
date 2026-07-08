@@ -145,6 +145,7 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
         fulfillment_type=payload.fulfillment_type,
         delivery_price=delivery if payload.fulfillment_type == FulfillmentType.delivery else None,
         delivery_address=payload.delivery_address,
+        delivery_name=payload.delivery_name,
         card_message=payload.card_message,
         payment_timing=payload.payment_timing,
         payment_method=payload.payment_method,
@@ -227,7 +228,7 @@ def update_order(db: Session, order_id: int, payload: OrderUpdate, user: User) -
 
     for field in (
         "client_name", "client_phone", "needed_for_date",
-        "fulfillment_type", "delivery_address", "card_message", "status",
+        "fulfillment_type", "delivery_address", "delivery_name", "card_message", "status",
     ):
         if field in data:
             setattr(order, field, data[field])

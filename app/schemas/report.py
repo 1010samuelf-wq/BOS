@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -58,10 +58,11 @@ class DeliveryItem(BaseModel):
 
 class DeliveryRow(BaseModel):
     order_id: int
-    needed_for_date: date | None
+    needed_for_date: datetime | None  # full datetime so delivery times show
     client_name: str
     client_phone: str | None
     delivery_address: str | None
+    delivery_name: str | None
     items: list[DeliveryItem]
     box_count: int            # distinct line items, NOT summed quantity (§2A)
     total: Decimal

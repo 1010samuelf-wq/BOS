@@ -83,11 +83,25 @@ export default function NewOrder() {
             value={draft.clientName} onChange={(e) => set({ clientName: e.target.value })} />
           <input className="input" style={{ maxWidth: 160 }} placeholder="Phone"
             value={draft.clientPhone} onChange={(e) => set({ clientPhone: e.target.value })} />
-          <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <span className="muted" style={{ fontSize: 11 }}>Needed for (date &amp; time)</span>
-            <input className="input" type="datetime-local" style={{ maxWidth: 220 }}
-              value={draft.neededFor ?? ""} onChange={(e) => set({ neededFor: e.target.value || null })} />
-          </label>
+          {(() => {
+            const nd = draft.neededFor ? draft.neededFor.split("T")[0] : "";
+            const nt = draft.neededFor?.includes("T") ? draft.neededFor.split("T")[1].slice(0, 5) : "";
+            return (
+              <>
+                <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span className="muted" style={{ fontSize: 11 }}>Needed for (date)</span>
+                  <input className="input" type="date" style={{ maxWidth: 160 }} value={nd}
+                    onChange={(e) => set({ neededFor: e.target.value ? (nt ? `${e.target.value}T${nt}` : e.target.value) : null })} />
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span className="muted" style={{ fontSize: 11 }}>Time (optional)</span>
+                  <input className="input" type="time" style={{ maxWidth: 130 }} value={nt} disabled={!nd}
+                    title={!nd ? "Pick a date first" : ""}
+                    onChange={(e) => set({ neededFor: nd ? (e.target.value ? `${nd}T${e.target.value}` : nd) : null })} />
+                </label>
+              </>
+            );
+          })()}
         </div>
         <div className="row" style={{ flexWrap: "wrap", marginTop: 12 }}>
           <div className="tabs">
@@ -99,6 +113,8 @@ export default function NewOrder() {
           </div>
           {draft.fulfillment === "delivery" && (
             <>
+              <input className="input" style={{ maxWidth: 180 }} placeholder="Delivery name (recipient)"
+                value={draft.deliveryName} onChange={(e) => set({ deliveryName: e.target.value })} />
               <input className="input" style={{ maxWidth: 130 }} placeholder="Delivery $"
                 value={draft.deliveryPrice} onChange={(e) => set({ deliveryPrice: e.target.value })} />
               <input className="input" style={{ flex: 1, minWidth: 180 }} placeholder="Delivery address *"
@@ -106,7 +122,7 @@ export default function NewOrder() {
             </>
           )}
         </div>
-        <input className="input" style={{ marginTop: 12 }} placeholder="Card message (written on the cake/card)"
+        <input className="input" style={{ marginTop: 12 }} placeholder="Card message"
           value={draft.cardMessage} onChange={(e) => set({ cardMessage: e.target.value })} />
       </div>
 

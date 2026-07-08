@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { listOrders } from "../api/endpoints";
 import type { Order, OrderStatus } from "../api/types";
 import { Loading, PageHead } from "../components/ui";
+import { formatNeeded, neededDeadline } from "../order/dates";
 
 const COLUMNS: { key: OrderStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
@@ -21,7 +22,7 @@ function isOverdue(o: Order): boolean {
     o.fulfillment_status !== "fulfilled" &&
     o.status !== "cancelled" &&
     !!o.needed_for_date &&
-    new Date(o.needed_for_date).getTime() < Date.now()
+    neededDeadline(o.needed_for_date) < Date.now()
   );
 }
 
@@ -117,7 +118,7 @@ function OrdersList() {
                 <tr key={o.id} className={isOverdue(o) ? "overdue" : ""} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${o.id}`)}>
                   <td>#{o.id}</td>
                   <td>{o.client_name}</td>
-                  <td>{o.needed_for_date ? new Date(o.needed_for_date).toLocaleDateString() : "—"}</td>
+                  <td>{o.needed_for_date ? formatNeeded(o.needed_for_date) : "—"}</td>
                   <td style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</td>
                   <td style={{ textTransform: "capitalize" }}>{o.fulfillment_status === "fulfilled" ? "fulfilled" : o.status.replace("_", " ")}</td>
                   <td className={o.paid_status === "unpaid" ? "tone-low" : ""}>{o.paid_status}</td>

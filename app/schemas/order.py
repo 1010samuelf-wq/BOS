@@ -39,6 +39,7 @@ class OrderCreate(BaseModel):
     fulfillment_type: FulfillmentType
     delivery_price: Decimal | None = Field(default=None, ge=0)
     delivery_address: str | None = None
+    delivery_name: str | None = None
     card_message: str | None = None
 
     payment_timing: PaymentTiming
@@ -71,6 +72,7 @@ class OrderUpdate(BaseModel):
     fulfillment_type: FulfillmentType | None = None
     delivery_price: Decimal | None = Field(default=None, ge=0)
     delivery_address: str | None = None
+    delivery_name: str | None = None
     card_message: str | None = None
     status: OrderStatus | None = None
     items: list[OrderItemIn] | None = None
@@ -133,6 +135,7 @@ class OrderOut(BaseModel):
     fulfillment_type: FulfillmentType
     delivery_price: Decimal | None
     delivery_address: str | None
+    delivery_name: str | None
     card_message: str | None
     payment_timing: PaymentTiming
     payment_method: PaymentMethod | None

@@ -37,6 +37,7 @@ export interface Draft {
   fulfillment: FulfillmentType;
   deliveryPrice: string;
   deliveryAddress: string;
+  deliveryName: string;
   cardMessage: string;
   paymentTiming: PaymentTiming;
   paymentMethod: PaymentMethod | null;
@@ -61,6 +62,7 @@ export function emptyDraft(): Draft {
     fulfillment: "pickup",
     deliveryPrice: "",
     deliveryAddress: "",
+    deliveryName: "",
     cardMessage: "",
     paymentTiming: "now",
     paymentMethod: null,
@@ -128,6 +130,7 @@ export function buildPayload(d: Draft): OrderCreatePayload {
     fulfillment_type: d.fulfillment,
     delivery_price: isDelivery && d.deliveryPrice.trim() !== "" ? d.deliveryPrice.trim() : null,
     delivery_address: isDelivery ? d.deliveryAddress.trim() : null,
+    delivery_name: isDelivery ? d.deliveryName.trim() || null : null,
     card_message: d.cardMessage.trim() || null,
     payment_timing: d.paymentTiming,
     payment_method: d.paymentTiming === "now" ? d.paymentMethod : null,

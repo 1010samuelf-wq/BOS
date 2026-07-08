@@ -49,6 +49,7 @@ def export_deliveries(
         [
             row.needed_for_date or "",
             row.client_name,
+            row.delivery_name or "",
             row.client_phone or "",
             row.delivery_address or "",
             "; ".join(f"{i.quantity}× {i.product_name}" for i in row.items),
@@ -60,6 +61,6 @@ def export_deliveries(
     ]
     return csv_response(
         f"deliveries_{f}_{t}.csv",
-        ["needed_for", "client", "phone", "address", "items", "boxes", "total", "paid"],
+        ["needed_for", "client", "recipient", "phone", "address", "items", "boxes", "total", "paid"],
         rows,
     )

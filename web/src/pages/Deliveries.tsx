@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { exportDeliveriesCsv, getDeliveries } from "../api/endpoints";
 import { Loading, PageHead } from "../components/ui";
+import { formatNeeded } from "../order/dates";
 
 export default function Deliveries() {
   const today = new Date().toISOString().slice(0, 10);
@@ -26,6 +27,7 @@ export default function Deliveries() {
               <tr>
                 <th>Needed</th>
                 <th>Client</th>
+                <th>Recipient</th>
                 <th>Address</th>
                 <th>Items</th>
                 <th className="num">Boxes</th>
@@ -36,11 +38,12 @@ export default function Deliveries() {
             <tbody>
               {(q.data?.rows ?? []).map((r) => (
                 <tr key={r.order_id}>
-                  <td>{r.needed_for_date ? new Date(r.needed_for_date).toLocaleDateString() : "—"}</td>
+                  <td>{r.needed_for_date ? formatNeeded(r.needed_for_date) : "—"}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{r.client_name}</div>
                     <div className="muted" style={{ fontSize: 12 }}>{r.client_phone}</div>
                   </td>
+                  <td>{r.delivery_name ?? "—"}</td>
                   <td>{r.delivery_address ?? "—"}</td>
                   <td className="muted">{r.items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}</td>
                   <td className="num">{r.box_count}</td>

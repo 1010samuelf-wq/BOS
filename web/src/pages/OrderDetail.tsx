@@ -9,13 +9,14 @@ import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { Order, PaymentMethod } from "../api/types";
 import { ErrorMsg, Loading } from "../components/ui";
+import { formatNeeded, neededDeadline } from "../order/dates";
 
 const PIPELINE: Order["status"][] = ["pending", "in_progress", "ready"];
 const METHODS: PaymentMethod[] = ["cash", "card", "etransfer"];
 
 function isOverdue(o: Order): boolean {
   return o.fulfillment_status !== "fulfilled" && o.status !== "cancelled" &&
-    !!o.needed_for_date && new Date(o.needed_for_date).getTime() < Date.now();
+    !!o.needed_for_date && neededDeadline(o.needed_for_date) < Date.now();
 }
 
 export default function OrderDetail() {
@@ -56,7 +57,7 @@ export default function OrderDetail() {
           <h1 style={{ margin: 0, ...(overdue ? { color: "var(--danger)" } : {}) }}>Order #{o.id} · {o.client_name}</h1>
           <div className="muted" style={{ textTransform: "capitalize" }}>
             {o.fulfillment_type} · {o.client_phone ?? "no phone"}
-            {o.needed_for_date ? ` · needed ${new Date(o.needed_for_date).toLocaleString()}` : ""}
+            {o.needed_for_date ? ` · needed ${formatNeeded(o.needed_for_date)}` : ""}
             {overdue ? " · OVERDUE" : ""}
           </div>
           {o.locked_by != null && <div style={{ color: "var(--warn)", fontStyle: "italic" }}>Being edited on another device</div>}
@@ -81,6 +82,7 @@ export default function OrderDetail() {
           </div>
         ))}
         {o.card_message && <p style={{ fontStyle: "italic" }}>🎂 “{o.card_message}”</p>}
+        {o.delivery_name && <p>🧑 {o.delivery_name}</p>}
         {o.delivery_address && <p>📍 {o.delivery_address}</p>}
       </div>
 

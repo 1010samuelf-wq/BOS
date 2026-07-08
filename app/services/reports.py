@@ -229,10 +229,11 @@ def deliveries_manifest(db: Session, from_date: date, to_date: date) -> Deliveri
     rows = [
         DeliveryRow(
             order_id=o.id,
-            needed_for_date=o.needed_for_date.date() if o.needed_for_date else None,
+            needed_for_date=o.needed_for_date,
             client_name=o.client_name,
             client_phone=o.client_phone,
             delivery_address=o.delivery_address,
+            delivery_name=o.delivery_name,
             items=[DeliveryItem(product_name=i.product_name, quantity=i.quantity) for i in o.items],
             box_count=len(o.items),  # distinct line items, not summed qty (§2A)
             total=o.total,

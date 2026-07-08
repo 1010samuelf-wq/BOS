@@ -80,6 +80,7 @@ export interface Order {
   fulfillment_type: FulfillmentType;
   delivery_price: string | null;
   delivery_address: string | null;
+  delivery_name: string | null;
   card_message: string | null;
   payment_timing: PaymentTiming;
   payment_method: PaymentMethod | null;
@@ -101,6 +102,7 @@ export interface OrderCreatePayload {
   fulfillment_type: FulfillmentType;
   delivery_price?: string | null;
   delivery_address?: string | null;
+  delivery_name?: string | null;
   card_message?: string | null;
   payment_timing: PaymentTiming;
   payment_method?: PaymentMethod | null;
@@ -155,6 +157,7 @@ export interface DeliveryRow {
   client_name: string;
   client_phone: string | null;
   delivery_address: string | null;
+  delivery_name: string | null;
   items: { product_name: string; quantity: number }[];
   box_count: number;
   total: string;

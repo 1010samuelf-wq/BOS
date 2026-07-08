@@ -114,6 +114,23 @@ def test_card_order_is_not_auto_paid(client, make_product):
     assert paid["paid_status"] == "paid"
 
 
+def test_delivery_name_recorded_and_in_manifest(client, make_product):
+    from datetime import datetime, timezone
+
+    p = make_product(price="10.00")
+    today = datetime.now(timezone.utc).date().isoformat()
+    o = client.post("/api/v1/orders", json=order_payload(
+        p["id"], "deliv-name", fulfillment_type="delivery",
+        delivery_address="1 Main St", delivery_name="Grandma",
+        delivery_price="5", needed_for_date=today)).json()
+    assert o["delivery_name"] == "Grandma"
+
+    # shows up on the delivery manifest with the recipient name
+    manifest = client.get("/api/v1/deliveries").json()
+    row = next(r for r in manifest["rows"] if r["order_id"] == o["id"])
+    assert row["delivery_name"] == "Grandma"
+
+
 def test_list_filter_by_date_range_payment_and_exclude_cancelled(client, make_product):
     from datetime import datetime, timezone
 

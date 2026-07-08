@@ -43,6 +43,9 @@ class User(Base, TimestampMixin):
     )
 
     # Brute-force lockout: consecutive failed logins and, once tripped, the time
-    # until which login is refused.
-    failed_login_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    # until which login is refused. server_default so a fresh create_all builds a
+    # DB default — 0001's raw system-user seed omits this column.
+    failed_login_count: Mapped[int] = mapped_column(
+        default=0, server_default="0", nullable=False
+    )
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

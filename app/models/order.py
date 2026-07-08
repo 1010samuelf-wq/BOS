@@ -59,6 +59,7 @@ class Order(Base, TimestampMixin):
     )
     delivery_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     delivery_address: Mapped[str | None] = mapped_column(Text)
+    delivery_name: Mapped[str | None] = mapped_column(Text)  # recipient for delivery
     card_message: Mapped[str | None] = mapped_column(Text)
 
     payment_timing: Mapped[PaymentTiming] = mapped_column(
