@@ -68,6 +68,40 @@ def test_clock_in_out_flow_and_hours_endpoint(client, make_user):
     assert h["open_entry"] is None
 
 
+def test_time_entries_list_create_edit_delete(client, make_user):
+    uid, _, worker = make_user("nate", "cashier")
+    _, _, other = make_user("olga", "cashier")
+
+    assert worker.get("/api/v1/time/entries").json() == []
+
+    ci = datetime(2024, 2, 5, 9, 0, tzinfo=timezone.utc).isoformat()
+    co = datetime(2024, 2, 5, 17, 0, tzinfo=timezone.utc).isoformat()
+
+    # manager (admin) adds a missed punch
+    r = client.post("/api/v1/time/entries", json={"user_id": uid, "clock_in": ci, "clock_out": co})
+    assert r.status_code == 201, r.text
+    eid = r.json()["id"]
+
+    # worker sees own entry; another cashier can't
+    assert [e["id"] for e in worker.get("/api/v1/time/entries").json()] == [eid]
+    assert other.get("/api/v1/time/entries", params={"employee_id": uid}).status_code == 403
+
+    # cashier can't create/edit/delete
+    assert worker.post("/api/v1/time/entries", json={"user_id": uid, "clock_in": ci}).status_code == 403
+    assert worker.put(f"/api/v1/time/entries/{eid}", json={"clock_in": ci}).status_code == 403
+    assert worker.delete(f"/api/v1/time/entries/{eid}").status_code == 403
+
+    # manager corrects the clock-out; out-before-in is rejected
+    new_co = datetime(2024, 2, 5, 16, 0, tzinfo=timezone.utc).isoformat()
+    assert client.put(f"/api/v1/time/entries/{eid}", json={"clock_out": new_co}).status_code == 200
+    bad = datetime(2024, 2, 5, 8, 0, tzinfo=timezone.utc).isoformat()
+    assert client.put(f"/api/v1/time/entries/{eid}", json={"clock_out": bad}).status_code == 400
+
+    # manager deletes
+    assert client.delete(f"/api/v1/time/entries/{eid}").status_code == 204
+    assert worker.get("/api/v1/time/entries").json() == []
+
+
 def test_hours_visibility_rules(client, make_user):
     jill_id, _, jill = make_user("jill", "cashier")
     _, _, kate = make_user("kate", "cashier")

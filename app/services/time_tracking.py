@@ -11,9 +11,13 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.errors import conflict, not_found
+from app.core.errors import bad_request, conflict, not_found
 from app.models import TimeEntry, User
 from app.models.base import utcnow
+
+
+def _day_start_utc(d: date) -> datetime:
+    return datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
 
 
 def week_bounds(any_day: date) -> tuple[date, date]:
@@ -82,6 +86,57 @@ def clock_out(db: Session, user: User) -> TimeEntry:
         raise conflict("Not currently clocked in.", code="not_clocked_in")
     entry.clock_out = utcnow()
     return entry
+
+
+def list_entries(
+    db: Session, user_id: int, start: date | None = None, end: date | None = None
+) -> list[TimeEntry]:
+    """All of an employee's punches (newest first), optionally within a date range
+    (by clock-in day). Powers the detailed log + weekly timesheets (spec §2G)."""
+    stmt = select(TimeEntry).where(TimeEntry.user_id == user_id)
+    if start is not None:
+        stmt = stmt.where(TimeEntry.clock_in >= _day_start_utc(start))
+    if end is not None:
+        stmt = stmt.where(TimeEntry.clock_in < _day_start_utc(end) + timedelta(days=1))
+    return list(db.execute(stmt.order_by(TimeEntry.clock_in.desc())).scalars().all())
+
+
+def _validate_pair(clock_in: datetime, clock_out: datetime | None) -> None:
+    if clock_out is not None and clock_out <= clock_in:
+        raise bad_request("Clock-out must be after clock-in.", code="bad_time_range")
+
+
+def create_entry(
+    db: Session, user_id: int, clock_in: datetime, clock_out: datetime | None
+) -> TimeEntry:
+    if db.get(User, user_id) is None:
+        raise not_found(f"Employee {user_id} not found")
+    _validate_pair(clock_in, clock_out)
+    entry = TimeEntry(user_id=user_id, clock_in=clock_in, clock_out=clock_out)
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def update_entry(db: Session, entry_id: int, fields: dict) -> TimeEntry:
+    entry = db.get(TimeEntry, entry_id)
+    if entry is None:
+        raise not_found(f"Time entry {entry_id} not found")
+    new_in = fields.get("clock_in", entry.clock_in)
+    new_out = fields.get("clock_out", entry.clock_out)
+    _validate_pair(_as_aware(new_in), _as_aware(new_out) if new_out else None)
+    if "clock_in" in fields:
+        entry.clock_in = fields["clock_in"]
+    if "clock_out" in fields:
+        entry.clock_out = fields["clock_out"]
+    return entry
+
+
+def delete_entry(db: Session, entry_id: int) -> None:
+    entry = db.get(TimeEntry, entry_id)
+    if entry is None:
+        raise not_found(f"Time entry {entry_id} not found")
+    db.delete(entry)
 
 
 def weekly_hours(db: Session, user_id: int, any_day: date):

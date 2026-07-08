@@ -176,3 +176,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 
 /* sidebar clock control */
 .clock-btn { width: 100%; margin-top: 8px; }
+.clock-timer {
+  margin-top: 8px; text-align: center; font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 15px; color: var(--success);
+}

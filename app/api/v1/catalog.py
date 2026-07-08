@@ -168,6 +168,7 @@ def upsert_recipe(
     else:
         recipe.items.clear()
         db.flush()
+    recipe.yield_qty = payload.yield_qty
     recipe.items = [
         RecipeItem(ingredient_id=i.ingredient_id, quantity=i.quantity)
         for i in payload.items

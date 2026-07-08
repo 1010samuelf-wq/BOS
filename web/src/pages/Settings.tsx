@@ -243,6 +243,7 @@ function Recipes() {
   const ingredients = useQuery({ queryKey: ["ingredients"], queryFn: () => api.listIngredients() });
   const [productId, setProductId] = useState<number | "">("");
   const [items, setItems] = useState<{ ingredient_id: number; quantity: string }[]>([]);
+  const [yieldQty, setYieldQty] = useState("1");
 
   const recipe = useQuery({
     queryKey: ["recipe", productId],
@@ -251,20 +252,28 @@ function Recipes() {
     retry: false,
   });
 
-  // Load existing recipe items when a product is selected (or start empty).
+  // Load existing recipe items + yield when a product is selected (or start empty).
   useEffect(() => {
-    if (productId === "") return setItems([]);
-    if (recipe.data) setItems(recipe.data.items.map((i) => ({ ingredient_id: i.ingredient_id, quantity: i.quantity })));
-    else if (recipe.isError) setItems([]);
+    if (productId === "") { setItems([]); setYieldQty("1"); return; }
+    if (recipe.data) {
+      setItems(recipe.data.items.map((i) => ({ ingredient_id: i.ingredient_id, quantity: i.quantity })));
+      setYieldQty(String(recipe.data.yield_qty));
+    } else if (recipe.isError) { setItems([]); setYieldQty("1"); }
   }, [productId, recipe.data, recipe.isError]);
 
   const save = useMutation({
-    mutationFn: () => api.upsertRecipe({ product_id: Number(productId), items }),
+    mutationFn: () => api.upsertRecipe({ product_id: Number(productId), yield_qty: Math.max(1, Number(yieldQty) || 1), items }),
     onSuccess: () => client.invalidateQueries({ queryKey: ["recipe", productId] }),
     onError: onErr,
   });
 
   const ingName = (id: number) => ingredients.data?.find((i) => i.id === id)?.name ?? `#${id}`;
+  const ingCost = (id: number) => Number(ingredients.data?.find((i) => i.id === id)?.cost_per_unit ?? 0);
+  const batchCost = items.reduce((s, it) => s + (Number(it.quantity) || 0) * ingCost(it.ingredient_id), 0);
+  const yieldN = Math.max(1, Number(yieldQty) || 1);
+  const perUnit = batchCost / yieldN;
+  const product = products.data?.find((p) => p.id === Number(productId));
+  const price = product ? Number(product.price) : null;
 
   return (
     <>
@@ -318,6 +327,28 @@ function Recipes() {
                 Save recipe
               </button>
               {save.isSuccess && <span className="tone-ok">Saved ✓</span>}
+            </div>
+
+            {/* Yield + cost-per-unit calculator (spec §2C) */}
+            <div className="field" style={{ maxWidth: 320, marginTop: 16 }}>
+              <label>Yield — units this recipe makes (e.g. 24 cupcakes)</label>
+              <input className="input" type="number" min={1} value={yieldQty}
+                onChange={(e) => setYieldQty(e.target.value)} style={{ maxWidth: 140 }} />
+            </div>
+            <div className="card" style={{ background: "var(--bg)", maxWidth: 360 }}>
+              <div className="row" style={{ justifyContent: "space-between" }}><span className="muted">Batch ingredient cost</span><strong>${batchCost.toFixed(2)}</strong></div>
+              <div className="row" style={{ justifyContent: "space-between" }}><span className="muted">Yield</span><strong>{yieldN} unit{yieldN === 1 ? "" : "s"}</strong></div>
+              <div className="row" style={{ justifyContent: "space-between" }}><span>Cost per unit</span><strong>${perUnit.toFixed(2)}</strong></div>
+              {price != null && (
+                <>
+                  <div className="row" style={{ justifyContent: "space-between" }}><span className="muted">Sells for</span><strong>${price.toFixed(2)}</strong></div>
+                  <div className="row" style={{ justifyContent: "space-between" }}>
+                    <span>Margin per unit</span>
+                    <strong style={{ color: price - perUnit >= 0 ? "var(--success)" : "var(--danger)" }}>${(price - perUnit).toFixed(2)}</strong>
+                  </div>
+                </>
+              )}
+              <p className="muted" style={{ fontSize: 11, marginTop: 4 }}>Based on current ingredient costs. Save to store the yield.</p>
             </div>
           </>
         )}

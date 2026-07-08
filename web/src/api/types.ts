@@ -48,7 +48,14 @@ export interface RecipeItem {
 export interface Recipe {
   id: number;
   product_id: number;
+  yield_qty: number;
   items: RecipeItem[];
+}
+export interface TimeEntry {
+  id: number;
+  user_id: number;
+  clock_in: string;
+  clock_out: string | null;
 }
 
 export interface OrderItemOut {

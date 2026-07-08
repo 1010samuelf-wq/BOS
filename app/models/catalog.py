@@ -45,6 +45,9 @@ class Recipe(Base, TimestampMixin):
     product_id: Mapped[int] = mapped_column(
         ForeignKey("products.id", ondelete="CASCADE"), unique=True, nullable=False
     )
+    # How many sellable units one batch of this recipe makes (e.g. 24 cupcakes),
+    # so cost-per-unit = total ingredient cost / yield_qty (spec §2C).
+    yield_qty: Mapped[int] = mapped_column(default=1, nullable=False)
 
     product: Mapped[Product] = relationship(back_populates="recipe")
     items: Mapped[list[RecipeItem]] = relationship(

@@ -28,6 +28,25 @@ def test_product_search_requires_auth(anon_client):
     assert anon_client.get("/api/v1/products/search", params={"q": "x"}).status_code == 401
 
 
+def test_recipe_yield_defaults_and_persists(client, make_product, make_ingredient):
+    p = make_product(name="Cupcake batch")
+    flour = make_ingredient(name="Flour")
+
+    # default yield is 1 when omitted
+    r = client.post("/api/v1/recipes", json={
+        "product_id": p["id"], "items": [{"ingredient_id": flour["id"], "quantity": "2"}]})
+    assert r.status_code == 201
+    assert r.json()["yield_qty"] == 1
+
+    # upsert with an explicit yield (e.g. 24 cupcakes per batch)
+    r = client.post("/api/v1/recipes", json={
+        "product_id": p["id"], "yield_qty": 24,
+        "items": [{"ingredient_id": flour["id"], "quantity": "2"}]})
+    assert r.status_code == 201
+    assert r.json()["yield_qty"] == 24
+    assert client.get(f"/api/v1/recipes/{p['id']}").json()["yield_qty"] == 24
+
+
 def test_ingredient_active_default_and_deactivate(client, make_ingredient):
     ing = make_ingredient(name="Butter")
     assert ing["active"] is True  # new ingredients are active by default

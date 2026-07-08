@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavLink, Navigate, Outlet, Route, Routes, useNavigate } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { clockIn, clockOut, myHours, unreadCount } from "./api/endpoints";
 import { useAuth } from "./auth/AuthContext";
@@ -14,6 +14,7 @@ import Production from "./pages/Production";
 import Deliveries from "./pages/Deliveries";
 import Stock from "./pages/Stock";
 import EmployeesHours from "./pages/EmployeesHours";
+import Time from "./pages/Time";
 import Tasks from "./pages/Tasks";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
@@ -28,6 +29,7 @@ const NAV = [
   { to: "/stock", label: "Stock", icon: "📦", section: "stock" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
   { to: "/employees", label: "Employees & hours", icon: "👥", section: "employees" },
+  { to: "/time", label: "My time", icon: "⏱", section: "time" },
   { to: "/tasks", label: "Tasks", icon: "✅", section: "tasks" },
   { to: "/notifications", label: "Notifications", icon: "🔔", section: "notifications" },
   { to: "/settings", label: "Admin / Settings", icon: "⚙️", section: "settings" },
@@ -53,15 +55,35 @@ function Toasts() {
 function ClockControl() {
   const client = useQueryClient();
   const hours = useQuery({ queryKey: ["hours", "me"], queryFn: myHours });
-  const open = !!hours.data?.open_entry;
+  const openEntry = hours.data?.open_entry ?? null;
+  const open = !!openEntry;
+  const [elapsed, setElapsed] = useState("");
+
+  // Live-ticking timer of the current shift while clocked in.
+  useEffect(() => {
+    if (!openEntry) { setElapsed(""); return; }
+    const start = new Date(openEntry.clock_in).getTime();
+    const tick = () => {
+      const s = Math.max(0, Math.floor((Date.now() - start) / 1000));
+      const p = (n: number) => String(n).padStart(2, "0");
+      setElapsed(`${p(Math.floor(s / 3600))}:${p(Math.floor((s % 3600) / 60))}:${p(s % 60)}`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [openEntry?.clock_in]);
+
   const punch = useMutation({
     mutationFn: () => (open ? clockOut() : clockIn()),
     onSuccess: () => client.invalidateQueries({ queryKey: ["hours"] }),
   });
   return (
-    <button className={`btn ${open ? "danger" : "success"} sm clock-btn`} disabled={punch.isPending} onClick={() => punch.mutate()}>
-      {open ? "● Clock out" : "Clock in"}
-    </button>
+    <>
+      {open && <div className="clock-timer" title="Time on this shift">⏱ {elapsed}</div>}
+      <button className={`btn ${open ? "danger" : "success"} sm clock-btn`} disabled={punch.isPending} onClick={() => punch.mutate()}>
+        {open ? "● Clock out" : "Clock in"}
+      </button>
+    </>
   );
 }
 
@@ -138,6 +160,7 @@ export default function App() {
         <Route path="/stock" element={<RequireSection section="stock"><Stock /></RequireSection>} />
         <Route path="/reports" element={<RequireSection section="reports"><Reports /></RequireSection>} />
         <Route path="/employees" element={<RequireSection section="employees"><EmployeesHours /></RequireSection>} />
+        <Route path="/time" element={<RequireSection section="time"><Time /></RequireSection>} />
         <Route path="/tasks" element={<RequireSection section="tasks"><Tasks /></RequireSection>} />
         <Route path="/notifications" element={<RequireSection section="notifications"><Notifications /></RequireSection>} />
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />

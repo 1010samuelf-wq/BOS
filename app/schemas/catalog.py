@@ -76,6 +76,7 @@ class RecipeItemOut(BaseModel):
 
 class RecipeCreate(BaseModel):
     product_id: int
+    yield_qty: int = Field(default=1, ge=1)
     items: list[RecipeItemIn] = Field(min_length=1)
 
 
@@ -84,4 +85,5 @@ class RecipeOut(BaseModel):
 
     id: int
     product_id: int
+    yield_qty: int
     items: list[RecipeItemOut]

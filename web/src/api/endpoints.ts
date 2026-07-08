@@ -21,6 +21,7 @@ import type {
   SalesReport,
   StockLevel,
   Task,
+  TimeEntry,
   TokenOut,
   WeeklyHours,
 } from "./types";
@@ -69,6 +70,16 @@ export const receiptPdf = (id: number) => openPdf(`/orders/${id}/receipt`);
 export const clockIn = () => api<unknown>("/time/clock-in", { method: "POST" });
 export const clockOut = () => api<unknown>("/time/clock-out", { method: "POST" });
 export const myHours = () => api<WeeklyHours>("/time/hours", {});
+export const getWeeklyHours = (employee_id: number | undefined, week: string) =>
+  api<WeeklyHours>("/time/hours", { query: { employee_id, week } });
+export const listTimeEntries = (params: { employee_id?: number; from?: string; to?: string }) =>
+  api<TimeEntry[]>("/time/entries", { query: params });
+export const createTimeEntry = (body: { user_id: number; clock_in: string; clock_out?: string | null }) =>
+  api<TimeEntry>("/time/entries", { method: "POST", body });
+export const updateTimeEntry = (id: number, body: { clock_in?: string; clock_out?: string | null }) =>
+  api<TimeEntry>(`/time/entries/${id}`, { method: "PUT", body });
+export const deleteTimeEntry = (id: number) =>
+  api<void>(`/time/entries/${id}`, { method: "DELETE" });
 
 // ---- reports ----
 export const getDailyReport = (day?: string) => api<SalesReport>("/reports/daily", { query: { day } });
@@ -121,7 +132,7 @@ export const createIngredient = (body: {
 export const updateIngredient = (id: number, body: Partial<Ingredient>) =>
   api<Ingredient>(`/ingredients/${id}`, { method: "PUT", body });
 export const getRecipe = (productId: number) => api<Recipe>(`/recipes/${productId}`);
-export const upsertRecipe = (body: { product_id: number; items: { ingredient_id: number; quantity: string }[] }) =>
+export const upsertRecipe = (body: { product_id: number; yield_qty: number; items: { ingredient_id: number; quantity: string }[] }) =>
   api<Recipe>("/recipes", { method: "POST", body });
 
 // ---- settings (Admin) ----
