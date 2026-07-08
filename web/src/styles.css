@@ -147,6 +147,19 @@ tr.overdue td { background: #fdf1ef; color: var(--danger); }
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--bg); font-size: 18px;
 }
+
+/* Tap-to-add product grid on the New Order screen */
+.product-grid {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 12px 0; max-height: 260px; overflow-y: auto;
+}
+.product-chip {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 108px; padding: 8px; text-align: center; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.product-chip:hover { background: var(--bg); border-color: var(--primary); }
+.product-chip-name { font-weight: 600; font-size: 13px; line-height: 1.2; }
 .board { display: flex; gap: 12px; align-items: flex-start; }
 .board-col { flex: 1; background: var(--bg); border-radius: var(--radius); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .board-col-title { font-weight: 700; }

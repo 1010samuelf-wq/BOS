@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
-import { createOrder, searchProducts } from "../api/endpoints";
+import { createOrder, listProducts, searchProducts } from "../api/endpoints";
 import type { PaymentMethod, Product } from "../api/types";
 import { PageHead } from "../components/ui";
 import {
@@ -44,6 +44,10 @@ export default function NewOrder() {
     enabled: search.trim().length >= 2,
     staleTime: 30_000,
   });
+
+  // Full active-product list for the tap-to-add grid below the search bar.
+  const products = useQuery({ queryKey: ["products"], queryFn: listProducts, staleTime: 60_000 });
+  const activeProducts = (products.data ?? []).filter((p) => p.active);
 
   const submit = useMutation({
     mutationFn: createOrder,
@@ -148,8 +152,25 @@ export default function NewOrder() {
             </div>
           )}
         </div>
+
+        {/* Tap-to-add: all active products, so staff don't have to search each one. */}
+        {activeProducts.length > 0 && (
+          <div className="product-grid">
+            {activeProducts.map((p) => (
+              <button key={p.id} type="button" className="product-chip" title={`Add ${p.name}`}
+                onClick={() => setDraft((d) => addProduct(d, p))}>
+                {p.photo_url
+                  ? <img src={p.photo_url} alt="" className="thumb" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                  : <span className="thumb thumb-empty">📷</span>}
+                <span className="product-chip-name">{p.name}</span>
+                <span className="muted" style={{ fontSize: 12 }}>${p.price}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {draft.lines.length === 0 ? (
-          <p className="muted" style={{ textAlign: "center" }}>No items yet — search above to add.</p>
+          <p className="muted" style={{ textAlign: "center" }}>No items yet — tap a product above or search.</p>
         ) : (
           draft.lines.map((l, i) => (
             <div key={`${l.product_id}-${i}`} className="row" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
