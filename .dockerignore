@@ -6,3 +6,12 @@ __pycache__/
 *.db
 .env
 tests/
+
+# The backend image needs only app/ + alembic/ + requirements. Keep the
+# frontend trees, their node_modules, and docs out of the build context.
+web/
+tablet/
+node_modules/
+docs/
+.github/
+*.md

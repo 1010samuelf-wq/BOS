@@ -1,0 +1,32 @@
+# Fly.io config for the BOS backend (spec §7 deploy target).
+# App runs the FastAPI/uvicorn image from ./Dockerfile; Postgres is a separate
+# Fly app attached via `fly postgres attach` (sets BOS_DATABASE_URL secret).
+app = "just-cake-bakery"
+primary_region = "yyz"  # Toronto
+
+[build]
+
+# Run DB migrations in a one-off machine before each release goes live.
+# alembic reads BOS_DATABASE_URL (see alembic/env.py -> app.config).
+[deploy]
+  release_command = "alembic upgrade head"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  # Keep one machine always up: it's a POS backend (tablets + realtime WS),
+  # so cold-starts on the first order of the day aren't acceptable.
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/api/v1/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
