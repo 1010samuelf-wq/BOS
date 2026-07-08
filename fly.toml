@@ -6,10 +6,11 @@ primary_region = "yyz"  # Toronto
 
 [build]
 
-# Run DB migrations in a one-off machine before each release goes live.
-# alembic reads BOS_DATABASE_URL (see alembic/env.py -> app.config).
+# Run DB migrations, then seed the first admin if the DB is empty, in a one-off
+# machine before each release goes live. Both read BOS_DATABASE_URL (see
+# alembic/env.py -> app.config); app.bootstrap is idempotent (see its docstring).
 [deploy]
-  release_command = "alembic upgrade head"
+  release_command = "sh -c 'alembic upgrade head && python -m app.bootstrap'"
 
 [http_service]
   internal_port = 8000
