@@ -1,0 +1,22 @@
+# Fly.io config for the BOS web dashboard (static Vite SPA served by nginx).
+# The API base URL is baked into dist/ at build time via VITE_API_URL, so this
+# app only serves static files; it talks to the backend app cross-origin
+# (backend must allow this origin via BOS_CORS_ORIGINS).
+app = "just-cake-dashboard"
+primary_region = "yyz"  # Toronto
+
+[build]
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0  # static site cold-starts in ~1s; no need to idle-burn
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/"
