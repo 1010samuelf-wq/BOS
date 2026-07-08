@@ -23,7 +23,6 @@ export interface RosterEntry {
   id: number;
   name: string;
   role: Role;
-  pin_set: boolean;
 }
 
 export interface Product {
@@ -228,6 +227,7 @@ export interface Employee {
   pin_set: boolean;
   permissions: string[] | null;      // raw override (null = using role default)
   effective_sections: string[];      // what they can actually access
+  setup_code?: string | null;        // one-time first-login code (create/reset only)
 }
 export interface Notification {
   id: number;

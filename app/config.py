@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     pin_min_length: int = 4
     pin_max_length: int = 8
 
+    # First-login setup code (admin-issued) lifetime, and brute-force lockout.
+    setup_code_ttl_hours: int = 72
+    login_max_attempts: int = 5
+    login_lockout_minutes: int = 15
+
     # Browser origins allowed to call the API (the web dashboard). CSV. The
     # tablet app is React Native and not subject to CORS. Set to the deployed
     # dashboard origin in production.

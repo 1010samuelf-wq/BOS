@@ -12,18 +12,26 @@ def _create_employee(client, name, role="cashier"):
 def test_first_login_pin_setup_then_login(client):
     emp = _create_employee(client, "bob", "manager")
     assert emp["pin_set"] is False
+    code = emp["setup_code"]
+    assert code  # admin gets the one-time code to hand over
 
     # login before PIN is set → 403 pin_not_set
     r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "9999"})
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "pin_not_set"
 
-    # employee sets their own PIN (unauthenticated by design)
-    r = client.post("/api/v1/auth/set-pin", json={"user_id": emp["id"], "pin": "9999"})
+    # employee sets their own PIN with the issued code (unauthenticated by design)
+    r = client.post(
+        "/api/v1/auth/set-pin",
+        json={"user_id": emp["id"], "setup_code": code, "pin": "9999"},
+    )
     assert r.status_code == 204
 
-    # setting again → 409
-    r = client.post("/api/v1/auth/set-pin", json={"user_id": emp["id"], "pin": "0000"})
+    # setting again → 409 (even with a code, since a PIN now exists)
+    r = client.post(
+        "/api/v1/auth/set-pin",
+        json={"user_id": emp["id"], "setup_code": code, "pin": "0000"},
+    )
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "pin_already_set"
 
@@ -36,19 +44,62 @@ def test_first_login_pin_setup_then_login(client):
     assert body["access_token"]
 
 
+def test_set_pin_requires_valid_setup_code(client):
+    """The takeover fix: without the admin's code, a stranger can't claim the
+    PIN of a not-yet-onboarded account."""
+    emp = _create_employee(client, "vic", "cashier")
+
+    # no code → 400 (schema requires it; app maps validation errors to 400)
+    assert client.post(
+        "/api/v1/auth/set-pin", json={"user_id": emp["id"], "pin": "9999"}
+    ).status_code == 400
+
+    # wrong code → 403 invalid_setup_code, and the PIN stays unset
+    r = client.post(
+        "/api/v1/auth/set-pin",
+        json={"user_id": emp["id"], "setup_code": "WRONGCODE", "pin": "9999"},
+    )
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "invalid_setup_code"
+
+    r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "9999"})
+    assert r.json()["error"]["code"] == "pin_not_set"
+
+
+def test_login_lockout_after_repeated_failures(client):
+    emp = _create_employee(client, "wanda", "cashier")
+    client.post(
+        "/api/v1/auth/set-pin",
+        json={"user_id": emp["id"], "setup_code": emp["setup_code"], "pin": "1234"},
+    )
+    # 5 wrong attempts (login_max_attempts) trip the lock
+    for _ in range(5):
+        r = client.post(
+            "/api/v1/auth/login", json={"user_id": emp["id"], "pin": "0000"}
+        )
+        assert r.status_code == 401
+
+    # even the CORRECT pin is now refused while locked
+    r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "1234"})
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "account_locked"
+
+
 def test_roster_is_public_and_minimal(client, anon_client):
     _create_employee(client, "roster-bob", "cashier")
-    # unauthenticated access works (pre-login picker)
+    # unauthenticated access works (pre-login picker), but leaks no onboarding state
     r = anon_client.get("/api/v1/auth/roster")
     assert r.status_code == 200
     entry = next(e for e in r.json() if e["name"] == "roster-bob")
-    assert entry["pin_set"] is False
-    assert set(entry.keys()) == {"id", "name", "role", "pin_set"}  # no pin/hash
+    assert set(entry.keys()) == {"id", "name", "role"}  # no pin/hash/pin_set
 
 
 def test_login_wrong_pin_is_401(client):
     emp = _create_employee(client, "carol")
-    client.post("/api/v1/auth/set-pin", json={"user_id": emp["id"], "pin": "1234"})
+    client.post(
+        "/api/v1/auth/set-pin",
+        json={"user_id": emp["id"], "setup_code": emp["setup_code"], "pin": "1234"},
+    )
     r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "0000"})
     assert r.status_code == 401
     assert r.json()["error"]["code"] == "invalid_credentials"

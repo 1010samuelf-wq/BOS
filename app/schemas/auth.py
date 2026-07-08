@@ -19,19 +19,20 @@ def _validate_pin(v: str) -> str:
 
 
 class LoginIn(BaseModel):
+    # Login only verifies against the stored hash — it must NOT enforce the
+    # current PIN-length policy, or raising the minimum would lock out everyone
+    # whose (valid) PIN predates the change. Just cap the input size.
     user_id: int
-    pin: str
-
-    @field_validator("pin")
-    @classmethod
-    def _pin(cls, v: str) -> str:
-        return _validate_pin(v)
+    pin: str = Field(min_length=1, max_length=64)
 
 
 class SetPinIn(BaseModel):
-    """First-login PIN setup for a newly added employee (spec §2E)."""
+    """First-login PIN setup for a newly added employee (spec §2E). Requires the
+    one-time `setup_code` the admin issued, so a stranger can't claim the PIN of
+    a not-yet-onboarded account."""
 
     user_id: int
+    setup_code: str = Field(min_length=1, max_length=64)
     pin: str
 
     @field_validator("pin")
@@ -51,11 +52,12 @@ class TokenOut(BaseModel):
 
 
 class RosterEntry(BaseModel):
-    """Minimal, pre-auth employee info for the shared-device login picker."""
+    """Minimal, pre-auth employee info for the shared-device login picker. No
+    `pin_set` — whether an account is onboarded isn't the public's business; the
+    login screen discovers first-login state reactively via the 403 on login."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     role: UserRole
-    pin_set: bool  # false → route to first-login PIN setup

@@ -7,7 +7,10 @@ wires the actual PIN/JWT flow; the columns already exist here.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import JSON
+from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -30,3 +33,16 @@ class User(Base, TimestampMixin):
     # Per-employee section override (list of section keys). NULL → use the role's
     # defaults (see app/core/permissions.py). Admin ignores this (always all).
     permissions: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+
+    # First-login gating: an admin issues a one-time setup code (only its hash is
+    # stored) that the employee must present to /auth/set-pin. Closes the public
+    # set-pin account-takeover window (see app/services/auth.py).
+    setup_code_hash: Mapped[str | None] = mapped_column(String(255))
+    setup_code_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    # Brute-force lockout: consecutive failed logins and, once tripped, the time
+    # until which login is refused.
+    failed_login_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

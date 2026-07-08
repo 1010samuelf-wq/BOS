@@ -22,6 +22,18 @@ _PBKDF2_ITERATIONS = 200_000
 _ALGO_TAG = "pbkdf2_sha256"
 
 
+# Unambiguous alphabet for admin-issued setup codes (no 0/O/1/I/L confusion).
+_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def generate_setup_code(length: int = 8) -> str:
+    """A short, human-readable one-time code an admin hands to a new employee
+    for first-login PIN setup. Only its hash is stored (see hash_pin)."""
+    import secrets
+
+    return "".join(secrets.choice(_CODE_ALPHABET) for _ in range(length))
+
+
 # ---- PIN hashing ------------------------------------------------------------
 def hash_pin(pin: str) -> str:
     salt = os.urandom(16)

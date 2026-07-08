@@ -22,11 +22,12 @@ from app.services import auth as auth_service
 router = APIRouter(prefix="/employees", tags=["employees"])
 
 
-def _out(u: User) -> EmployeeOut:
+def _out(u: User, setup_code: str | None = None) -> EmployeeOut:
     return EmployeeOut(
         id=u.id, name=u.name, role=u.role, active=u.active, pin_set=u.pin_set,
         permissions=u.permissions,
         effective_sections=sorted(effective_sections(u)),
+        setup_code=setup_code,
     )
 
 
@@ -44,9 +45,11 @@ def create_employee(
 ):
     employee = User(name=payload.name, role=payload.role, pin_set=False, active=True)
     db.add(employee)
+    db.flush()  # assign id before issuing the code
+    code = auth_service.issue_setup_code(employee)
     db.commit()
     db.refresh(employee)
-    return _out(employee)
+    return _out(employee, setup_code=code)
 
 
 @router.get("", response_model=list[EmployeeOut])
@@ -87,11 +90,12 @@ def reset_pin(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Clear the employee's PIN and return them to first-login state (spec §2E)."""
-    employee = auth_service.reset_pin(db, employee_id)
+    """Clear the employee's PIN and return them to first-login state, issuing a
+    fresh one-time setup code to hand over (spec §2E)."""
+    employee, code = auth_service.reset_pin(db, employee_id)
     db.commit()
     db.refresh(employee)
-    return _out(employee)
+    return _out(employee, setup_code=code)
 
 
 @router.delete("/{employee_id}", response_model=EmployeeOut)

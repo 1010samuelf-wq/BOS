@@ -18,7 +18,7 @@ interface AuthValue {
   user: SessionUser | null;
   ready: boolean;
   login: (userId: number, pin: string) => Promise<void>;
-  setupPin: (userId: number, pin: string) => Promise<void>;
+  setupPin: (userId: number, pin: string, setupCode: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setupPin = useCallback(
-    async (userId: number, pin: string) => {
-      await api.setPin(userId, pin); // first-login PIN setup, then straight in
+    async (userId: number, pin: string, setupCode: string) => {
+      await api.setPin(userId, pin, setupCode); // first-login setup, then straight in
       await login(userId, pin);
     },
     [login],

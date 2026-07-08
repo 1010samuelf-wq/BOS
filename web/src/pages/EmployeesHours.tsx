@@ -67,6 +67,7 @@ export default function EmployeesHours() {
   const isAdmin = user?.role === "admin";
   const client = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [issued, setIssued] = useState<{ name: string; code: string } | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("cashier");
 
@@ -76,12 +77,13 @@ export default function EmployeesHours() {
   const invalidate = () => client.invalidateQueries({ queryKey: ["employees"] });
   const onErr = (e: unknown) => setError(e instanceof ApiRequestError ? e.message : "Action failed.");
 
+  const showCode = (e: Employee) => { if (e.setup_code) setIssued({ name: e.name, code: e.setup_code }); };
   const create = useMutation({
     mutationFn: () => createEmployee({ name: name.trim(), role }),
-    onSuccess: () => { setName(""); setRole("cashier"); invalidate(); },
+    onSuccess: (e) => { showCode(e); setName(""); setRole("cashier"); invalidate(); },
     onError: onErr,
   });
-  const reset = useMutation({ mutationFn: resetPin, onSuccess: invalidate, onError: onErr });
+  const reset = useMutation({ mutationFn: resetPin, onSuccess: showCode, onError: onErr });
   const deactivate = useMutation({ mutationFn: deactivateEmployee, onSuccess: invalidate, onError: onErr });
   const setPerms = useMutation({
     mutationFn: (v: { id: number; permissions: string[] | null }) => updateEmployee(v.id, { permissions: v.permissions }),
@@ -93,6 +95,21 @@ export default function EmployeesHours() {
     <div className="page">
       <PageHead title="Employees & hours" />
       {error && <p className="error">{error}</p>}
+
+      {issued && (
+        <div className="card" style={{ borderColor: "var(--accent)", background: "#fbf6ef" }}>
+          <div className="row">
+            <div style={{ flex: 1 }}>
+              <strong>Setup code for {issued.name}</strong>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Give this to them — they enter it with a new PIN on first login. Shown once; expires in 72h.
+              </div>
+            </div>
+            <code style={{ fontSize: 22, fontWeight: 700, letterSpacing: 2 }}>{issued.code}</code>
+            <button className="btn neutral sm" onClick={() => setIssued(null)}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h2>Hours this week (all staff)</h2>

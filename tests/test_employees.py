@@ -40,19 +40,22 @@ def test_admin_reset_pin_returns_to_first_login(client, make_user):
         "/api/v1/auth/login", json={"user_id": uid, "pin": "5555"}
     ).status_code == 200
 
-    # admin resets → back to first-login state
+    # admin resets → back to first-login state, with a fresh setup code
     r = client.post(f"/api/v1/employees/{uid}/reset-pin")
     assert r.status_code == 200
     assert r.json()["pin_set"] is False
+    code = r.json()["setup_code"]
+    assert code
 
     # old PIN no longer logs in; login now blocked pending new PIN
     r = client.post("/api/v1/auth/login", json={"user_id": uid, "pin": "5555"})
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "pin_not_set"
 
-    # employee sets a new PIN and logs in again
+    # employee sets a new PIN (with the issued code) and logs in again
     assert client.post(
-        "/api/v1/auth/set-pin", json={"user_id": uid, "pin": "6666"}
+        "/api/v1/auth/set-pin",
+        json={"user_id": uid, "setup_code": code, "pin": "6666"},
     ).status_code == 204
     assert client.post(
         "/api/v1/auth/login", json={"user_id": uid, "pin": "6666"}

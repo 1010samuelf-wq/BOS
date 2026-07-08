@@ -43,3 +43,6 @@ class EmployeeOut(BaseModel):
     pin_set: bool                       # completed first-login PIN setup?
     permissions: list[str] | None       # raw override (null = using role default)
     effective_sections: list[str]       # what they can actually access
+    # One-time first-login setup code — returned ONLY by create/reset-pin (the
+    # plaintext exists just at issue time); always null in list/update.
+    setup_code: str | None = None
