@@ -25,9 +25,11 @@ def test_sales_report_revenue_breakdown_and_profit(client, make_product, make_in
 
     # 2 paid-cash cakes (total 20), 1 paid-card cake (10), 1 pay-later cake (10 unpaid)
     client.post("/api/v1/orders", json=order_payload(cake["id"], "rep-cash1", payment_method="cash"))
-    client.post("/api/v1/orders", json=order_payload(
+    # card orders aren't auto-paid — staff mark them paid once the terminal settles
+    card_oid = client.post("/api/v1/orders", json=order_payload(
         cake["id"], "rep-card1", payment_method="card",
-        items=[{"product_id": cake["id"], "quantity": 1}]))
+        items=[{"product_id": cake["id"], "quantity": 1}])).json()["id"]
+    client.post(f"/api/v1/orders/{card_oid}/mark-paid")
     client.post("/api/v1/orders", json=order_payload(
         cake["id"], "rep-later1", payment_timing="later", payment_method=None,
         items=[{"product_id": cake["id"], "quantity": 1}]))

@@ -7,19 +7,46 @@ historical orders/time entries keep their references. Kept admin-only on purpose
 managing who-can-do-what is the one privilege-escalation surface we don't grant.
 """
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin
-from app.core.errors import not_found
+from app.core.errors import conflict, not_found
 from app.core.permissions import GRANTABLE_SECTIONS, effective_sections
 from app.database import get_db
-from app.models import User
+from app.models import (
+    Expense,
+    Order,
+    OrderNote,
+    StockAdjustment,
+    Task,
+    TimeEntry,
+    User,
+)
 from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
 from app.services import auth as auth_service
 
 router = APIRouter(prefix="/employees", tags=["employees"])
+
+
+def _has_activity(db: Session, uid: int) -> bool:
+    """True if any record references this user, so a hard delete would orphan
+    history (or violate a FK on Postgres). Such accounts stay soft-deactivated."""
+    checks = [
+        select(TimeEntry.id).where(TimeEntry.user_id == uid),
+        select(Task.id).where(
+            or_(Task.assigned_to == uid, Task.assigned_by == uid, Task.done_by == uid)
+        ),
+        select(Order.id).where(
+            or_(Order.paid_by == uid, Order.fulfilled_by == uid,
+                Order.cancelled_by == uid, Order.locked_by == uid)
+        ),
+        select(OrderNote.id).where(OrderNote.done_by == uid),
+        select(Expense.id).where(Expense.logged_by == uid),
+        select(StockAdjustment.id).where(StockAdjustment.adjusted_by == uid),
+    ]
+    return any(db.execute(stmt.limit(1)).first() is not None for stmt in checks)
 
 
 def _out(u: User, setup_code: str | None = None) -> EmployeeOut:
@@ -101,12 +128,34 @@ def reset_pin(
 @router.delete("/{employee_id}", response_model=EmployeeOut)
 def deactivate_employee(
     employee_id: int,
+    hard: bool = Query(default=False, description="permanently delete instead of deactivate"),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
+    """Soft-deactivate by default (keeps history intact). `hard=true` permanently
+    deletes — allowed only for an already-inactive account with no history, so we
+    never orphan orders/tasks/time entries."""
     employee = db.get(User, employee_id)
     if employee is None:
         raise not_found(f"Employee {employee_id} not found")
+
+    if hard:
+        if employee.active:
+            raise conflict(
+                "Deactivate the employee before permanently deleting them.",
+                code="employee_active",
+            )
+        if _has_activity(db, employee_id):
+            raise conflict(
+                "This employee has history (orders, tasks, or time entries) and "
+                "can't be permanently deleted — leave them deactivated.",
+                code="employee_has_activity",
+            )
+        out = _out(employee)  # snapshot before the row is gone
+        db.delete(employee)
+        db.commit()
+        return out
+
     employee.active = False
     db.commit()
     db.refresh(employee)

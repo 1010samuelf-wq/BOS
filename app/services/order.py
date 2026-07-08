@@ -128,6 +128,13 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
         delivery = Decimal(0)
 
     now = utcnow()
+    # Card orders are NOT auto-marked paid even when paying "now": the terminal
+    # settles separately, so staff confirm and mark them paid manually. Cash /
+    # e-transfer paid "now" are settled on the spot.
+    pays_now = (
+        payload.payment_timing == PaymentTiming.now
+        and payload.payment_method != PaymentMethod.card
+    )
     order = Order(
         idempotency_key=payload.idempotency_key,
         request_fingerprint=fingerprint,
@@ -141,13 +148,9 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
         card_message=payload.card_message,
         payment_timing=payload.payment_timing,
         payment_method=payload.payment_method,
-        paid_status=(
-            PaidStatus.paid
-            if payload.payment_timing == PaymentTiming.now
-            else PaidStatus.unpaid
-        ),
-        paid_at=now if payload.payment_timing == PaymentTiming.now else None,
-        paid_by=user.id if payload.payment_timing == PaymentTiming.now else None,
+        paid_status=PaidStatus.paid if pays_now else PaidStatus.unpaid,
+        paid_at=now if pays_now else None,
+        paid_by=user.id if pays_now else None,
         status=OrderStatus.pending,
         fulfillment_status=FulfillmentStatus.pending,
         total=subtotal + delivery,

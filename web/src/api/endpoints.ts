@@ -136,6 +136,8 @@ export const createEmployee = (body: { name: string; role: string }) =>
   api<Employee>("/employees", { method: "POST", body });
 export const resetPin = (id: number) => api<Employee>(`/employees/${id}/reset-pin`, { method: "POST" });
 export const deactivateEmployee = (id: number) => api<Employee>(`/employees/${id}`, { method: "DELETE" });
+export const deleteEmployee = (id: number) =>
+  api<Employee>(`/employees/${id}`, { method: "DELETE", query: { hard: true } });
 export const grantableSections = () => api<string[]>("/employees/sections");
 export const updateEmployee = (
   id: number,

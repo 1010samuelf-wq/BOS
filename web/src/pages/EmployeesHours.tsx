@@ -10,6 +10,7 @@ import { ApiRequestError } from "../api/client";
 import {
   createEmployee,
   deactivateEmployee,
+  deleteEmployee,
   getStaffHours,
   grantableSections,
   listEmployees,
@@ -85,6 +86,16 @@ export default function EmployeesHours() {
   });
   const reset = useMutation({ mutationFn: resetPin, onSuccess: showCode, onError: onErr });
   const deactivate = useMutation({ mutationFn: deactivateEmployee, onSuccess: invalidate, onError: onErr });
+  const reactivate = useMutation({
+    mutationFn: (id: number) => updateEmployee(id, { active: true }),
+    onSuccess: invalidate, onError: onErr,
+  });
+  const del = useMutation({ mutationFn: deleteEmployee, onSuccess: invalidate, onError: onErr });
+  const confirmDelete = (e: Employee) => {
+    if (window.confirm(`Permanently delete ${e.name}? This can't be undone. (Only works if they have no orders, tasks, or time entries.)`)) {
+      del.mutate(e.id);
+    }
+  };
   const setPerms = useMutation({
     mutationFn: (v: { id: number; permissions: string[] | null }) => updateEmployee(v.id, { permissions: v.permissions }),
     onSuccess: invalidate,
@@ -156,10 +167,15 @@ export default function EmployeesHours() {
                       <strong>{e.name}</strong>{!e.active ? " · inactive" : ""}
                       <span className="muted"> · {e.role} · PIN {e.pin_set ? "set" : "awaiting first login"}</span>
                     </div>
-                    {e.active && (
+                    {e.active ? (
                       <>
                         <button className="btn neutral sm" onClick={() => reset.mutate(e.id)}>Reset PIN</button>
                         <button className="btn danger sm" onClick={() => deactivate.mutate(e.id)}>Deactivate</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn primary sm" onClick={() => reactivate.mutate(e.id)}>Reactivate</button>
+                        <button className="btn danger sm" onClick={() => confirmDelete(e)}>Delete</button>
                       </>
                     )}
                   </div>

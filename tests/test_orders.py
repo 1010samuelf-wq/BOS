@@ -100,6 +100,20 @@ def test_fulfill_moves_out_of_pipeline(client, make_product):
     assert client.post(f"/api/v1/orders/{oid}/fulfill").status_code == 400
 
 
+def test_card_order_is_not_auto_paid(client, make_product):
+    p = make_product(price="10.00")
+    # cash "now" settles on the spot
+    cash = client.post("/api/v1/orders", json=order_payload(p["id"], "pay-cash", payment_method="cash")).json()
+    assert cash["paid_status"] == "paid"
+    # card "now" stays UNPAID until an admin marks it (terminal settles separately)
+    card = client.post("/api/v1/orders", json=order_payload(p["id"], "pay-card", payment_method="card")).json()
+    assert card["paid_status"] == "unpaid"
+    assert card["payment_method"] == "card"
+    # marking it paid manually still works
+    paid = client.post(f"/api/v1/orders/{card['id']}/mark-paid").json()
+    assert paid["paid_status"] == "paid"
+
+
 def test_list_filter_by_date_range_payment_and_exclude_cancelled(client, make_product):
     from datetime import datetime, timezone
 

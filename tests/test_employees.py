@@ -1,5 +1,35 @@
 """Employee management — Admin only (spec §2G)."""
 
+from tests.conftest import order_payload
+
+
+def test_reactivate_and_hard_delete_unused_employee(client, make_user):
+    uid, _, _ = make_user("temp", "cashier")
+
+    # can't permanently delete an ACTIVE account
+    assert client.delete(f"/api/v1/employees/{uid}?hard=true").status_code == 409
+
+    # deactivate, then reactivate via PUT active=true
+    assert client.delete(f"/api/v1/employees/{uid}").status_code == 200
+    r = client.put(f"/api/v1/employees/{uid}", json={"active": True})
+    assert r.status_code == 200 and r.json()["active"] is True
+
+    # deactivate again, then hard-delete (no history) → gone
+    client.delete(f"/api/v1/employees/{uid}")
+    assert client.delete(f"/api/v1/employees/{uid}?hard=true").status_code == 200
+    assert client.delete(f"/api/v1/employees/{uid}?hard=true").status_code == 404
+
+
+def test_hard_delete_blocked_when_employee_has_history(client, make_user, make_product):
+    uid, _, worker = make_user("busy", "cashier")
+    p = make_product()
+    worker.post("/api/v1/orders", json=order_payload(p["id"], "busy-order"))
+
+    client.delete(f"/api/v1/employees/{uid}")  # deactivate
+    r = client.delete(f"/api/v1/employees/{uid}?hard=true")
+    assert r.status_code == 409
+    assert r.json()["error"]["code"] == "employee_has_activity"
+
 
 def test_admin_crud_employee(client):
     r = client.post("/api/v1/employees", json={"name": "gina", "role": "cashier"})
