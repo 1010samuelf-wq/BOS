@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: bos
+        working-directory: .
     services:
       postgres:
         image: postgres:16
@@ -44,9 +44,14 @@ jobs:
   tablet:
     name: Tablet (typecheck + smoke tests)
     runs-on: ubuntu-latest
+    # The tablet (Expo) app is on hold and has never been compiled locally (the
+    # dev network's TLS filter blocks its npm install). Run it in CI for signal,
+    # but don't fail the whole workflow on it. Remove this when resuming tablet
+    # work so the job becomes blocking again.
+    continue-on-error: true
     defaults:
       run:
-        working-directory: bos/tablet
+        working-directory: tablet
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: bos/web
+        working-directory: web
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
