@@ -83,8 +83,11 @@ export default function NewOrder() {
             value={draft.clientName} onChange={(e) => set({ clientName: e.target.value })} />
           <input className="input" style={{ maxWidth: 160 }} placeholder="Phone"
             value={draft.clientPhone} onChange={(e) => set({ clientPhone: e.target.value })} />
-          <input className="input" style={{ maxWidth: 210 }} placeholder="Needed for (YYYY-MM-DD HH:MM)"
-            value={draft.neededFor ?? ""} onChange={(e) => set({ neededFor: e.target.value.trim() ? e.target.value.replace(" ", "T") : null })} />
+          <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span className="muted" style={{ fontSize: 11 }}>Needed for (date &amp; time)</span>
+            <input className="input" type="datetime-local" style={{ maxWidth: 220 }}
+              value={draft.neededFor ?? ""} onChange={(e) => set({ neededFor: e.target.value || null })} />
+          </label>
         </div>
         <div className="row" style={{ flexWrap: "wrap", marginTop: 12 }}>
           <div className="tabs">

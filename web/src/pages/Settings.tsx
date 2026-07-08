@@ -42,6 +42,76 @@ function useErr() {
   return { error, onErr };
 }
 
+function PhotoCell({ p, onEditPhoto }: { p: Product; onEditPhoto: (p: Product) => void }) {
+  return (
+    <button className="thumb-btn" title="Set photo" onClick={() => onEditPhoto(p)}>
+      {p.photo_url
+        ? <img src={p.photo_url} alt={p.name} className="thumb" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+        : <span className="thumb thumb-empty">📷</span>}
+    </button>
+  );
+}
+
+function ProductRow({
+  p, invalidate, onErr, onToggleActive, onEditPhoto,
+}: {
+  p: Product;
+  invalidate: () => void;
+  onErr: (e: unknown) => void;
+  onToggleActive: (p: Product) => void;
+  onEditPhoto: (p: Product) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(p.name);
+  const [price, setPrice] = useState(p.price);
+  const [category, setCategory] = useState(p.category ?? "");
+
+  const save = useMutation({
+    mutationFn: () => api.updateProduct(p.id, {
+      name: name.trim(), price: price.trim(), category: category.trim() || null,
+    }),
+    onSuccess: () => { setEditing(false); invalidate(); },
+    onError: onErr,
+  });
+
+  const start = () => {
+    setName(p.name); setPrice(p.price); setCategory(p.category ?? ""); setEditing(true);
+  };
+  const validPrice = /^\d+(\.\d{1,2})?$/.test(price.trim());
+
+  if (editing) {
+    return (
+      <tr>
+        <td><PhotoCell p={p} onEditPhoto={onEditPhoto} /></td>
+        <td><input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ minWidth: 140 }} /></td>
+        <td><input className="input" placeholder="—" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 140 }} /></td>
+        <td className="num"><input className="input" value={price} onChange={(e) => setPrice(e.target.value)} style={{ maxWidth: 90, textAlign: "right" }} /></td>
+        <td>
+          <div className="row">
+            <button className="btn primary sm" disabled={!name.trim() || !validPrice || save.isPending} onClick={() => save.mutate()}>Save</button>
+            <button className="btn neutral sm" onClick={() => setEditing(false)}>Cancel</button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr style={{ opacity: p.active ? 1 : 0.5 }}>
+      <td><PhotoCell p={p} onEditPhoto={onEditPhoto} /></td>
+      <td>{p.name}</td>
+      <td className="muted">{p.category ?? "—"}</td>
+      <td className="num">${p.price}</td>
+      <td>
+        <div className="row">
+          <button className="btn neutral sm" onClick={start}>Edit</button>
+          <button className="btn neutral sm" onClick={() => onToggleActive(p)}>{p.active ? "Deactivate" : "Activate"}</button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 function Products() {
   const client = useQueryClient();
   const { error, onErr } = useErr();
@@ -93,22 +163,11 @@ function Products() {
         <h2>Catalog</h2>
         {products.isLoading ? <Loading /> : products.isError ? <p className="error">Admin access required.</p> : (
           <table>
-            <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th className="num">Price</th><th>Active</th></tr></thead>
+            <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th className="num">Price</th><th>Actions</th></tr></thead>
             <tbody>
               {(products.data ?? []).map((p) => (
-                <tr key={p.id} style={{ opacity: p.active ? 1 : 0.5 }}>
-                  <td>
-                    <button className="thumb-btn" title="Set photo" onClick={() => editPhoto(p)}>
-                      {p.photo_url
-                        ? <img src={p.photo_url} alt={p.name} className="thumb" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                        : <span className="thumb thumb-empty">📷</span>}
-                    </button>
-                  </td>
-                  <td>{p.name}</td>
-                  <td className="muted">{p.category ?? "—"}</td>
-                  <td className="num">${p.price}</td>
-                  <td><button className="btn neutral sm" onClick={() => toggleActive.mutate(p)}>{p.active ? "Deactivate" : "Activate"}</button></td>
-                </tr>
+                <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
+                  onToggleActive={(x) => toggleActive.mutate(x)} onEditPhoto={editPhoto} />
               ))}
             </tbody>
           </table>
