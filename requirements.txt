@@ -1,0 +1,22 @@
+# Runtime + dev dependencies. Lower bounds chosen to resolve on Python
+# 3.11–3.14; see requirements.lock for the exact versions this build was
+# verified against. psycopg (v3) is the Postgres driver used in prod; the test
+# suite runs on stdlib sqlite and needs no driver.
+fastapi>=0.115
+uvicorn[standard]>=0.34
+sqlalchemy>=2.0.30
+alembic>=1.14
+psycopg[binary]>=3.2
+pydantic>=2.10
+pydantic-settings>=2.7
+python-json-logger>=3.2
+pyjwt>=2.8
+# WS protocol library — uvicorn needs it to serve /api/v1/ws (the [standard]
+# extra also provides it, but pin it explicitly so a plain install works).
+websockets>=13
+# PDF generation for receipts + report export (pure Python, no native deps).
+fpdf2>=2.8
+
+# --- test / dev ---
+pytest>=8.3
+httpx>=0.28

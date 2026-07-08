@@ -1,0 +1,16 @@
+# Exact versions this Phase-1 build was verified against (Python 3.14, 16/16
+# tests passing). Regenerate with: pip freeze > requirements.lock
+SQLAlchemy==2.0.51
+alembic==1.18.5
+fastapi==0.139.0
+httpx==0.28.1
+pydantic==2.13.4
+pydantic-settings==2.14.2
+PyJWT==2.13.0
+fpdf2==2.8.7
+python-json-logger==4.1.0
+pytest==9.1.1
+starlette==1.3.1
+uvicorn==0.50.2
+websockets==16.0
+# psycopg[binary]>=3.2   # add for Postgres; not needed for the sqlite test run
