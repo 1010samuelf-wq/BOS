@@ -14,7 +14,7 @@ import {
   listEmployees,
   resetPin,
 } from "../../src/api/endpoints";
-import type { Role } from "../../src/api/types";
+import type { Employee, Role } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -78,7 +78,7 @@ export default function EmployeesScreen() {
           {employees.isLoading ? (
             <Loading />
           ) : (
-            (employees.data ?? []).map((e) => (
+            (employees.data ?? []).map((e: Employee) => (
               <View key={e.id} style={[styles.row, !e.active && styles.rowInactive]}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name}>

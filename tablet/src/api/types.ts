@@ -75,6 +75,7 @@ export interface Order {
   paid_status: PaidStatus;
   status: OrderStatus;
   fulfillment_status: FulfillmentStatus;
+  stock_reversed: boolean;
   total: string;
   locked_by: number | null;
   items: OrderItemOut[];

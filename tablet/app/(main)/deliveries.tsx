@@ -8,13 +8,14 @@ import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getDeliveries } from "../../src/api/endpoints";
+import type { DeliveryRow } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Empty, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
 export default function DeliveriesScreen() {
   const deliveries = useQuery({ queryKey: ["deliveries", "today"], queryFn: () => getDeliveries({}) });
-  const rows = deliveries.data?.rows ?? [];
+  const rows: DeliveryRow[] = deliveries.data?.rows ?? [];
 
   return (
     <RequiresConnection>

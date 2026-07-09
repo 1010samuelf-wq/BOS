@@ -8,7 +8,7 @@ import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getDailyReport, getMonthlyReport } from "../../src/api/endpoints";
-import type { SalesReport } from "../../src/api/types";
+import type { ExpenseOut, SalesReport } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
@@ -108,7 +108,7 @@ export default function ReportsScreen() {
               {report.data.expenses.length === 0 ? (
                 <Text style={styles.muted}>No expenses logged.</Text>
               ) : (
-                report.data.expenses.map((e) => (
+                report.data.expenses.map((e: ExpenseOut) => (
                   <View key={e.id} style={styles.expense}>
                     <Text style={styles.expenseDesc}>{e.description}</Text>
                     <Text style={styles.expenseAmt}>${e.amount}</Text>

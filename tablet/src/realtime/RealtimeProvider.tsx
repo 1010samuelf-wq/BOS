@@ -94,7 +94,8 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         } else if (event.type === "notification") {
           void queryClient.invalidateQueries({ queryKey: ["notifications"] });
           const id = nextToastId.current++;
-          setToasts((t) => [...t, { id, message: event.notification.message }]);
+          const message = event.notification.message;
+          setToasts((t) => [...t, { id, message }]);
           void playPing();
           // Auto-dismiss the banner; the feed keeps the full item.
           setTimeout(

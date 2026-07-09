@@ -50,7 +50,7 @@ export default function StockScreen() {
     onError: (e) => setError(e instanceof ApiRequestError ? e.message : "Adjustment failed."),
   });
 
-  const rows = stock.data ?? [];
+  const rows: StockLevel[] = stock.data ?? [];
   const lowCount = rows.filter((r) => r.is_low || parseFloat(r.quantity) < 0).length;
 
   return (

@@ -72,7 +72,7 @@ export default function OrdersBoard() {
     enabled: tab === "fulfilled",
   });
 
-  const activeOrders = (active.data?.items ?? []).filter((o) => o.status !== "cancelled");
+  const activeOrders: Order[] = (active.data?.items ?? []).filter((o: Order) => o.status !== "cancelled");
 
   return (
     <RequiresConnection>
@@ -128,7 +128,7 @@ export default function OrdersBoard() {
           <Loading />
         ) : (
           <ScrollView contentContainerStyle={{ padding: spacing.l, gap: spacing.s }}>
-            {(fulfilled.data?.items ?? []).map((o) => (
+            {(fulfilled.data?.items ?? []).map((o: Order) => (
               <OrderCard key={o.id} order={o} />
             ))}
             {fulfilled.isSuccess && fulfilled.data.items.length === 0 && (

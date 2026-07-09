@@ -10,6 +10,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { ApiRequestError } from "../../src/api/client";
 import { clockIn, clockOut, getHours, getStaffHours } from "../../src/api/endpoints";
+import type { DayHours, StaffHoursRow } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -61,7 +62,7 @@ export default function TimeScreen() {
           ) : hours.data ? (
             <>
               <View style={styles.grid}>
-                {hours.data.days.map((d, i) => (
+                {hours.data.days.map((d: DayHours, i: number) => (
                   <View key={d.day} style={styles.dayCell}>
                     <Text style={styles.dayLabel}>{DAYS[i]}</Text>
                     <Text style={styles.dayHours}>{d.hours.toFixed(1)}</Text>
@@ -85,7 +86,7 @@ export default function TimeScreen() {
             {staff.isLoading ? (
               <Loading />
             ) : (
-              (staff.data?.rows ?? []).map((r) => (
+              (staff.data?.rows ?? []).map((r: StaffHoursRow) => (
                 <View key={r.user_id} style={styles.staffRow}>
                   <Text style={styles.staffName}>{r.name}</Text>
                   <Text style={styles.staffHours}>{r.total_hours.toFixed(1)} h</Text>

@@ -176,7 +176,7 @@ export default function NewOrderScreen() {
             {search.trim().length >= 2 && (
               <View style={styles.dropdown}>
                 {results.isLoading && <ActivityIndicator style={{ padding: spacing.m }} />}
-                {(results.data ?? []).map((p) => (
+                {(results.data ?? []).map((p: Product) => (
                   <Pressable key={p.id} style={styles.dropdownRow} onPress={() => pickProduct(p)}>
                     <Text style={styles.dropdownName}>{p.name}</Text>
                     <Text style={styles.dropdownPrice}>${p.price}</Text>

@@ -44,11 +44,6 @@ jobs:
   tablet:
     name: Tablet (typecheck + smoke tests)
     runs-on: ubuntu-latest
-    # The tablet (Expo) app is on hold and has never been compiled locally (the
-    # dev network's TLS filter blocks its npm install). Run it in CI for signal,
-    # but don't fail the whole workflow on it. Remove this when resuming tablet
-    # work so the job becomes blocking again.
-    continue-on-error: true
     defaults:
       run:
         working-directory: tablet

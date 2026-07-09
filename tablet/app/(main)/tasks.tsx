@@ -9,7 +9,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 
 import { ApiRequestError } from "../../src/api/client";
 import { createTask, fetchRoster, listTasks, toggleTaskDone } from "../../src/api/endpoints";
-import type { Task } from "../../src/api/types";
+import type { RosterEntry, Task } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -44,7 +44,7 @@ export default function TasksScreen() {
   const roster = useQuery({ queryKey: ["roster"], queryFn: fetchRoster, enabled: isManager });
   const nameOf = useMemo(() => {
     const m = new Map<number, string>();
-    (roster.data ?? []).forEach((r) => m.set(r.id, r.name));
+    (roster.data ?? []).forEach((r: RosterEntry) => m.set(r.id, r.name));
     return (id: number) => m.get(id) ?? `#${id}`;
   }, [roster.data]);
 
@@ -87,7 +87,7 @@ export default function TasksScreen() {
           ) : (mine.data ?? []).length === 0 ? (
             <Text style={styles.muted}>Nothing assigned to you.</Text>
           ) : (
-            (mine.data ?? []).map((t) => (
+            (mine.data ?? []).map((t: Task) => (
               <TaskRow key={t.id} task={t} onToggle={() => toggle.mutate(t.id)} />
             ))
           )}
@@ -105,7 +105,7 @@ export default function TasksScreen() {
               />
               <Text style={styles.label}>Assign to</Text>
               <View style={styles.assignees}>
-                {(roster.data ?? []).map((r) => (
+                {(roster.data ?? []).map((r: RosterEntry) => (
                   <Pressable
                     key={r.id}
                     style={[styles.pill, assignee === r.id && styles.pillOn]}
@@ -134,7 +134,7 @@ export default function TasksScreen() {
               {all.isLoading ? (
                 <Loading />
               ) : (
-                (all.data ?? []).map((t) => (
+                (all.data ?? []).map((t: Task) => (
                   <TaskRow key={t.id} task={t} name={nameOf(t.assigned_to)} onToggle={() => toggle.mutate(t.id)} />
                 ))
               )}

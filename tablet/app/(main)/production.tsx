@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getProduction } from "../../src/api/endpoints";
+import type { ProductionRow } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Empty, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
@@ -68,7 +69,7 @@ export default function ProductionScreen() {
               <Text style={[styles.h, styles.cNum]}>In stock</Text>
               <Text style={[styles.h, styles.cNum, styles.bakeH]}>To bake</Text>
             </View>
-            {(prod.data?.rows ?? []).map((row) => (
+            {(prod.data?.rows ?? []).map((row: ProductionRow) => (
               <View key={row.product_id} style={styles.row}>
                 <Text style={styles.cName}>{row.product_name}</Text>
                 <Text style={styles.cNum}>{row.total_quantity}</Text>

@@ -68,7 +68,7 @@ export default function OrderDetail() {
   if (q.isLoading) return <Loading />;
   if (q.isError || !q.data) return <ErrorText>Couldn't load order #{orderId}.</ErrorText>;
 
-  const o = q.data;
+  const o: Order = q.data;
   const overdue = isOverdue(o);
   const fulfilLabel = o.fulfillment_type === "delivery" ? "Mark as delivered" : "Mark as picked up";
 
