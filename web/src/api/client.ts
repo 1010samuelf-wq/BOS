@@ -1,6 +1,9 @@
 // fetch wrapper: base URL from Vite env, bearer token injection, and the
 // backend's uniform { error: { code, message } } surfaced as ApiRequestError.
 
+// Empty in production: the dashboard's own nginx proxies /api to the backend, so
+// the whole app is one origin (locked-down devices only need the dashboard domain
+// allowlisted). Falls back to the local dev backend when unset.
 export const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const V1 = `${API_URL}/api/v1`;
 
@@ -55,7 +58,9 @@ export async function api<T>(
 }
 
 export function wsUrl(token: string): string {
-  return `${V1.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`;
+  // API_URL is empty in production (same-origin) → build from the page origin.
+  const origin = API_URL || window.location.origin;
+  return `${origin.replace(/^http/, "ws")}/api/v1/ws?token=${encodeURIComponent(token)}`;
 }
 
 // Authenticated file download: the export endpoints require a bearer token, so a
