@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.core.auth import current_user, require_manager
+from app.core.auth import current_user, require_admin, require_manager
 from app.core.errors import APIError
 from app.core.permissions import require_section
 from app.database import get_db
@@ -11,6 +11,7 @@ from app.models import User, UserRole
 from app.models.base import utc_today
 from app.schemas.time import (
     DayHours,
+    MarkPaidIn,
     TimeEntryCreate,
     TimeEntryOut,
     TimeEntryUpdate,
@@ -70,6 +71,18 @@ def create_entry(
     db.commit()
     db.refresh(entry)
     return entry
+
+
+@router.post("/entries/mark-paid")
+def mark_entries_paid(
+    payload: MarkPaidIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Mark selected time entries paid/unpaid — payroll (admin only, §2G)."""
+    updated = time_tracking.mark_paid(db, payload.ids, payload.paid)
+    db.commit()
+    return {"updated": updated, "paid": payload.paid}
 
 
 @router.put("/entries/{entry_id}", response_model=TimeEntryOut)

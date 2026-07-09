@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.permissions import GRANTABLE_SECTIONS
@@ -18,6 +20,7 @@ class EmployeeUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     role: UserRole | None = None
     active: bool | None = None
+    hourly_rate: Decimal | None = Field(default=None, ge=0)
     # Per-employee section override. [] = access to nothing; null via a separate
     # "reset" flag. Only grantable sections are accepted.
     permissions: list[str] | None = None
@@ -40,6 +43,7 @@ class EmployeeOut(BaseModel):
     name: str
     role: UserRole
     active: bool
+    hourly_rate: Decimal
     pin_set: bool                       # completed first-login PIN setup?
     permissions: list[str] | None       # raw override (null = using role default)
     effective_sections: list[str]       # what they can actually access

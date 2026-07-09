@@ -5,6 +5,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
 import {
@@ -63,9 +64,24 @@ function SectionsEditor({
   );
 }
 
+function RateEditor({ emp, onSave, saving }: { emp: Employee; onSave: (v: string) => void; saving: boolean }) {
+  const [v, setV] = useState(emp.hourly_rate);
+  const dirty = v !== emp.hourly_rate;
+  const valid = /^\d+(\.\d{1,2})?$/.test(v.trim());
+  return (
+    <span className="row" style={{ gap: 4, alignItems: "center" }}>
+      <span className="muted" style={{ fontSize: 13 }}>Rate $</span>
+      <input className="input" style={{ width: 74, padding: "4px 8px" }} value={v} onChange={(e) => setV(e.target.value)} />
+      <span className="muted" style={{ fontSize: 13 }}>/hr</span>
+      {dirty && <button className="btn primary sm" disabled={saving || !valid} onClick={() => onSave(v.trim())}>Save</button>}
+    </span>
+  );
+}
+
 export default function EmployeesHours() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const navigate = useNavigate();
   const client = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<{ name: string; code: string } | null>(null);
@@ -91,6 +107,10 @@ export default function EmployeesHours() {
     onSuccess: invalidate, onError: onErr,
   });
   const del = useMutation({ mutationFn: deleteEmployee, onSuccess: invalidate, onError: onErr });
+  const setRate = useMutation({
+    mutationFn: (v: { id: number; rate: string }) => updateEmployee(v.id, { hourly_rate: v.rate }),
+    onSuccess: invalidate, onError: onErr,
+  });
   const confirmDelete = (e: Employee) => {
     if (window.confirm(`Permanently delete ${e.name}? This can't be undone. (Only works if they have no orders, tasks, or time entries.)`)) {
       del.mutate(e.id);
@@ -164,7 +184,10 @@ export default function EmployeesHours() {
                 <div key={e.id} style={{ borderBottom: "1px solid var(--border)", padding: "12px 0", opacity: e.active ? 1 : 0.5 }}>
                   <div className="row">
                     <div style={{ flex: 1 }}>
-                      <strong>{e.name}</strong>{!e.active ? " · inactive" : ""}
+                      <button className="linklike" title="View time cards" onClick={() => navigate(`/time?emp=${e.id}`)}>
+                        <strong>{e.name}</strong> 🕑
+                      </button>
+                      {!e.active ? " · inactive" : ""}
                       <span className="muted"> · {e.role} · PIN {e.pin_set ? "set" : "awaiting first login"}</span>
                     </div>
                     {e.active ? (
@@ -180,7 +203,8 @@ export default function EmployeesHours() {
                     )}
                   </div>
                   {e.active && (
-                    <div style={{ marginTop: 8 }}>
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                      <RateEditor emp={e} saving={setRate.isPending} onSave={(rate) => setRate.mutate({ id: e.id, rate })} />
                       <SectionsEditor
                         emp={e}
                         sections={sections.data ?? []}

@@ -56,6 +56,7 @@ export interface TimeEntry {
   user_id: number;
   clock_in: string;
   clock_out: string | null;
+  paid: boolean;
 }
 
 export interface OrderItemOut {
@@ -234,6 +235,7 @@ export interface Employee {
   name: string;
   role: Role;
   active: boolean;
+  hourly_rate: string;
   pin_set: boolean;
   permissions: string[] | null;      // raw override (null = using role default)
   effective_sections: string[];      // what they can actually access

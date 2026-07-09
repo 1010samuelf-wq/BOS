@@ -52,7 +52,7 @@ def _has_activity(db: Session, uid: int) -> bool:
 def _out(u: User, setup_code: str | None = None) -> EmployeeOut:
     return EmployeeOut(
         id=u.id, name=u.name, role=u.role, active=u.active, pin_set=u.pin_set,
-        permissions=u.permissions,
+        hourly_rate=u.hourly_rate, permissions=u.permissions,
         effective_sections=sorted(effective_sections(u)),
         setup_code=setup_code,
     )

@@ -80,6 +80,8 @@ export const updateTimeEntry = (id: number, body: { clock_in?: string; clock_out
   api<TimeEntry>(`/time/entries/${id}`, { method: "PUT", body });
 export const deleteTimeEntry = (id: number) =>
   api<void>(`/time/entries/${id}`, { method: "DELETE" });
+export const markTimePaid = (ids: number[], paid: boolean) =>
+  api<{ updated: number; paid: boolean }>("/time/entries/mark-paid", { method: "POST", body: { ids, paid } });
 
 // ---- reports ----
 export const getDailyReport = (day?: string) => api<SalesReport>("/reports/daily", { query: { day } });
@@ -152,7 +154,7 @@ export const deleteEmployee = (id: number) =>
 export const grantableSections = () => api<string[]>("/employees/sections");
 export const updateEmployee = (
   id: number,
-  body: { name?: string; role?: string; active?: boolean; permissions?: string[] | null },
+  body: { name?: string; role?: string; active?: boolean; permissions?: string[] | null; hourly_rate?: string },
 ) => api<Employee>(`/employees/${id}`, { method: "PUT", body });
 
 // ---- tasks ----

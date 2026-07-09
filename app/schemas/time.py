@@ -12,6 +12,7 @@ class TimeEntryOut(BaseModel):
     user_id: int
     clock_in: datetime
     clock_out: datetime | None
+    paid: bool
 
     @field_serializer("clock_in", "clock_out")
     def _as_utc(self, dt: datetime | None) -> str | None:
@@ -39,6 +40,13 @@ class TimeEntryUpdate(BaseModel):
 
     clock_in: datetime | None = None
     clock_out: datetime | None = None
+
+
+class MarkPaidIn(BaseModel):
+    """Admin marks a set of time entries paid (or unpaid)."""
+
+    ids: list[int]
+    paid: bool = True
 
 
 class DayHours(BaseModel):

@@ -102,6 +102,32 @@ def test_time_entries_list_create_edit_delete(client, make_user):
     assert worker.get("/api/v1/time/entries").json() == []
 
 
+def test_time_entries_mark_paid(client, make_user):
+    from decimal import Decimal
+
+    uid, _, worker = make_user("quinn", "cashier")
+    ci = datetime(2024, 3, 4, 9, tzinfo=timezone.utc).isoformat()
+    co = datetime(2024, 3, 4, 17, tzinfo=timezone.utc).isoformat()
+    done = client.post("/api/v1/time/entries", json={"user_id": uid, "clock_in": ci, "clock_out": co}).json()
+    open_ = client.post("/api/v1/time/entries", json={"user_id": uid, "clock_in": ci}).json()
+    assert done["paid"] is False
+
+    # admin marks the completed shift paid
+    r = client.post("/api/v1/time/entries/mark-paid", json={"ids": [done["id"]], "paid": True})
+    assert r.status_code == 200 and r.json()["updated"] == 1
+    entries = worker.get("/api/v1/time/entries").json()
+    assert next(e for e in entries if e["id"] == done["id"])["paid"] is True
+
+    # can't pay an open shift; a cashier can't mark paid at all
+    assert client.post("/api/v1/time/entries/mark-paid", json={"ids": [open_["id"]], "paid": True}).status_code == 400
+    assert worker.post("/api/v1/time/entries/mark-paid", json={"ids": [done["id"]], "paid": False}).status_code == 403
+
+    # setting an hourly rate on the employee
+    r = client.put(f"/api/v1/employees/{uid}", json={"hourly_rate": "18.50"})
+    assert r.status_code == 200
+    assert Decimal(r.json()["hourly_rate"]) == Decimal("18.50")
+
+
 def test_hours_visibility_rules(client, make_user):
     jill_id, _, jill = make_user("jill", "cashier")
     _, _, kate = make_user("kate", "cashier")

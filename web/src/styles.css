@@ -175,6 +175,8 @@ tr.overdue td { background: #fdf1ef; color: var(--danger); }
 textarea.input { resize: vertical; font-family: inherit; }
 
 /* sidebar clock control */
+.linklike { background: none; border: none; padding: 0; font: inherit; color: var(--primary); cursor: pointer; }
+.linklike:hover { text-decoration: underline; }
 .clock-btn { width: 100%; margin-top: 8px; }
 .clock-timer {
   margin-top: 8px; text-align: center; font-variant-numeric: tabular-nums;

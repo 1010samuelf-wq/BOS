@@ -8,11 +8,12 @@ wires the actual PIN/JWT flow; the columns already exist here.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import JSON
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import String
+from sqlalchemy import Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -30,6 +31,10 @@ class User(Base, TimestampMixin):
     pin_hash: Mapped[str | None] = mapped_column(String(255))
     pin_set: Mapped[bool] = mapped_column(default=False, nullable=False)
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # Payroll pay rate per hour, used to total unpaid time entries (§2G).
+    hourly_rate: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), default=0, server_default="0", nullable=False
+    )
     # Per-employee section override (list of section keys). NULL → use the role's
     # defaults (see app/core/permissions.py). Admin ignores this (always all).
     permissions: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)

@@ -16,6 +16,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    false as sa_false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +46,10 @@ class TimeEntry(Base):
     )
     clock_in: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     clock_out: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Payroll: whether this shift has been paid out (spec §2G).
+    paid: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
 
 
 class DailyReport(Base):

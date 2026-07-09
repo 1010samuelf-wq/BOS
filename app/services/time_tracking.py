@@ -139,6 +139,19 @@ def delete_entry(db: Session, entry_id: int) -> None:
     db.delete(entry)
 
 
+def mark_paid(db: Session, ids: list[int], paid: bool) -> int:
+    """Flag the given time entries paid/unpaid (payroll). Returns how many
+    matched. Open (unfinished) shifts can't be marked paid."""
+    if not ids:
+        return 0
+    entries = db.execute(select(TimeEntry).where(TimeEntry.id.in_(ids))).scalars().all()
+    for e in entries:
+        if paid and e.clock_out is None:
+            raise bad_request("Can't pay an open shift — clock it out first.", code="open_shift")
+        e.paid = paid
+    return len(entries)
+
+
 def weekly_hours(db: Session, user_id: int, any_day: date):
     user = db.get(User, user_id)
     if user is None:
