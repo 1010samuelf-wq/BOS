@@ -91,6 +91,12 @@ export default function Login() {
     setError(null);
   };
 
+  // Logging in verifies an EXISTING pin, which may predate the current policy
+  // (e.g. a 4-digit PIN set before the minimum was raised) — the server never
+  // enforces a minimum on login, only on creating/changing a PIN. Only
+  // choose-pin/confirm-pin (setting a new PIN) need the real MIN_PIN..MAX_PIN.
+  const minRequired = phase === "enter-pin" ? 1 : MIN_PIN;
+
   const onDigit = (d: string) => {
     if (busy || pin.length >= MAX_PIN) return;
     setPin(pin + d);
@@ -98,7 +104,7 @@ export default function Login() {
   const onBackspace = () => setPin(pin.slice(0, -1));
 
   const onEnter = async () => {
-    if (!selected || pin.length < MIN_PIN) return;
+    if (!selected || pin.length < minRequired) return;
     setBusy(true);
     setError(null);
 
@@ -216,7 +222,7 @@ export default function Login() {
                 onDigit={onDigit}
                 onBackspace={onBackspace}
                 onEnter={onEnter}
-                enterEnabled={pin.length >= MIN_PIN && !busy}
+                enterEnabled={pin.length >= minRequired && !busy}
               />
             </>
           )}
