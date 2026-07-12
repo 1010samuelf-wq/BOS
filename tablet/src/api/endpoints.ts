@@ -44,7 +44,12 @@ export const listOrders = (params: {
   paid_status?: string;
   fulfillment_type?: string;
   fulfillment_status?: string;
+  payment_method?: string;
   product_name?: string;
+  from?: string;
+  to?: string;
+  date_field?: string;
+  exclude_cancelled?: boolean;
 }) => api<Page<Order>>("/orders", { query: params });
 
 export const getOrder = (id: number) => api<Order>(`/orders/${id}`);
