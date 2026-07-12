@@ -4,32 +4,100 @@
 // the API returns 403 for cashiers).
 
 import { useQuery } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { getDailyReport, getMonthlyReport } from "../../src/api/endpoints";
-import type { ExpenseOut, SalesReport } from "../../src/api/types";
+import { getDailyReport, getMonthlyReport, listOrders } from "../../src/api/endpoints";
+import type { ExpenseOut, Order, SalesReport } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
-function Metric({ label, value, tone }: { label: string; value: string; tone?: string }) {
+interface Drill {
+  label: string;
+  params: { payment_method?: string; paid_status?: string; exclude_cancelled?: boolean };
+}
+
+// Drill-down (§2D): tapping a metric or a breakdown segment expands the
+// itemized orders behind that number.
+function DrillPanel({ report, drill, onClose }: { report: SalesReport; drill: Drill; onClose: () => void }) {
+  const q = useQuery({
+    queryKey: ["report-drill", report.from_date, report.to_date, drill.label],
+    queryFn: () => listOrders({ from: report.from_date, to: report.to_date, limit: 200, ...drill.params }),
+  });
+  const rows: Order[] = q.data?.items ?? [];
   return (
-    <View style={styles.metric}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={[styles.metricValue, tone ? { color: tone } : null]}>{value}</Text>
-    </View>
+    <Card>
+      <View style={styles.drillHeader}>
+        <Text style={styles.section}>{drill.label}</Text>
+        <Pressable style={styles.closeBtn} onPress={onClose}>
+          <Text style={styles.closeBtnText}>Close</Text>
+        </Pressable>
+      </View>
+      {q.isLoading ? (
+        <Loading />
+      ) : rows.length === 0 ? (
+        <Text style={styles.muted}>No matching orders.</Text>
+      ) : (
+        rows.map((o) => (
+          <Pressable
+            key={o.id}
+            style={styles.drillRow}
+            onPress={() => router.navigate(`/(main)/orders/${o.id}` as never)}
+          >
+            <Text style={[styles.drillCell, { width: 50 }]}>#{o.id}</Text>
+            <Text style={[styles.drillCell, { flex: 1 }]}>{o.client_name}</Text>
+            <Text style={[styles.drillCell, { width: 100, textTransform: "capitalize" }]}>
+              {o.status.replace("_", " ")}
+            </Text>
+            <Text style={[styles.drillCell, { width: 110 }]}>
+              {o.paid_status}
+              {o.payment_method ? ` · ${o.payment_method}` : ""}
+            </Text>
+            <Text style={[styles.drillCell, { width: 70, fontWeight: "700", textAlign: "right" }]}>
+              ${o.total}
+            </Text>
+          </Pressable>
+        ))
+      )}
+    </Card>
   );
 }
 
-function BreakdownBar({ report }: { report: SalesReport }) {
+function Metric({
+  label,
+  value,
+  tone,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  onPress?: () => void;
+}) {
+  const Wrapper = onPress ? Pressable : View;
+  return (
+    <Wrapper style={styles.metric} onPress={onPress}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={[styles.metricValue, tone ? { color: tone } : null]}>{value}</Text>
+    </Wrapper>
+  );
+}
+
+function breakdownSegments(report: SalesReport) {
   const b = report.payment_breakdown;
-  const segs = [
-    { label: "Cash", v: parseFloat(b.cash), color: colors.success },
-    { label: "Card", v: parseFloat(b.card), color: colors.primary },
-    { label: "E-transfer", v: parseFloat(b.etransfer), color: "#3a6ea5" },
-    { label: "Unpaid", v: parseFloat(b.unpaid), color: colors.warn },
-  ].filter((s) => s.v > 0);
+  return [
+    { label: "Cash", v: parseFloat(b.cash), color: colors.success, drill: { payment_method: "cash" } },
+    { label: "Card", v: parseFloat(b.card), color: colors.primary, drill: { payment_method: "card" } },
+    { label: "E-transfer", v: parseFloat(b.etransfer), color: "#3a6ea5", drill: { payment_method: "etransfer" } },
+    { label: "Unpaid", v: parseFloat(b.unpaid), color: colors.warn, drill: { paid_status: "unpaid" } },
+  ];
+}
+
+function BreakdownBar({ report, onDrill }: { report: SalesReport; onDrill: (d: Drill) => void }) {
+  const all = breakdownSegments(report);
+  const segs = all.filter((s) => s.v > 0);
   const total = segs.reduce((a, s) => a + s.v, 0) || 1;
   return (
     <View style={{ gap: spacing.s }}>
@@ -40,12 +108,16 @@ function BreakdownBar({ report }: { report: SalesReport }) {
       </View>
       <View style={styles.legend}>
         {segs.map((s) => (
-          <View key={s.label} style={styles.legendItem}>
+          <Pressable
+            key={s.label}
+            style={styles.legendItem}
+            onPress={() => onDrill({ label: `${s.label} — orders`, params: s.drill })}
+          >
             <View style={[styles.legendDot, { backgroundColor: s.color }]} />
             <Text style={styles.legendText}>
               {s.label} ${s.v.toFixed(2)}
             </Text>
-          </View>
+          </Pressable>
         ))}
       </View>
     </View>
@@ -54,6 +126,7 @@ function BreakdownBar({ report }: { report: SalesReport }) {
 
 export default function ReportsScreen() {
   const [mode, setMode] = useState<"daily" | "monthly">("daily");
+  const [drill, setDrill] = useState<Drill | null>(null);
   const report = useQuery({
     queryKey: ["report", mode],
     queryFn: () => (mode === "daily" ? getDailyReport() : getMonthlyReport()),
@@ -88,8 +161,16 @@ export default function ReportsScreen() {
         ) : report.data ? (
           <>
             <View style={styles.metrics}>
-              <Metric label="Revenue" value={`$${report.data.revenue}`} />
-              <Metric label="Orders" value={String(report.data.order_count)} />
+              <Metric
+                label="Revenue"
+                value={`$${report.data.revenue}`}
+                onPress={() => setDrill({ label: "Revenue — orders", params: { exclude_cancelled: true } })}
+              />
+              <Metric
+                label="Orders"
+                value={String(report.data.order_count)}
+                onPress={() => setDrill({ label: "Orders", params: { exclude_cancelled: true } })}
+              />
               <Metric label="Ingredient cost" value={`$${report.data.ingredient_cost}`} />
               <Metric
                 label="Profit"
@@ -98,9 +179,11 @@ export default function ReportsScreen() {
               />
             </View>
 
+            {drill && <DrillPanel report={report.data} drill={drill} onClose={() => setDrill(null)} />}
+
             <Card>
               <Text style={styles.section}>Payment breakdown</Text>
-              <BreakdownBar report={report.data} />
+              <BreakdownBar report={report.data} onDrill={setDrill} />
             </Card>
 
             <Card>
@@ -162,4 +245,16 @@ const styles = StyleSheet.create({
   expenseDesc: { color: colors.text },
   expenseAmt: { color: colors.text, fontWeight: "700" },
   expenseTotal: { flexDirection: "row", justifyContent: "space-between", paddingTop: spacing.s },
+  drillHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  closeBtn: { paddingHorizontal: spacing.m, paddingVertical: spacing.xs, borderRadius: radius.m, backgroundColor: colors.bg },
+  closeBtnText: { color: colors.textMuted, fontWeight: "600" },
+  drillRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.s,
+    paddingVertical: spacing.s,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  drillCell: { color: colors.text, fontSize: 13 },
 });
