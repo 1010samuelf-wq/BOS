@@ -12,6 +12,7 @@ import type { DeliveryRow } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Empty, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
+import { formatNeeded } from "../../src/order/dates";
 
 export default function DeliveriesScreen() {
   const deliveries = useQuery({ queryKey: ["deliveries", "today"], queryFn: () => getDeliveries({}) });
@@ -31,6 +32,7 @@ export default function DeliveriesScreen() {
               <Text style={[styles.h, styles.cTime]}>Needed</Text>
               <Text style={[styles.h, styles.cClient]}>Client</Text>
               <Text style={[styles.h, styles.cAddr]}>Address</Text>
+              <Text style={[styles.h, styles.cRecipient]}>Recipient</Text>
               <Text style={[styles.h, styles.cItems]}>Items</Text>
               <Text style={[styles.h, styles.cBox]}>Boxes</Text>
               <Text style={[styles.h, styles.cTotal]}>Total</Text>
@@ -39,13 +41,14 @@ export default function DeliveriesScreen() {
             {rows.map((r) => (
               <View key={r.order_id} style={styles.row}>
                 <Text style={styles.cTime}>
-                  {r.needed_for_date ? new Date(r.needed_for_date).toLocaleDateString() : "—"}
+                  {r.needed_for_date ? formatNeeded(r.needed_for_date) : "—"}
                 </Text>
                 <View style={styles.cClient}>
                   <Text style={styles.client}>{r.client_name}</Text>
                   <Text style={styles.phone}>{r.client_phone ?? ""}</Text>
                 </View>
                 <Text style={styles.cAddr}>{r.delivery_address ?? "—"}</Text>
+                <Text style={styles.cRecipient}>{r.delivery_name ?? "—"}</Text>
                 <Text style={styles.cItems}>
                   {r.items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}
                 </Text>
@@ -81,6 +84,7 @@ const styles = StyleSheet.create({
   cTime: { width: 90, color: colors.text },
   cClient: { width: 130 },
   cAddr: { flex: 2, color: colors.text },
+  cRecipient: { flex: 1, color: colors.text },
   cItems: { flex: 3, color: colors.textMuted, fontSize: 13 },
   cBox: { width: 50, color: colors.text },
   cTotal: { width: 70, color: colors.text, fontWeight: "700" },

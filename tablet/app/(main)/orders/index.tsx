@@ -12,6 +12,7 @@ import type { Order, OrderStatus } from "../../../src/api/types";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Empty, ErrorText, Loading, ScreenHeader } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
+import { neededDeadline } from "../../../src/order/dates";
 
 const COLUMNS: { key: OrderStatus; label: string }[] = [
   { key: "pending", label: "Pending" },
@@ -24,7 +25,7 @@ function isOverdue(o: Order): boolean {
     o.fulfillment_status !== "fulfilled" &&
     o.status !== "cancelled" &&
     !!o.needed_for_date &&
-    new Date(o.needed_for_date).getTime() < Date.now()
+    neededDeadline(o.needed_for_date) < Date.now()
   );
 }
 

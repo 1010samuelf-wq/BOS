@@ -26,6 +26,7 @@ export interface Draft {
   fulfillment: FulfillmentType;
   deliveryPrice: string; // manual entry; only meaningful for delivery
   deliveryAddress: string;
+  deliveryName: string; // recipient name; only meaningful for delivery
   cardMessage: string;
   paymentTiming: PaymentTiming;
   paymentMethod: PaymentMethod | null;
@@ -52,6 +53,7 @@ export function emptyDraft(): Draft {
     fulfillment: "pickup",
     deliveryPrice: "",
     deliveryAddress: "",
+    deliveryName: "",
     cardMessage: "",
     paymentTiming: "now",
     paymentMethod: null,
@@ -143,6 +145,7 @@ export function buildPayload(draft: Draft): OrderCreatePayload {
     delivery_price:
       isDelivery && draft.deliveryPrice.trim() !== "" ? draft.deliveryPrice.trim() : null,
     delivery_address: isDelivery ? draft.deliveryAddress.trim() : null,
+    delivery_name: isDelivery && draft.deliveryName.trim() !== "" ? draft.deliveryName.trim() : null,
     card_message: draft.cardMessage.trim() || null,
     payment_timing: draft.paymentTiming,
     // Backend rejects a method on pay-later orders — it's captured at mark-paid.

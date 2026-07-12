@@ -19,6 +19,7 @@ import { ApiRequestError } from "../../../src/api/client";
 import * as api from "../../../src/api/endpoints";
 import type { Order, PaymentMethod } from "../../../src/api/types";
 import { printReceipt } from "../../../src/order/receipt";
+import { formatNeeded, neededDeadline } from "../../../src/order/dates";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
@@ -31,7 +32,7 @@ function isOverdue(o: Order): boolean {
     o.fulfillment_status !== "fulfilled" &&
     o.status !== "cancelled" &&
     !!o.needed_for_date &&
-    new Date(o.needed_for_date).getTime() < Date.now()
+    neededDeadline(o.needed_for_date) < Date.now()
   );
 }
 
@@ -86,7 +87,7 @@ export default function OrderDetail() {
             </Text>
             <Text style={styles.sub}>
               {o.fulfillment_type} · {o.client_phone ?? "no phone"}
-              {o.needed_for_date ? ` · needed ${new Date(o.needed_for_date).toLocaleString()}` : ""}
+              {o.needed_for_date ? ` · needed ${formatNeeded(o.needed_for_date)}` : ""}
               {overdue ? " · OVERDUE" : ""}
             </Text>
             {o.locked_by != null && (
@@ -131,7 +132,10 @@ export default function OrderDetail() {
             <Text style={styles.cardMsg}>🎂 “{o.card_message}”</Text>
           ) : null}
           {o.delivery_address ? (
-            <Text style={styles.addr}>📍 {o.delivery_address}</Text>
+            <Text style={styles.addr}>
+              📍 {o.delivery_address}
+              {o.delivery_name ? ` · for ${o.delivery_name}` : ""}
+            </Text>
           ) : null}
         </Card>
 

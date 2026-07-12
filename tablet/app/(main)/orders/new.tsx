@@ -50,6 +50,18 @@ export default function NewOrderScreen() {
   const [problems, setProblems] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
+  // "Needed for" is date + an OPTIONAL time (not every order has a specific
+  // time). Kept as two plain text fields — no native date-picker dependency,
+  // so nothing here can crash on a device this hasn't been tested on. Empty
+  // date -> null; date only -> date-only string; both -> "YYYY-MM-DDTHH:MM".
+  const [neededDate, setNeededDate] = useState("");
+  const [neededTime, setNeededTime] = useState("");
+  const setNeededParts = (date: string, time: string) => {
+    setNeededDate(date);
+    setNeededTime(date ? time : "");
+    setDraft((d) => ({ ...d, neededFor: date ? (time ? `${date}T${time}` : date) : null }));
+  };
+
   // Search-as-you-type (§2A): live fuzzy dropdown from /products/search.
   const results = useQuery({
     queryKey: ["product-search", search],
@@ -116,9 +128,16 @@ export default function NewOrderScreen() {
             />
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              placeholder="Needed for (YYYY-MM-DD HH:MM)"
-              value={draft.neededFor ?? ""}
-              onChangeText={(t) => set({ neededFor: t.trim() ? t.replace(" ", "T") : null })}
+              placeholder="Needed for (YYYY-MM-DD)"
+              value={neededDate}
+              onChangeText={(t) => setNeededParts(t.trim(), neededTime)}
+            />
+            <TextInput
+              style={[styles.input, { width: 100 }]}
+              placeholder="Time (optional)"
+              value={neededTime}
+              editable={!!neededDate.trim()}
+              onChangeText={(t) => setNeededParts(neededDate, t.trim())}
             />
           </View>
 
@@ -151,13 +170,19 @@ export default function NewOrderScreen() {
                   value={draft.deliveryAddress}
                   onChangeText={(t) => set({ deliveryAddress: t })}
                 />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="Delivery name (recipient)"
+                  value={draft.deliveryName}
+                  onChangeText={(t) => set({ deliveryName: t })}
+                />
               </>
             )}
           </View>
 
           <TextInput
             style={styles.input}
-            placeholder="Card message (written on the cake/card)"
+            placeholder="Card message"
             value={draft.cardMessage}
             onChangeText={(t) => set({ cardMessage: t })}
           />
