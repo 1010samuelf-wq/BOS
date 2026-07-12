@@ -130,6 +130,12 @@ export const resetPin = (id: number) =>
   api<Employee>(`/employees/${id}/reset-pin`, { method: "POST" });
 export const deactivateEmployee = (id: number) =>
   api<Employee>(`/employees/${id}`, { method: "DELETE" });
+export const deleteEmployee = (id: number) =>
+  api<Employee>(`/employees/${id}`, { method: "DELETE", query: { hard: true } });
+export const updateEmployee = (
+  id: number,
+  body: { name?: string; role?: string; active?: boolean; hourly_rate?: string },
+) => api<Employee>(`/employees/${id}`, { method: "PUT", body });
 
 // ---- notifications ----
 export const listNotifications = (params: { unread_only?: boolean; limit?: number }) =>

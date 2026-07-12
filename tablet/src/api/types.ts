@@ -242,7 +242,11 @@ export interface Employee {
   name: string;
   role: Role;
   active: boolean;
+  hourly_rate: string;
   pin_set: boolean;
+  permissions: string[] | null;
+  effective_sections: string[];
+  setup_code?: string | null; // only present right after create/reset-pin
 }
 
 // ---- notifications ----
