@@ -16,6 +16,7 @@ import type {
   SalesReport,
   StockLevel,
   Task,
+  TimeEntry,
   TokenOut,
   WeeklyHours,
 } from "./types";
@@ -98,6 +99,15 @@ export const clockIn = () => api<unknown>("/time/clock-in", { method: "POST" });
 export const clockOut = () => api<unknown>("/time/clock-out", { method: "POST" });
 export const getHours = (params: { employee_id?: number; week?: string }) =>
   api<WeeklyHours>("/time/hours", { query: params });
+export const listTimeEntries = (params: { employee_id?: number; from?: string; to?: string }) =>
+  api<TimeEntry[]>("/time/entries", { query: params });
+export const createTimeEntry = (body: { user_id: number; clock_in: string; clock_out?: string | null }) =>
+  api<TimeEntry>("/time/entries", { method: "POST", body });
+export const updateTimeEntry = (id: number, body: { clock_in?: string; clock_out?: string | null }) =>
+  api<TimeEntry>(`/time/entries/${id}`, { method: "PUT", body });
+export const deleteTimeEntry = (id: number) => api<void>(`/time/entries/${id}`, { method: "DELETE" });
+export const markTimePaid = (ids: number[], paid: boolean) =>
+  api<{ updated: number; paid: boolean }>("/time/entries/mark-paid", { method: "POST", body: { ids, paid } });
 
 // ---- deliveries ----
 export const getDeliveries = (params: { from?: string; to?: string }) =>

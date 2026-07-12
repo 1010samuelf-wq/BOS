@@ -125,6 +125,7 @@ export interface TimeEntry {
   user_id: number;
   clock_in: string;
   clock_out: string | null;
+  paid: boolean;
 }
 
 export interface DayHours {
