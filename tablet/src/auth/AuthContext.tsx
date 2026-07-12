@@ -27,7 +27,7 @@ interface AuthContextValue {
   user: SessionUser | null;
   ready: boolean; // storage hydration finished
   login: (userId: number, pin: string) => Promise<void>;
-  setupPin: (userId: number, pin: string) => Promise<void>;
+  setupPin: (userId: number, pin: string, setupCode: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -64,8 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setupPin = useCallback(
-    async (userId: number, pin: string) => {
-      await endpoints.setPin(userId, pin);
+    async (userId: number, pin: string, setupCode: string) => {
+      await endpoints.setPin(userId, pin, setupCode);
       await login(userId, pin); // straight into a session after first setup
     },
     [login],

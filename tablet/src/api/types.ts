@@ -19,7 +19,6 @@ export interface RosterEntry {
   id: number;
   name: string;
   role: Role;
-  pin_set: boolean;
 }
 
 export interface TokenOut {

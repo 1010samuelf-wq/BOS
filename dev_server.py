@@ -50,4 +50,5 @@ if __name__ == "__main__":
     print(f"[dev] SQLite DB at {_DB_PATH}")
     print(f"[dev] login -> employee: system   PIN: {_DEV_ADMIN_PIN}")
     print("[dev] docs:  http://localhost:8000/docs")
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=False)
+    # 0.0.0.0 so devices on the LAN (e.g. a tablet running Expo Go) can reach it.
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)

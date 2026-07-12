@@ -26,8 +26,8 @@ export const fetchRoster = () => api<RosterEntry[]>("/auth/roster");
 export const login = (user_id: number, pin: string) =>
   api<TokenOut>("/auth/login", { method: "POST", body: { user_id, pin } });
 
-export const setPin = (user_id: number, pin: string) =>
-  api<void>("/auth/set-pin", { method: "POST", body: { user_id, pin } });
+export const setPin = (user_id: number, pin: string, setup_code: string) =>
+  api<void>("/auth/set-pin", { method: "POST", body: { user_id, pin, setup_code } });
 
 // ---- products ----
 export const searchProducts = (q: string) =>
