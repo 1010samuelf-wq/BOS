@@ -40,7 +40,22 @@ export default function TasksScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const mine = useQuery({ queryKey: ["tasks", "mine"], queryFn: () => listTasks({ employee_id: user?.id }) });
-  const all = useQuery({ queryKey: ["tasks", "all"], queryFn: () => listTasks({}), enabled: isManager });
+
+  // "All tasks" filters (§2J): assignee, status, due-date.
+  const [fEmployee, setFEmployee] = useState<number | null>(null);
+  const [fStatus, setFStatus] = useState<"" | "open" | "done">("");
+  const [fDate, setFDate] = useState("");
+  const filtersActive = fEmployee !== null || fStatus !== "" || fDate !== "";
+  const allFilters = {
+    employee_id: fEmployee ?? undefined,
+    done: fStatus === "" ? undefined : fStatus === "done",
+    date: fDate.trim() || undefined,
+  };
+  const all = useQuery({
+    queryKey: ["tasks", "all", allFilters],
+    queryFn: () => listTasks(allFilters),
+    enabled: isManager,
+  });
   const roster = useQuery({ queryKey: ["roster"], queryFn: fetchRoster, enabled: isManager });
   const nameOf = useMemo(() => {
     const m = new Map<number, string>();
@@ -131,8 +146,56 @@ export default function TasksScreen() {
 
             <Card>
               <Text style={styles.section}>All tasks</Text>
+              <View style={styles.assignees}>
+                <Pressable
+                  style={[styles.pill, fEmployee === null && styles.pillOn]}
+                  onPress={() => setFEmployee(null)}
+                >
+                  <Text style={fEmployee === null ? styles.pillTextOn : styles.pillText}>Everyone</Text>
+                </Pressable>
+                {(roster.data ?? []).map((r: RosterEntry) => (
+                  <Pressable
+                    key={r.id}
+                    style={[styles.pill, fEmployee === r.id && styles.pillOn]}
+                    onPress={() => setFEmployee(r.id)}
+                  >
+                    <Text style={fEmployee === r.id ? styles.pillTextOn : styles.pillText}>{r.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={styles.assignees}>
+                {([
+                  { key: "", label: "Any status" },
+                  { key: "open", label: "Not done" },
+                  { key: "done", label: "Done" },
+                ] as const).map((o) => (
+                  <Pressable
+                    key={o.key}
+                    style={[styles.pill, fStatus === o.key && styles.pillOn]}
+                    onPress={() => setFStatus(o.key)}
+                  >
+                    <Text style={fStatus === o.key ? styles.pillTextOn : styles.pillText}>{o.label}</Text>
+                  </Pressable>
+                ))}
+                <TextInput
+                  style={[styles.input, { width: 130 }]}
+                  placeholder="Due date (YYYY-MM-DD)"
+                  value={fDate}
+                  onChangeText={setFDate}
+                />
+                {filtersActive && (
+                  <Pressable
+                    style={styles.pill}
+                    onPress={() => { setFEmployee(null); setFStatus(""); setFDate(""); }}
+                  >
+                    <Text style={styles.pillText}>Clear</Text>
+                  </Pressable>
+                )}
+              </View>
               {all.isLoading ? (
                 <Loading />
+              ) : (all.data ?? []).length === 0 ? (
+                <Text style={styles.muted}>No matching tasks.</Text>
               ) : (
                 (all.data ?? []).map((t: Task) => (
                   <TaskRow key={t.id} task={t} name={nameOf(t.assigned_to)} onToggle={() => toggle.mutate(t.id)} />
