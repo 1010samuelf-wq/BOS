@@ -30,12 +30,18 @@ export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown; query?: Record<string, string | number | boolean | undefined> } = {},
 ): Promise<T> {
-  const url = new URL(`${V1}${path}`);
-  for (const [k, v] of Object.entries(options.query ?? {})) {
-    if (v !== undefined) url.searchParams.set(k, String(v));
-  }
+  // Build the URL by plain string concatenation, not `new URL()` — under
+  // concurrent calls (several queries firing on mount) the URL/URLSearchParams
+  // polyfill on this device produced corrupted, doubled-up URLs (e.g. the path
+  // segment ending up containing a second copy of the full absolute URL). This
+  // sidesteps that class of bug entirely.
+  const params = Object.entries(options.query ?? {})
+    .filter(([, v]) => v !== undefined)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  const fullUrl = `${V1}${path}${params ? `?${params}` : ""}`;
 
-  const res = await fetch(url.toString(), {
+  const res = await fetch(fullUrl, {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
