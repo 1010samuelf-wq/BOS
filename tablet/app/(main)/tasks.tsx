@@ -12,6 +12,7 @@ import { createTask, fetchRoster, listTasks, toggleTaskDone } from "../../src/ap
 import type { RosterEntry, Task } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
+import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
@@ -72,18 +73,20 @@ export default function TasksScreen() {
   // create form
   const [desc, setDesc] = useState("");
   const [assignee, setAssignee] = useState<number | null>(null);
-  const [due, setDue] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
   const create = useMutation({
     mutationFn: () =>
       createTask({
         description: desc.trim(),
         assigned_to: assignee!,
-        due_date: due.trim() ? due.replace(" ", "T") : null,
+        due_date: dueDate.trim() ? `${dueDate.trim()}T${dueTime.trim() || "00:00"}` : null,
       }),
     onSuccess: () => {
       setDesc("");
       setAssignee(null);
-      setDue("");
+      setDueDate("");
+      setDueTime("");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: (e) => setError(e instanceof ApiRequestError ? e.message : "Create failed."),
@@ -130,12 +133,10 @@ export default function TasksScreen() {
                   </Pressable>
                 ))}
               </View>
-              <TextInput
-                style={styles.input}
-                placeholder="Due (YYYY-MM-DD HH:MM, optional)"
-                value={due}
-                onChangeText={setDue}
-              />
+              <View style={styles.assignees}>
+                <DateField style={{ width: 150 }} placeholder="Due date (optional)" value={dueDate} onChange={setDueDate} />
+                <TimeField style={{ width: 120 }} placeholder="Time" value={dueTime} onChange={setDueTime} disabled={!dueDate.trim()} />
+              </View>
               <Button
                 label="Create task"
                 busy={create.isPending}
@@ -177,11 +178,11 @@ export default function TasksScreen() {
                     <Text style={fStatus === o.key ? styles.pillTextOn : styles.pillText}>{o.label}</Text>
                   </Pressable>
                 ))}
-                <TextInput
-                  style={[styles.input, { width: 130 }]}
-                  placeholder="Due date (YYYY-MM-DD)"
+                <DateField
+                  style={{ width: 150 }}
+                  placeholder="Due date"
                   value={fDate}
-                  onChangeText={setFDate}
+                  onChange={setFDate}
                 />
                 {filtersActive && (
                   <Pressable
@@ -239,7 +240,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   label: { color: colors.textMuted, fontSize: 12 },
-  assignees: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s },
+  assignees: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s, alignItems: "center" },
   pill: {
     borderWidth: 1,
     borderColor: colors.border,

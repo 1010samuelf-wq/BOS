@@ -21,6 +21,7 @@ import { ApiRequestError } from "../../../src/api/client";
 import { createOrder, searchProducts } from "../../../src/api/endpoints";
 import type { PaymentMethod, Product } from "../../../src/api/types";
 import { RequiresConnection } from "../../../src/components/Chrome";
+import { DateField, TimeField } from "../../../src/components/DateTimeField";
 import { QtyControl } from "../../../src/components/QtyControl";
 import { colors, radius, spacing } from "../../../src/components/theme";
 import {
@@ -114,71 +115,73 @@ export default function NewOrderScreen() {
         <View style={styles.card}>
           <View style={styles.rowWrap}>
             <TextInput
-              style={[styles.input, { flex: 2 }]}
+              style={[styles.input, styles.grow, { minWidth: 200 }]}
               placeholder="Client name *"
               value={draft.clientName}
               onChangeText={(t) => set({ clientName: t })}
             />
             <TextInput
-              style={[styles.input, { flex: 1 }]}
+              style={[styles.input, styles.grow, { minWidth: 140 }]}
               placeholder="Phone"
               keyboardType="phone-pad"
               value={draft.clientPhone}
               onChangeText={(t) => set({ clientPhone: t })}
             />
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Needed for (YYYY-MM-DD)"
-              value={neededDate}
-              onChangeText={(t) => setNeededParts(t.trim(), neededTime)}
-            />
-            <TextInput
-              style={[styles.input, { width: 100 }]}
-              placeholder="Time (optional)"
-              value={neededTime}
-              editable={!!neededDate.trim()}
-              onChangeText={(t) => setNeededParts(neededDate, t.trim())}
-            />
           </View>
 
           <View style={styles.rowWrap}>
-            <View style={styles.toggle}>
-              {(["pickup", "delivery"] as const).map((f) => (
-                <Pressable
-                  key={f}
-                  style={[styles.toggleOpt, draft.fulfillment === f && styles.toggleOptActive]}
-                  onPress={() => set({ fulfillment: f })}
-                >
-                  <Text style={draft.fulfillment === f ? styles.toggleTextActive : styles.toggleText}>
-                    {f === "pickup" ? "Pickup" : "Delivery"}
-                  </Text>
-                </Pressable>
-              ))}
+            <View>
+              <Text style={styles.fieldLabel}>Needed for (date)</Text>
+              <DateField value={neededDate} onChange={(d) => setNeededParts(d, neededTime)} style={{ width: 160 }} />
             </View>
-            {draft.fulfillment === "delivery" && (
-              <>
-                <TextInput
-                  style={[styles.input, { width: 130 }]}
-                  placeholder="Delivery $"
-                  keyboardType="decimal-pad"
-                  value={draft.deliveryPrice}
-                  onChangeText={(t) => set({ deliveryPrice: t })}
-                />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Delivery address *"
-                  value={draft.deliveryAddress}
-                  onChangeText={(t) => set({ deliveryAddress: t })}
-                />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="Delivery name (recipient)"
-                  value={draft.deliveryName}
-                  onChangeText={(t) => set({ deliveryName: t })}
-                />
-              </>
-            )}
+            <View>
+              <Text style={styles.fieldLabel}>Time (optional)</Text>
+              <TimeField
+                value={neededTime}
+                onChange={(t) => setNeededParts(neededDate, t)}
+                disabled={!neededDate.trim()}
+                style={{ width: 130 }}
+              />
+            </View>
           </View>
+
+          <View style={styles.toggle}>
+            {(["pickup", "delivery"] as const).map((f) => (
+              <Pressable
+                key={f}
+                style={[styles.toggleOpt, draft.fulfillment === f && styles.toggleOptActive]}
+                onPress={() => set({ fulfillment: f })}
+              >
+                <Text style={draft.fulfillment === f ? styles.toggleTextActive : styles.toggleText}>
+                  {f === "pickup" ? "Pickup" : "Delivery"}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {draft.fulfillment === "delivery" && (
+            <View style={styles.rowWrap}>
+              <TextInput
+                style={[styles.input, { minWidth: 110, width: 110 }]}
+                placeholder="Delivery $"
+                keyboardType="decimal-pad"
+                value={draft.deliveryPrice}
+                onChangeText={(t) => set({ deliveryPrice: t })}
+              />
+              <TextInput
+                style={[styles.input, styles.grow, { minWidth: 200 }]}
+                placeholder="Delivery address *"
+                value={draft.deliveryAddress}
+                onChangeText={(t) => set({ deliveryAddress: t })}
+              />
+              <TextInput
+                style={[styles.input, styles.grow, { minWidth: 180 }]}
+                placeholder="Delivery name (recipient)"
+                value={draft.deliveryName}
+                onChangeText={(t) => set({ deliveryName: t })}
+              />
+            </View>
+          )}
 
           <TextInput
             style={styles.input}
@@ -358,6 +361,8 @@ const styles = StyleSheet.create({
     gap: spacing.m,
   },
   rowWrap: { flexDirection: "row", gap: spacing.m, alignItems: "center", flexWrap: "wrap" },
+  grow: { flexGrow: 1, flexBasis: 0 },
+  fieldLabel: { color: colors.textMuted, fontSize: 11, marginBottom: 2 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

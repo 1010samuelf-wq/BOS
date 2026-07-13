@@ -7,7 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Print from "expo-print";
 
 import { ApiRequestError } from "../../src/api/client";
@@ -26,6 +26,7 @@ import {
 import type { Employee, RosterEntry, TimeEntry } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
+import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
@@ -260,10 +261,10 @@ export default function TimeScreen() {
                 return (
                   <View key={e.id} style={styles.editRow}>
                     <Text style={styles.dayLabel}>{fmtDay(e.clock_in)}</Text>
-                    <TextInput style={styles.smallInput} placeholder="In date" value={editInDate} onChangeText={setEditInDate} />
-                    <TextInput style={styles.tinyInput} placeholder="HH:MM" value={editInTime} onChangeText={setEditInTime} />
-                    <TextInput style={styles.smallInput} placeholder="Out date" value={editOutDate} onChangeText={setEditOutDate} />
-                    <TextInput style={styles.tinyInput} placeholder="HH:MM" value={editOutTime} onChangeText={setEditOutTime} />
+                    <DateField style={styles.smallInput} placeholder="In date" value={editInDate} onChange={setEditInDate} />
+                    <TimeField style={styles.tinyInput} placeholder="HH:MM" value={editInTime} onChange={setEditInTime} />
+                    <DateField style={styles.smallInput} placeholder="Out date" value={editOutDate} onChange={setEditOutDate} />
+                    <TimeField style={styles.tinyInput} placeholder="HH:MM" value={editOutTime} onChange={setEditOutTime} />
                     <Button
                       label="Save"
                       busy={save.isPending}
@@ -316,10 +317,10 @@ export default function TimeScreen() {
 
           {isManager && (adding ? (
             <View style={styles.editRow}>
-              <TextInput style={styles.smallInput} placeholder="In date (YYYY-MM-DD)" value={addInDate} onChangeText={setAddInDate} />
-              <TextInput style={styles.tinyInput} placeholder="HH:MM" value={addInTime} onChangeText={setAddInTime} />
-              <TextInput style={styles.smallInput} placeholder="Out date (optional)" value={addOutDate} onChangeText={setAddOutDate} />
-              <TextInput style={styles.tinyInput} placeholder="HH:MM" value={addOutTime} onChangeText={setAddOutTime} />
+              <DateField style={styles.smallInput} placeholder="In date" value={addInDate} onChange={setAddInDate} />
+              <TimeField style={styles.tinyInput} placeholder="HH:MM" value={addInTime} onChange={setAddInTime} />
+              <DateField style={styles.smallInput} placeholder="Out date (optional)" value={addOutDate} onChange={setAddOutDate} />
+              <TimeField style={styles.tinyInput} placeholder="HH:MM" value={addOutTime} onChange={setAddOutTime} />
               <Button
                 label="Add"
                 busy={add.isPending}
