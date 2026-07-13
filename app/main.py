@@ -14,6 +14,34 @@ from app.core.ratelimit import RateLimitMiddleware
 from app.core.realtime import broadcaster
 
 
+class ProxyFormPathNormalizer:
+    """Accept HTTP requests whose target is in *absolute form*.
+
+    A client configured to use a proxy (e.g. the shop tablets behind their
+    content-filter, whose Android proxy/VPN forwards some requests untouched)
+    sends ``GET http://host:port/path`` instead of the normal ``GET /path``.
+    ASGI then reports ``scope["path"]`` as the whole URL, and routing 404s on
+    the literal string. Strip the scheme + authority so the app routes on the
+    real path. No-op for normal (origin-form) requests, so it's inert in prod
+    for well-behaved clients — it only rewrites paths that start with a scheme.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            path = scope.get("path", "")
+            if path.startswith(("http://", "https://")):
+                after_scheme = path.split("://", 1)[1]
+                slash = after_scheme.find("/")
+                new_path = after_scheme[slash:] if slash != -1 else "/"
+                scope = dict(scope)
+                scope["path"] = new_path
+                scope["raw_path"] = new_path.encode("latin-1")
+        await self.app(scope, receive, send)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Capture the running loop so sync request threads can schedule WS pushes.
@@ -57,4 +85,6 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+# Wrap outermost so absolute-form request targets are normalised before anything
+# else (routing, logging, rate limit) sees them.
+app = ProxyFormPathNormalizer(create_app())
