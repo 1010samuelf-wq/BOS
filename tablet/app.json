@@ -3,7 +3,7 @@
     "name": "BOS Tablet",
     "slug": "bos-tablet",
     "version": "0.1.0",
-    "orientation": "landscape",
+    "orientation": "default",
     "scheme": "bos",
     "userInterfaceStyle": "light",
     "platforms": ["android"],
