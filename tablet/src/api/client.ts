@@ -26,46 +26,58 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+// This device's networking layer corrupts URLs when several fetch() calls are
+// in flight at once (screens that fire multiple useQuery calls on mount saw
+// requests arrive at the server with a mangled, doubled-up URL; screens firing
+// one request at a time never did). Root cause is below the app layer, so the
+// robust fix is to never have two requests in flight simultaneously: every
+// call is chained onto a single running queue, one at a time.
+let queue: Promise<unknown> = Promise.resolve();
+
 export async function api<T>(
   path: string,
   options: { method?: string; body?: unknown; query?: Record<string, string | number | boolean | undefined> } = {},
 ): Promise<T> {
-  // Build the URL by plain string concatenation, not `new URL()` — under
-  // concurrent calls (several queries firing on mount) the URL/URLSearchParams
-  // polyfill on this device produced corrupted, doubled-up URLs (e.g. the path
-  // segment ending up containing a second copy of the full absolute URL). This
-  // sidesteps that class of bug entirely.
   const params = Object.entries(options.query ?? {})
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
     .join("&");
   const fullUrl = `${V1}${path}${params ? `?${params}` : ""}`;
 
-  const res = await fetch(fullUrl, {
-    method: options.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  const run = async (): Promise<T> => {
+    const res = await fetch(fullUrl, {
+      method: options.method ?? "GET",
+      headers: {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
 
-  if (!res.ok) {
-    let code = "http_error";
-    let message = `Request failed (${res.status})`;
-    try {
-      const data = await res.json();
-      if (data?.error) {
-        code = data.error.code;
-        message = data.error.message;
+    if (!res.ok) {
+      let code = "http_error";
+      let message = `Request failed (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data?.error) {
+          code = data.error.code;
+          message = data.error.message;
+        }
+      } catch {
+        /* non-JSON error body */
       }
-    } catch {
-      /* non-JSON error body */
+      throw new ApiRequestError(res.status, code, message);
     }
-    throw new ApiRequestError(res.status, code, message);
-  }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  };
+
+  // Chain onto the queue regardless of whether the previous call succeeded or
+  // failed (swallow its rejection here so one failed request doesn't wedge the
+  // queue for everyone after it), then run this call and propagate its own result.
+  const result = queue.catch(() => undefined).then(run);
+  queue = result.catch(() => undefined);
+  return result;
 }
 
 export function wsUrl(token: string): string {
