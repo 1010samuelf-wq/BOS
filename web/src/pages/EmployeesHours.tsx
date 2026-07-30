@@ -19,10 +19,21 @@ import {
   updateEmployee,
 } from "../api/endpoints";
 import type { Employee, Role } from "../api/types";
+import { roleLabel } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Loading, PageHead } from "../components/ui";
 
 const ROLES: Role[] = ["cashier", "manager", "admin"];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+function weekMonday(offset: number): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7);
+  return d;
+}
 
 function SectionsEditor({
   emp,
@@ -87,8 +98,14 @@ export default function EmployeesHours() {
   const [issued, setIssued] = useState<{ name: string; code: string } | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("cashier");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const monday = weekMonday(weekOffset);
+  const rangeLabel = (() => {
+    const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+    return `${monday.toLocaleDateString()} - ${sunday.toLocaleDateString()}`;
+  })();
 
-  const hours = useQuery({ queryKey: ["staff-hours"], queryFn: () => getStaffHours() });
+  const hours = useQuery({ queryKey: ["staff-hours", weekOffset], queryFn: () => getStaffHours(ymd(monday)) });
   const employees = useQuery({ queryKey: ["employees"], queryFn: () => listEmployees(true), enabled: isAdmin });
   const sections = useQuery({ queryKey: ["grantable-sections"], queryFn: grantableSections, enabled: isAdmin });
   const invalidate = () => client.invalidateQueries({ queryKey: ["employees"] });
@@ -143,7 +160,15 @@ export default function EmployeesHours() {
       )}
 
       <div className="card">
-        <h2>Hours this week (all staff)</h2>
+        <div className="row" style={{ flexWrap: "wrap", alignItems: "center" }}>
+          <h2 style={{ margin: 0 }}>Hours (all staff)</h2>
+          <div className="row" style={{ marginLeft: "auto", gap: 8 }}>
+            <button className="btn neutral sm" onClick={() => setWeekOffset((o) => o - 1)}>← Prev week</button>
+            <strong style={{ minWidth: 190, textAlign: "center" }}>{rangeLabel}</strong>
+            <button className="btn neutral sm" disabled={weekOffset >= 0} onClick={() => setWeekOffset((o) => o + 1)}>Next week →</button>
+            {weekOffset !== 0 && <button className="btn neutral sm" onClick={() => setWeekOffset(0)}>This week</button>}
+          </div>
+        </div>
         {hours.isLoading ? (
           <Loading />
         ) : hours.isError ? (
@@ -153,7 +178,14 @@ export default function EmployeesHours() {
             <thead><tr><th>Employee</th><th className="num">Total hours</th></tr></thead>
             <tbody>
               {(hours.data?.rows ?? []).map((r) => (
-                <tr key={r.user_id}><td>{r.name}</td><td className="num">{r.total_hours.toFixed(1)}</td></tr>
+                <tr key={r.user_id}>
+                  <td>
+                    <button className="linklike" title="View full time log" onClick={() => navigate(`/time?emp=${r.user_id}`)}>
+                      {r.name}
+                    </button>
+                  </td>
+                  <td className="num">{r.total_hours.toFixed(1)}</td>
+                </tr>
               ))}
               {hours.data && (
                 <tr><td><strong>Total</strong></td><td className="num"><strong>{hours.data.grand_total_hours.toFixed(1)}</strong></td></tr>
@@ -170,7 +202,7 @@ export default function EmployeesHours() {
             <div className="row">
               <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ maxWidth: 260 }} />
               <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)} style={{ maxWidth: 160 }}>
-                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                {ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
               </select>
               <button className="btn primary" disabled={!name.trim() || create.isPending} onClick={() => create.mutate()}>Add employee</button>
             </div>
@@ -188,7 +220,7 @@ export default function EmployeesHours() {
                         <strong>{e.name}</strong> 🕑
                       </button>
                       {!e.active ? " · inactive" : ""}
-                      <span className="muted"> · {e.role} · PIN {e.pin_set ? "set" : "awaiting first login"}</span>
+                      <span className="muted"> · {roleLabel(e.role)} · PIN {e.pin_set ? "set" : "awaiting first login"}</span>
                     </div>
                     {e.active ? (
                       <>

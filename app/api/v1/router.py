@@ -7,6 +7,7 @@ from app.api.v1 import (
     employees,
     expenses,
     health,
+    inquiries,
     notifications,
     orders,
     reports,
@@ -31,4 +32,6 @@ api_router.include_router(deliveries.router)
 api_router.include_router(notifications.router)
 api_router.include_router(tasks.router)
 api_router.include_router(settings.router)
+api_router.include_router(inquiries.public_router)
+api_router.include_router(inquiries.router)
 api_router.include_router(ws.router)

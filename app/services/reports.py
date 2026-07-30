@@ -127,7 +127,9 @@ def sales_report(db: Session, from_date: date, to_date: date) -> SalesReportOut:
         .order_by(Expense.spent_on, Expense.id)
     ).scalars().all()
     expenses_total = sum((e.amount for e in expenses), Decimal(0))
-    profit = revenue - ingredient_cost - expenses_total
+
+    labor_cost = _labor_cost(db, start, end)
+    profit = revenue - ingredient_cost - expenses_total - labor_cost
 
     return SalesReportOut(
         from_date=from_date,
@@ -136,10 +138,30 @@ def sales_report(db: Session, from_date: date, to_date: date) -> SalesReportOut:
         order_count=len(orders),
         ingredient_cost=_money(ingredient_cost),
         expenses_total=_money(expenses_total),
+        labor_cost=_money(labor_cost),
         profit=_money(profit),
         payment_breakdown=PaymentBreakdown(**{k: _money(v) for k, v in breakdown.items()}),
         expenses=[ExpenseOut.model_validate(e) for e in expenses],
     )
+
+
+# ---- payroll cost (accrual: hours worked in the period × the employee's rate,
+# same accrual basis as ingredient cost/expenses — regardless of paid status) --
+def _labor_cost(db: Session, start: datetime, end: datetime) -> Decimal:
+    rows = db.execute(
+        select(TimeEntry.user_id, TimeEntry.clock_in, TimeEntry.clock_out, User.hourly_rate)
+        .join(User, User.id == TimeEntry.user_id)
+        .where(
+            TimeEntry.clock_in >= start,
+            TimeEntry.clock_in < end,
+            TimeEntry.clock_out.is_not(None),
+        )
+    ).all()
+    total = Decimal(0)
+    for _user_id, clock_in, clock_out, hourly_rate in rows:
+        hours = Decimal((clock_out - clock_in).total_seconds()) / Decimal(3600)
+        total += hours * hourly_rate
+    return total
 
 
 # ---- production summary / bake list -----------------------------------------

@@ -24,11 +24,12 @@ export function fromCents(cents: number): string {
 }
 
 export interface DraftLine {
-  product_id: number;
+  product_id: number | null; // null = a custom, not-in-catalog item
   product_name: string;
   unit_price: string;
   quantity: number;
   note: string;
+  saveAsProduct?: boolean; // only meaningful when product_id is null
 }
 export interface Draft {
   clientName: string;
@@ -79,6 +80,15 @@ export function addProduct(d: Draft, p: Product): Draft {
   return {
     ...d,
     lines: [...d.lines, { product_id: p.id, product_name: p.name, unit_price: p.price, quantity: 1, note: "" }],
+  };
+}
+export function addCustomItem(d: Draft, name: string, price: string, saveAsProduct: boolean): Draft {
+  return {
+    ...d,
+    lines: [
+      ...d.lines,
+      { product_id: null, product_name: name, unit_price: price, quantity: 1, note: "", saveAsProduct },
+    ],
   };
 }
 export function setQuantity(d: Draft, i: number, q: number): Draft {
@@ -134,7 +144,17 @@ export function buildPayload(d: Draft): OrderCreatePayload {
     card_message: d.cardMessage.trim() || null,
     payment_timing: d.paymentTiming,
     payment_method: d.paymentTiming === "now" ? d.paymentMethod : null,
-    items: d.lines.map((l) => ({ product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null })),
+    items: d.lines.map((l) =>
+      l.product_id !== null
+        ? { product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null }
+        : {
+            custom_name: l.product_name.trim(),
+            custom_price: l.unit_price,
+            save_as_product: !!l.saveAsProduct,
+            quantity: l.quantity,
+            note: l.note.trim() || null,
+          },
+    ),
     notes,
   };
 }

@@ -7,7 +7,7 @@ import { useState } from "react";
 import { exportProductionCsv, getProduction } from "../api/endpoints";
 import { Loading, PageHead, Tabs } from "../components/ui";
 
-type Preset = "today" | "tomorrow" | "week";
+type Preset = "today" | "tomorrow" | "week" | "upcoming";
 
 function range(preset: Preset): { from: string; to: string } {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -18,8 +18,15 @@ function range(preset: Preset): { from: string; to: string } {
     t.setDate(now.getDate() + 1);
     return { from: iso(t), to: iso(t) };
   }
+  if (preset === "week") {
+    const end = new Date(now);
+    end.setDate(now.getDate() + 6);
+    return { from: iso(now), to: iso(end) };
+  }
+  // "upcoming": every order not yet fulfilled, no cutoff — far enough out it's
+  // effectively unlimited for a bakery's planning horizon.
   const end = new Date(now);
-  end.setDate(now.getDate() + 6);
+  end.setFullYear(now.getFullYear() + 5);
   return { from: iso(now), to: iso(end) };
 }
 
@@ -38,6 +45,7 @@ export default function Production() {
             { key: "today", label: "Today" },
             { key: "tomorrow", label: "Tomorrow" },
             { key: "week", label: "This week" },
+            { key: "upcoming", label: "Upcoming (no limit)" },
           ]}
         />
         <button className="btn neutral" onClick={() => void exportProductionCsv(r.from, r.to)}>Export CSV</button>

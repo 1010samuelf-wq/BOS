@@ -3,6 +3,20 @@
 // only render, and adjustments are entered as strings.
 
 export type Role = "cashier" | "manager" | "admin";
+// Display label only — the wire value stays "cashier" (backend enum/permissions
+// are unchanged); this bakery just calls that role "Baker".
+export const roleLabel = (r: Role): string => (r === "cashier" ? "Baker" : r[0].toUpperCase() + r.slice(1));
+// Fixed preset — must match app/schemas/catalog.py's PRODUCT_CATEGORIES.
+export const PRODUCT_CATEGORIES = [
+  "Pareve Miniatures",
+  "Pareve Cakes",
+  "Dairy Miniatures",
+  "Dairy Cakes",
+  "Tarts",
+  "Seasonal",
+] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
 export type FulfillmentType = "pickup" | "delivery";
 export type PaymentMethod = "cash" | "card" | "etransfer";
 export type PaidStatus = "unpaid" | "paid";
@@ -114,7 +128,10 @@ export interface OrderCreatePayload {
   card_message?: string | null;
   payment_timing: PaymentTiming;
   payment_method?: PaymentMethod | null;
-  items: { product_id: number; quantity: number; note?: string | null }[];
+  items: (
+    | { product_id: number; quantity: number; note?: string | null }
+    | { custom_name: string; custom_price: string; save_as_product: boolean; quantity: number; note?: string | null }
+  )[];
   notes: { text: string; type: NoteType }[];
 }
 
@@ -215,6 +232,7 @@ export interface SalesReport {
   order_count: number;
   ingredient_cost: string;
   expenses_total: string;
+  labor_cost: string;
   profit: string;
   payment_breakdown: PaymentBreakdown;
   expenses: ExpenseOut[];
@@ -222,7 +240,8 @@ export interface SalesReport {
 
 export interface Task {
   id: number;
-  description: string;
+  title: string;
+  description: string | null;
   assigned_to: number;
   assigned_by: number;
   due_date: string | null;
@@ -261,4 +280,24 @@ export interface BusinessProfile {
 export type RealtimeEvent =
   | { type: "orders_changed" }
   | { type: "stock_changed" }
+  | { type: "inquiry_created" }
   | { type: "notification"; notification: { type: string; message: string } };
+
+export interface InquiryItem {
+  product_id: number;
+  product_name: string;
+  unit_price: string;
+  quantity: number;
+}
+
+export interface Inquiry {
+  id: number;
+  customer_name: string;
+  customer_phone: string;
+  note: string | null;
+  items: InquiryItem[];
+  handled: boolean;
+  handled_by: number | null;
+  handled_at: string | null;
+  created_at: string;
+}

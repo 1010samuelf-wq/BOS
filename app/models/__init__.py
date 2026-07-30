@@ -26,6 +26,7 @@ from app.models.user import User
 from app.models.misc import (
     DailyReport,
     Expense,
+    Inquiry,
     Notification,
     Task,
     TimeEntry,
@@ -55,6 +56,7 @@ __all__ = [
     "User",
     "DailyReport",
     "Expense",
+    "Inquiry",
     "Notification",
     "Task",
     "TimeEntry",

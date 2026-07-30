@@ -75,7 +75,7 @@ export default function Time() {
 
   const [params] = useSearchParams();
   const [offset, setOffset] = useState(0);
-  const [empId, setEmpId] = useState<number | "">(() => {
+  const [empId] = useState<number | "">(() => {
     const p = params.get("emp");
     return p ? Number(p) : "";
   });
@@ -143,15 +143,7 @@ export default function Time() {
           <strong style={{ minWidth: 210, textAlign: "center" }}>{rangeLabel}</strong>
           <button className="btn neutral sm" disabled={offset >= 0} onClick={() => setOffset((o) => o + 1)}>Next week →</button>
           {offset !== 0 && <button className="btn neutral sm" onClick={() => setOffset(0)}>This week</button>}
-          {isManager && (
-            <select className="input" style={{ maxWidth: 220, marginLeft: "auto" }} value={empId} onChange={(e) => setEmpId(e.target.value ? Number(e.target.value) : "")}>
-              <option value="">Me ({user?.name})</option>
-              {people.filter((p) => p.id !== user?.id).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}{isAdmin && p.rate != null ? ` — $${p.rate.toFixed(2)}/hr` : ""}</option>
-              ))}
-            </select>
-          )}
-          <button className="btn primary sm" onClick={() => printTimesheet(whoName, rangeLabel, entries, weekTotal, targetRate)}>🖨 Print week</button>
+          <button className="btn primary sm" style={{ marginLeft: "auto" }} onClick={() => printTimesheet(whoName, rangeLabel, entries, weekTotal, targetRate)}>🖨 Print week</button>
         </div>
       </div>
 

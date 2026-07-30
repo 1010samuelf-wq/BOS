@@ -88,6 +88,7 @@ def export_summary(
         ["Orders", r.order_count],
         ["Ingredient cost", r.ingredient_cost],
         ["Expenses", r.expenses_total],
+        ["Labor cost", r.labor_cost],
         ["Profit", r.profit],
         ["Cash", pb.cash],
         ["Card", pb.card],

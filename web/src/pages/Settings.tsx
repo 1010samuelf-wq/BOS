@@ -3,10 +3,11 @@
 // returns 403 for others, which surfaces as an error message here.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
+import { PRODUCT_CATEGORIES } from "../api/types";
 import type { Ingredient, Product } from "../api/types";
 import { Loading, PageHead, Tabs } from "../components/ui";
 
@@ -42,24 +43,50 @@ function useErr() {
   return { error, onErr };
 }
 
-function PhotoCell({ p, onEditPhoto }: { p: Product; onEditPhoto: (p: Product) => void }) {
+function PhotoCell({
+  p, onUpload, uploading,
+}: {
+  p: Product;
+  onUpload: (p: Product, file: File) => void;
+  uploading: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <button className="thumb-btn" title="Set photo" onClick={() => onEditPhoto(p)}>
-      {p.photo_url
-        ? <img src={p.photo_url} alt={p.name} className="thumb" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-        : <span className="thumb thumb-empty">📷</span>}
-    </button>
+    <>
+      <button
+        className="thumb-btn"
+        title="Upload photo"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        {p.photo_url
+          ? <img src={p.photo_url} alt={p.name} className="thumb" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+          : <span className="thumb thumb-empty">📷</span>}
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = ""; // allow re-selecting the same file next time
+          if (file) onUpload(p, file);
+        }}
+      />
+    </>
   );
 }
 
 function ProductRow({
-  p, invalidate, onErr, onToggleActive, onEditPhoto,
+  p, invalidate, onErr, onToggleActive, onUploadPhoto, uploadingId,
 }: {
   p: Product;
   invalidate: () => void;
   onErr: (e: unknown) => void;
   onToggleActive: (p: Product) => void;
-  onEditPhoto: (p: Product) => void;
+  onUploadPhoto: (p: Product, file: File) => void;
+  uploadingId: number | null;
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(p.name);
@@ -82,9 +109,14 @@ function ProductRow({
   if (editing) {
     return (
       <tr>
-        <td><PhotoCell p={p} onEditPhoto={onEditPhoto} /></td>
+        <td><PhotoCell p={p} onUpload={onUploadPhoto} uploading={uploadingId === p.id} /></td>
         <td><input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ minWidth: 140 }} /></td>
-        <td><input className="input" placeholder="—" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 140 }} /></td>
+        <td>
+          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 160 }}>
+            <option value="">—</option>
+            {PRODUCT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </td>
         <td className="num"><input className="input" value={price} onChange={(e) => setPrice(e.target.value)} style={{ maxWidth: 90, textAlign: "right" }} /></td>
         <td>
           <div className="row">
@@ -98,7 +130,7 @@ function ProductRow({
 
   return (
     <tr style={{ opacity: p.active ? 1 : 0.5 }}>
-      <td><PhotoCell p={p} onEditPhoto={onEditPhoto} /></td>
+      <td><PhotoCell p={p} onUpload={onUploadPhoto} uploading={uploadingId === p.id} /></td>
       <td>{p.name}</td>
       <td className="muted">{p.category ?? "—"}</td>
       <td className="num">${p.price}</td>
@@ -121,11 +153,11 @@ function Products() {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
-  const [photoUrl, setPhotoUrl] = useState("");
+  const [uploadingId, setUploadingId] = useState<number | null>(null);
 
   const create = useMutation({
-    mutationFn: () => api.createProduct({ name: name.trim(), price: price.trim(), category: category.trim() || null, photo_url: photoUrl.trim() || null }),
-    onSuccess: () => { setName(""); setPrice(""); setCategory(""); setPhotoUrl(""); invalidate(); },
+    mutationFn: () => api.createProduct({ name: name.trim(), price: price.trim(), category: category.trim() || null }),
+    onSuccess: () => { setName(""); setPrice(""); setCategory(""); invalidate(); },
     onError: onErr,
   });
   const toggleActive = useMutation({
@@ -133,16 +165,13 @@ function Products() {
     onSuccess: invalidate,
     onError: onErr,
   });
-  const setPhoto = useMutation({
-    mutationFn: (v: { id: number; photo_url: string | null }) => api.updateProduct(v.id, { photo_url: v.photo_url }),
+  const uploadPhoto = useMutation({
+    mutationFn: (v: { p: Product; file: File }) => api.uploadProductPhoto(v.p.id, v.file),
+    onMutate: (v) => setUploadingId(v.p.id),
     onSuccess: invalidate,
     onError: onErr,
+    onSettled: () => setUploadingId(null),
   });
-  const editPhoto = (p: Product) => {
-    const next = window.prompt(`Photo URL for "${p.name}" (blank to remove):`, p.photo_url ?? "");
-    if (next === null) return; // cancelled
-    setPhoto.mutate({ id: p.id, photo_url: next.trim() || null });
-  };
 
   return (
     <>
@@ -152,12 +181,15 @@ function Products() {
         <div className="row" style={{ flexWrap: "wrap" }}>
           <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 2, minWidth: 200 }} />
           <input className="input" placeholder="Price (e.g. 3.50)" value={price} onChange={(e) => setPrice(e.target.value)} style={{ maxWidth: 140 }} />
-          <input className="input" placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 180 }} />
-          <input className="input" placeholder="Photo URL (optional)" value={photoUrl} onChange={(e) => setPhotoUrl(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 180 }}>
+            <option value="">Category…</option>
+            {PRODUCT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
           <button className="btn primary" disabled={!name.trim() || !/^\d+(\.\d{1,2})?$/.test(price.trim()) || create.isPending} onClick={() => create.mutate()}>
             Add
           </button>
         </div>
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>Add the photo afterward — click the camera icon on its row below.</p>
       </div>
       <div className="card">
         <h2>Catalog</h2>
@@ -167,7 +199,10 @@ function Products() {
             <tbody>
               {(products.data ?? []).map((p) => (
                 <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
-                  onToggleActive={(x) => toggleActive.mutate(x)} onEditPhoto={editPhoto} />
+                  onToggleActive={(x) => toggleActive.mutate(x)}
+                  onUploadPhoto={(prod, file) => uploadPhoto.mutate({ p: prod, file })}
+                  uploadingId={uploadingId}
+                />
               ))}
             </tbody>
           </table>

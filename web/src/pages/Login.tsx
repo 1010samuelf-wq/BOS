@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { ApiRequestError } from "../api/client";
 import { fetchRoster } from "../api/endpoints";
 import type { RosterEntry } from "../api/types";
+import { roleLabel } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 
 const MIN_PIN = 6;
@@ -88,7 +89,7 @@ export default function Login() {
               {(roster.data ?? []).map((e) => (
                 <button key={e.id} onClick={() => setSelected(e)}>
                   <div style={{ fontWeight: 600 }}>{e.name}</div>
-                  <div className="role">{e.role}</div>
+                  <div className="role">{roleLabel(e.role)}</div>
                 </button>
               ))}
             </div>

@@ -6,6 +6,7 @@
 // Clock-in/out is deliberately tablet-only (§1) — it's a physical shift action.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as Print from "expo-print";
@@ -112,8 +113,9 @@ export default function TimeScreen() {
   });
 
   // ---- week + employee selection ----
+  const params = useLocalSearchParams<{ emp?: string }>();
   const [offset, setOffset] = useState(0);
-  const [empId, setEmpId] = useState<number | null>(null);
+  const [empId] = useState<number | null>(params.emp ? Number(params.emp) : null);
   const targetId = empId ?? user!.id;
   const monday = weekMonday(offset);
   const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
@@ -219,21 +221,6 @@ export default function TimeScreen() {
               </Pressable>
             )}
           </View>
-
-          {isManager && (
-            <View style={styles.assignees}>
-              <Pressable style={[styles.pill, empId === null && styles.pillOn]} onPress={() => setEmpId(null)}>
-                <Text style={empId === null ? styles.pillTextOn : styles.pillText}>Me ({user?.name})</Text>
-              </Pressable>
-              {people.filter((p) => p.id !== user?.id).map((p) => (
-                <Pressable key={p.id} style={[styles.pill, empId === p.id && styles.pillOn]} onPress={() => setEmpId(p.id)}>
-                  <Text style={empId === p.id ? styles.pillTextOn : styles.pillText}>
-                    {p.name}{isAdmin && p.rate != null ? ` — $${p.rate.toFixed(2)}/hr` : ""}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
 
           <Pressable
             style={styles.printBtn}

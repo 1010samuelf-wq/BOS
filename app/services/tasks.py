@@ -37,6 +37,7 @@ def create_task(db: Session, payload: TaskCreate, creator: User) -> Task:
             code="unknown_assignee",
         )
     task = Task(
+        title=payload.title,
         description=payload.description,
         assigned_to=payload.assigned_to,
         assigned_by=creator.id,

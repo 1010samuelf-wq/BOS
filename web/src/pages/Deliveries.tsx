@@ -2,20 +2,53 @@
 // lines), address, items, total, paid status, plus CSV export/print.
 
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { exportDeliveriesCsv, getDeliveries } from "../api/endpoints";
-import { Loading, PageHead } from "../components/ui";
+import { Loading, PageHead, Tabs } from "../components/ui";
 import { formatNeeded } from "../order/dates";
 
+type Preset = "today" | "tomorrow" | "week" | "upcoming";
+
+function range(preset: Preset): { from: string; to: string } {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const now = new Date();
+  if (preset === "today") return { from: iso(now), to: iso(now) };
+  if (preset === "tomorrow") {
+    const t = new Date(now);
+    t.setDate(now.getDate() + 1);
+    return { from: iso(t), to: iso(t) };
+  }
+  if (preset === "week") {
+    const end = new Date(now);
+    end.setDate(now.getDate() + 6);
+    return { from: iso(now), to: iso(end) };
+  }
+  const end = new Date(now);
+  end.setFullYear(now.getFullYear() + 5);
+  return { from: iso(now), to: iso(end) };
+}
+
 export default function Deliveries() {
-  const today = new Date().toISOString().slice(0, 10);
-  const q = useQuery({ queryKey: ["deliveries", "today"], queryFn: () => getDeliveries({}) });
+  const [preset, setPreset] = useState<Preset>("today");
+  const r = range(preset);
+  const q = useQuery({ queryKey: ["deliveries", preset], queryFn: () => getDeliveries(r) });
 
   return (
     <div className="page">
-      <PageHead title="Deliveries — today">
+      <PageHead title="Deliveries">
+        <Tabs
+          value={preset}
+          onChange={setPreset}
+          options={[
+            { key: "today", label: "Today" },
+            { key: "tomorrow", label: "Tomorrow" },
+            { key: "week", label: "This week" },
+            { key: "upcoming", label: "Upcoming (no limit)" },
+          ]}
+        />
         <button className="btn neutral" onClick={() => window.print()}>Print</button>
-        <button className="btn neutral" onClick={() => void exportDeliveriesCsv(today, today)}>Export CSV</button>
+        <button className="btn neutral" onClick={() => void exportDeliveriesCsv(r.from, r.to)}>Export CSV</button>
       </PageHead>
 
       {q.isLoading ? (

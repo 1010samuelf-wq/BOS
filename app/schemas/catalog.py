@@ -1,15 +1,31 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# Fixed preset — the only categories a product can be assigned (spec: menu
+# filters + a consistent dropdown instead of free-text). Order here is the
+# display order everywhere (Settings dropdown, public menu filter tabs).
+PRODUCT_CATEGORIES: list[str] = [
+    "Pareve Miniatures",
+    "Pareve Cakes",
+    "Dairy Miniatures",
+    "Dairy Cakes",
+    "Tarts",
+    "Seasonal",
+]
+ProductCategory = Literal[
+    "Pareve Miniatures", "Pareve Cakes", "Dairy Miniatures", "Dairy Cakes", "Tarts", "Seasonal",
+]
 
 
 # ---- Products ----
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     price: Decimal = Field(ge=0)
-    category: str | None = None
+    category: ProductCategory | None = None
     active: bool = True
     photo_url: str | None = None
 
@@ -17,7 +33,7 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     price: Decimal | None = Field(default=None, ge=0)
-    category: str | None = None
+    category: ProductCategory | None = None
     active: bool | None = None
     photo_url: str | None = None
 
@@ -30,6 +46,19 @@ class ProductOut(BaseModel):
     price: Decimal
     category: str | None
     active: bool
+    photo_url: str | None
+
+
+class PublicProductOut(BaseModel):
+    """Trimmed for the public menu site (justcakeskosher.com) — no `active`
+    flag or anything internal, just what a customer needs to pick items."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    price: Decimal
+    category: str | None
     photo_url: str | None
 
 

@@ -22,7 +22,7 @@ interface RealtimeValue {
 const RealtimeContext = createContext<RealtimeValue>({ online: false, toasts: [], dismiss: () => {} });
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const queryClient = useQueryClient();
   const [online, setOnline] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -50,6 +50,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         }
         if (ev.type === "orders_changed") void queryClient.invalidateQueries({ queryKey: ["orders"] });
         else if (ev.type === "stock_changed") void queryClient.invalidateQueries({ queryKey: ["stock"] });
+        else if (ev.type === "inquiry_created") void queryClient.invalidateQueries({ queryKey: ["inquiries"] });
         else if (ev.type === "notification") {
           void queryClient.invalidateQueries({ queryKey: ["notifications"] });
           const id = nextId.current++;
@@ -57,8 +58,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 6000);
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         setOnline(false);
+        // 1008 = the server rejected the token (expired/invalid) — it will
+        // never become valid by retrying, so drop back to login instead of
+        // looping "offline" forever.
+        if (ev.code === 1008) {
+          cancelled = true;
+          logout();
+          return;
+        }
         if (!cancelled) retry = setTimeout(connect, 3000);
       };
       ws.onerror = () => ws?.close();
@@ -69,7 +78,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (retry) clearTimeout(retry);
       ws?.close();
     };
-  }, [user, queryClient]);
+  }, [user, queryClient, logout]);
 
   const dismiss = (id: number) => setToasts((t) => t.filter((x) => x.id !== id));
   return <RealtimeContext.Provider value={{ online, toasts, dismiss }}>{children}</RealtimeContext.Provider>;

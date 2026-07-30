@@ -55,7 +55,7 @@ async function playPing() {
 }
 
 export function RealtimeProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const queryClient = useQueryClient();
   const [online, setOnline] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -105,8 +105,16 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         setOnline(false);
+        // 1008 = the server rejected the token (expired/invalid) — it will
+        // never become valid by retrying, so drop back to login instead of
+        // looping "offline" forever.
+        if (ev.code === 1008) {
+          cancelled = true;
+          void logout();
+          return;
+        }
         if (!cancelled) retry = setTimeout(connect, RECONNECT_MS);
       };
       ws.onerror = () => ws.close();
@@ -118,7 +126,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       if (retry) clearTimeout(retry);
       wsRef.current?.close();
     };
-  }, [user, queryClient]);
+  }, [user, queryClient, logout]);
 
   const dismissToast = (id: number) =>
     setToasts((t) => t.filter((x) => x.id !== id));

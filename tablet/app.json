@@ -1,19 +1,53 @@
 {
   "expo": {
-    "name": "BOS Tablet",
+    "name": "Just Cake",
     "slug": "bos-tablet",
-    "version": "0.1.0",
+    "owner": "1010samuel",
+    "version": "1.0.0",
     "orientation": "default",
     "scheme": "bos",
     "userInterfaceStyle": "light",
-    "platforms": ["android"],
+    "icon": "./assets/icon.png",
+    "platforms": [
+      "android"
+    ],
     "android": {
       "package": "com.bos.tablet",
-      "softwareKeyboardLayoutMode": "pan"
+      "versionCode": 2,
+      "softwareKeyboardLayoutMode": "pan",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#a24f1e"
+      }
     },
-    "plugins": ["expo-router"],
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/43b6bf1d-37bd-4832-8b3c-2cd14bcb1f61"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "kotlinVersion": "1.9.25"
+          }
+        }
+      ]
+    ],
     "extra": {
-      "apiUrl": "http://192.168.2.10:8000"
+      "apiUrl": "https://just-cake-bakery.fly.dev",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "43b6bf1d-37bd-4832-8b3c-2cd14bcb1f61"
+      }
     }
   }
 }

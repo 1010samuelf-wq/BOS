@@ -141,7 +141,7 @@ def refresh_overdue(db: Session) -> int:
         create(
             db,
             type="overdue_task",
-            message=f"Task '{task.description[:60]}' is overdue.",
+            message=f"Task '{task.title[:60]}' is overdue.",
             related_task_id=task.id,
         )
         created += 1

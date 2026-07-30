@@ -18,6 +18,18 @@ export function setAuthToken(token: string | null) {
   authToken = token;
 }
 
+// The shift token expires (12h) — when a request comes back 401, the token is
+// dead and never becoming valid again, so drop straight back to login instead
+// of leaving the app stuck showing a stale error. AuthProvider registers the
+// actual logout() here (this module has no React/router access of its own).
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
+function checkUnauthorized(status: number) {
+  if (status === 401) onUnauthorized?.();
+}
+
 export async function api<T>(
   path: string,
   options: {
@@ -40,6 +52,7 @@ export async function api<T>(
   });
 
   if (!res.ok) {
+    checkUnauthorized(res.status);
     let code = "http_error";
     let message = `Request failed (${res.status})`;
     try {
@@ -69,7 +82,10 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
   const res = await fetch(`${V1}${path}`, {
     headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
   });
-  if (!res.ok) throw new ApiRequestError(res.status, "export_failed", "Export failed.");
+  if (!res.ok) {
+    checkUnauthorized(res.status);
+    throw new ApiRequestError(res.status, "export_failed", "Export failed.");
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -79,12 +95,44 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
   URL.revokeObjectURL(url);
 }
 
+// Multipart file upload (e.g. a product photo picked from disk). Body must be
+// FormData with no explicit Content-Type — the browser sets the multipart
+// boundary itself.
+export async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${V1}${path}`, {
+    method: "POST",
+    headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: form,
+  });
+  if (!res.ok) {
+    checkUnauthorized(res.status);
+    let code = "http_error";
+    let message = `Request failed (${res.status})`;
+    try {
+      const data = await res.json();
+      if (data?.error) {
+        code = data.error.code;
+        message = data.error.message;
+      }
+    } catch {
+      /* non-JSON error */
+    }
+    throw new ApiRequestError(res.status, code, message);
+  }
+  return (await res.json()) as T;
+}
+
 // Open an authenticated PDF in a new tab (for viewing + browser print).
 export async function openPdf(path: string): Promise<void> {
   const res = await fetch(`${V1}${path}`, {
     headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
   });
-  if (!res.ok) throw new ApiRequestError(res.status, "pdf_failed", "Could not open PDF.");
+  if (!res.ok) {
+    checkUnauthorized(res.status);
+    throw new ApiRequestError(res.status, "pdf_failed", "Could not open PDF.");
+  }
   const url = URL.createObjectURL(await res.blob());
   window.open(url, "_blank");
   setTimeout(() => URL.revokeObjectURL(url), 60_000);

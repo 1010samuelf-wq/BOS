@@ -3,6 +3,9 @@
 // use the cents helpers in src/order/money.ts.
 
 export type Role = "cashier" | "manager" | "admin";
+// Display label only — the wire value stays "cashier" (backend enum/permissions
+// are unchanged); this bakery just calls that role "Baker".
+export const roleLabel = (r: Role): string => (r === "cashier" ? "Baker" : r[0].toUpperCase() + r.slice(1));
 export type FulfillmentType = "pickup" | "delivery";
 export type PaymentTiming = "now" | "later";
 export type PaymentMethod = "cash" | "card" | "etransfer";
@@ -102,7 +105,10 @@ export interface OrderCreatePayload {
   card_message?: string | null;
   payment_timing: PaymentTiming;
   payment_method?: PaymentMethod | null;
-  items: { product_id: number; quantity: number; note?: string | null }[];
+  items: (
+    | { product_id: number; quantity: number; note?: string | null }
+    | { custom_name: string; custom_price: string; save_as_product: boolean; quantity: number; note?: string | null }
+  )[];
   notes: { text: string; type: NoteType }[];
 }
 
@@ -218,6 +224,7 @@ export interface SalesReport {
   order_count: number;
   ingredient_cost: string;
   expenses_total: string;
+  labor_cost: string;
   profit: string;
   payment_breakdown: PaymentBreakdown;
   expenses: ExpenseOut[];
@@ -226,7 +233,8 @@ export interface SalesReport {
 // ---- tasks ----
 export interface Task {
   id: number;
-  description: string;
+  title: string;
+  description: string | null;
   assigned_to: number;
   assigned_by: number;
   due_date: string | null;

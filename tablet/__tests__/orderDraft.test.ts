@@ -4,6 +4,7 @@
 import type { Product } from "../src/api/types";
 import { fromCents, toCents } from "../src/order/money";
 import {
+  addCustomItem,
   addProduct,
   buildPayload,
   draftTotal,
@@ -116,6 +117,22 @@ describe("core POS flow: search-add → quantity → submit payload", () => {
     d = { ...d, clientName: "Bob", paymentTiming: "later", paymentMethod: null };
     expect(validateDraft(d)).toEqual([]);
     expect(buildPayload(d).payment_method).toBeNull();
+  });
+
+  it("a custom item builds a custom_name/custom_price payload, not product_id", () => {
+    let d = emptyDraft();
+    d = addProduct(d, croissant);
+    d = addCustomItem(d, "Birthday Special", "42.00", true);
+    d = { ...d, clientName: "Ann", paymentTiming: "later" };
+    expect(d.lines).toHaveLength(2);
+    expect(lineTotal(d.lines[1])).toBe("42.00");
+    expect(draftTotal(d)).toBe("45.50"); // 3.50 + 42.00
+
+    const payload = buildPayload(d);
+    expect(payload.items).toEqual([
+      { product_id: 1, quantity: 1, note: null },
+      { custom_name: "Birthday Special", custom_price: "42.00", save_as_product: true, quantity: 1, note: null },
+    ]);
   });
 
   it("validation catches the §2A required fields", () => {

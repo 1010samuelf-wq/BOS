@@ -4,6 +4,7 @@
 // returns 403 for others.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
@@ -12,17 +13,29 @@ import {
   createEmployee,
   deactivateEmployee,
   deleteEmployee,
+  getStaffHours,
   listEmployees,
   resetPin,
   updateEmployee,
 } from "../../src/api/endpoints";
-import type { Employee, Role } from "../../src/api/types";
+import type { Employee, Role, StaffHoursRow } from "../../src/api/types";
+import { roleLabel } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
 const ROLES: Role[] = ["cashier", "manager", "admin"];
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+function weekMonday(offset: number): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7);
+  return d;
+}
 
 function RateEditor({ emp, onSave, saving }: { emp: Employee; onSave: (v: string) => void; saving: boolean }) {
   const [v, setV] = useState(emp.hourly_rate);
@@ -42,12 +55,25 @@ function RateEditor({ emp, onSave, saving }: { emp: Employee; onSave: (v: string
 
 export default function EmployeesScreen() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const isManager = isAdmin || user?.role === "manager";
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("cashier");
+  const [weekOffset, setWeekOffset] = useState(0);
+  const monday = weekMonday(weekOffset);
+  const rangeLabel = (() => {
+    const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
+    return `${monday.toLocaleDateString()} - ${sunday.toLocaleDateString()}`;
+  })();
 
-  const employees = useQuery({ queryKey: ["employees"], queryFn: () => listEmployees(true) });
+  const hours = useQuery({
+    queryKey: ["staff-hours", weekOffset],
+    queryFn: () => getStaffHours(ymd(monday)),
+    enabled: isManager,
+  });
+  const employees = useQuery({ queryKey: ["employees"], queryFn: () => listEmployees(true), enabled: isAdmin });
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["employees"] });
   const onErr = (e: unknown) => setError(e instanceof ApiRequestError ? e.message : "Action failed.");
 
@@ -93,8 +119,8 @@ export default function EmployeesScreen() {
     onError: onErr,
   });
 
-  if (user?.role !== "admin") {
-    return <ErrorText>Employee management is Admin-only.</ErrorText>;
+  if (!isManager) {
+    return <ErrorText>Employee management requires Manager access.</ErrorText>;
   }
 
   return (
@@ -103,6 +129,54 @@ export default function EmployeesScreen() {
         <ScreenHeader title="Employees" />
         {error && <ErrorText>{error}</ErrorText>}
 
+        <Card>
+          <View style={styles.hoursHeader}>
+            <Text style={styles.section}>Hours (all staff)</Text>
+            <View style={styles.weekNav}>
+              <Pressable style={styles.navBtn} onPress={() => setWeekOffset((o) => o - 1)}>
+                <Text style={styles.navBtnText}>← Prev</Text>
+              </Pressable>
+              <Text style={styles.rangeLabel}>{rangeLabel}</Text>
+              <Pressable
+                style={[styles.navBtn, weekOffset >= 0 && styles.navBtnDisabled]}
+                disabled={weekOffset >= 0}
+                onPress={() => setWeekOffset((o) => o + 1)}
+              >
+                <Text style={styles.navBtnText}>Next →</Text>
+              </Pressable>
+              {weekOffset !== 0 && (
+                <Pressable style={styles.navBtn} onPress={() => setWeekOffset(0)}>
+                  <Text style={styles.navBtnText}>This week</Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
+          {hours.isLoading ? (
+            <Loading />
+          ) : (
+            <>
+              {(hours.data?.rows ?? []).map((row: StaffHoursRow) => (
+                <Pressable
+                  key={row.user_id}
+                  style={styles.hoursRow}
+                  onPress={() => router.push({ pathname: "/(main)/time", params: { emp: String(row.user_id) } })}
+                >
+                  <Text style={styles.hoursName}>{row.name} ›</Text>
+                  <Text style={styles.hoursValue}>{row.total_hours.toFixed(1)}</Text>
+                </Pressable>
+              ))}
+              {hours.data && (
+                <View style={[styles.hoursRow, styles.hoursTotal]}>
+                  <Text style={styles.hoursNameTotal}>Total</Text>
+                  <Text style={styles.hoursValueTotal}>{hours.data.grand_total_hours.toFixed(1)}</Text>
+                </View>
+              )}
+            </>
+          )}
+        </Card>
+
+        {isAdmin && (
+        <>
         <Card>
           <Text style={styles.section}>Add employee</Text>
           <TextInput style={styles.input} placeholder="Name" value={name} onChangeText={setName} />
@@ -113,7 +187,7 @@ export default function EmployeesScreen() {
                 style={[styles.pill, role === r && styles.pillOn]}
                 onPress={() => setRole(r)}
               >
-                <Text style={role === r ? styles.pillTextOn : styles.pillText}>{r}</Text>
+                <Text style={role === r ? styles.pillTextOn : styles.pillText}>{roleLabel(r)}</Text>
               </Pressable>
             ))}
           </View>
@@ -133,7 +207,7 @@ export default function EmployeesScreen() {
                     {e.name} {!e.active ? "· inactive" : ""}
                   </Text>
                   <Text style={styles.meta}>
-                    {e.role} · {e.pin_set ? "PIN set" : "awaiting first-login PIN"}
+                    {roleLabel(e.role)} · {e.pin_set ? "PIN set" : "awaiting first-login PIN"}
                   </Text>
                   {e.active && (
                     <RateEditor emp={e} saving={setRate.isPending} onSave={(rate) => setRate.mutate({ id: e.id, rate })} />
@@ -154,6 +228,8 @@ export default function EmployeesScreen() {
             ))
           )}
         </Card>
+        </>
+        )}
       </ScrollView>
     </RequiresConnection>
   );
@@ -162,6 +238,24 @@ export default function EmployeesScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   section: { fontSize: 15, fontWeight: "700", color: colors.text },
+  hoursHeader: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.s, marginBottom: spacing.s },
+  weekNav: { flexDirection: "row", alignItems: "center", gap: spacing.s, marginLeft: "auto" },
+  navBtn: { paddingHorizontal: spacing.m, paddingVertical: spacing.xs, borderRadius: radius.m, backgroundColor: colors.bg },
+  navBtnDisabled: { opacity: 0.4 },
+  navBtnText: { color: colors.text, fontWeight: "600", fontSize: 13 },
+  rangeLabel: { color: colors.text, fontWeight: "700" },
+  hoursRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: spacing.s,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  hoursName: { color: colors.primary, fontWeight: "600" },
+  hoursValue: { color: colors.text, fontVariant: ["tabular-nums"] },
+  hoursTotal: { borderBottomWidth: 0, marginTop: spacing.xs },
+  hoursNameTotal: { color: colors.text, fontWeight: "800" },
+  hoursValueTotal: { color: colors.text, fontWeight: "800", fontVariant: ["tabular-nums"] },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

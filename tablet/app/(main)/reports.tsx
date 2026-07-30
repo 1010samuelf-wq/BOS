@@ -3,15 +3,15 @@
 // list. Manager+ only (enforced server-side; the rail shows it to everyone but
 // the API returns 403 for cashiers).
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { getDailyReport, getMonthlyReport, listOrders } from "../../src/api/endpoints";
+import { createExpense, getDailyReport, getMonthlyReport, listOrders } from "../../src/api/endpoints";
 import type { ExpenseOut, Order, SalesReport } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
-import { Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
+import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
 interface Drill {
@@ -124,9 +124,27 @@ function BreakdownBar({ report, onDrill }: { report: SalesReport; onDrill: (d: D
   );
 }
 
+function AddExpense({ onAdded }: { onAdded: () => void }) {
+  const [desc, setDesc] = useState("");
+  const [amt, setAmt] = useState("");
+  const add = useMutation({
+    mutationFn: () => createExpense({ description: desc.trim(), amount: amt.trim() }),
+    onSuccess: () => { setDesc(""); setAmt(""); onAdded(); },
+  });
+  const valid = desc.trim() !== "" && /^\d+(\.\d{1,2})?$/.test(amt.trim());
+  return (
+    <View style={styles.addExpense}>
+      <TextInput style={[styles.input, { flex: 1 }]} placeholder="Description" value={desc} onChangeText={setDesc} />
+      <TextInput style={[styles.input, { width: 90 }]} placeholder="Amount" value={amt} onChangeText={setAmt} keyboardType="decimal-pad" />
+      <Button label="Add" busy={add.isPending} disabled={!valid} onPress={() => add.mutate()} />
+    </View>
+  );
+}
+
 export default function ReportsScreen() {
   const [mode, setMode] = useState<"daily" | "monthly">("daily");
   const [drill, setDrill] = useState<Drill | null>(null);
+  const queryClient = useQueryClient();
   const report = useQuery({
     queryKey: ["report", mode],
     queryFn: () => (mode === "daily" ? getDailyReport() : getMonthlyReport()),
@@ -172,6 +190,7 @@ export default function ReportsScreen() {
                 onPress={() => setDrill({ label: "Orders", params: { exclude_cancelled: true } })}
               />
               <Metric label="Ingredient cost" value={`$${report.data.ingredient_cost}`} />
+              <Metric label="Labor cost" value={`$${report.data.labor_cost}`} />
               <Metric
                 label="Profit"
                 value={`$${report.data.profit}`}
@@ -202,6 +221,7 @@ export default function ReportsScreen() {
                 <Text style={styles.expenseDesc}>Total expenses</Text>
                 <Text style={styles.expenseAmt}>${report.data.expenses_total}</Text>
               </View>
+              <AddExpense onAdded={() => queryClient.invalidateQueries({ queryKey: ["report"] })} />
             </Card>
           </>
         ) : null}
@@ -245,6 +265,16 @@ const styles = StyleSheet.create({
   expenseDesc: { color: colors.text },
   expenseAmt: { color: colors.text, fontWeight: "700" },
   expenseTotal: { flexDirection: "row", justifyContent: "space-between", paddingTop: spacing.s },
+  addExpense: { flexDirection: "row", gap: spacing.s, alignItems: "center", marginTop: spacing.m },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.m,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
+    backgroundColor: colors.bg,
+    color: colors.text,
+  },
   drillHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   closeBtn: { paddingHorizontal: spacing.m, paddingVertical: spacing.xs, borderRadius: radius.m, backgroundColor: colors.bg },
   closeBtnText: { color: colors.textMuted, fontWeight: "600" },

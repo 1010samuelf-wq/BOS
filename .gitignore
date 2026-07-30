@@ -7,3 +7,9 @@ __pycache__/
 .mypy_cache/
 mig_test.db
 *.pdf
+
+# Local-machine TLS-interception CA (Geder filter), needed only to build
+# through a network proxy on this dev machine. Never commit; build-only,
+# trusted in an intermediate Docker stage and never copied into the final
+# image (see Dockerfile).
+geder-filter-ca.crt.local

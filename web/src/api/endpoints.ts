@@ -3,13 +3,14 @@
 // and order management — plus the oversight screens (reports, production,
 // deliveries, stock, employees & hours, tasks, notifications, Admin/Settings).
 
-import { api, downloadCsv, openPdf } from "./client";
+import { api, downloadCsv, openPdf, uploadFile } from "./client";
 import type {
   BusinessProfile,
   Deliveries,
   Employee,
   HoursReport,
   Ingredient,
+  Inquiry,
   Notification,
   Order,
   OrderCreatePayload,
@@ -123,6 +124,8 @@ export const createProduct = (body: { name: string; price: string; category?: st
   api<Product>("/products", { method: "POST", body });
 export const updateProduct = (id: number, body: Partial<Product>) =>
   api<Product>(`/products/${id}`, { method: "PUT", body });
+export const uploadProductPhoto = (id: number, file: File) =>
+  uploadFile<Product>(`/products/${id}/photo`, file);
 export const listIngredients = (active?: boolean) =>
   api<Ingredient[]>("/ingredients", { query: active === undefined ? {} : { active } });
 export const createIngredient = (body: {
@@ -160,7 +163,7 @@ export const updateEmployee = (
 // ---- tasks ----
 export const listTasks = (params: { employee_id?: number; done?: boolean; date?: string }) =>
   api<Task[]>("/tasks", { query: params });
-export const createTask = (body: { description: string; assigned_to: number; due_date?: string | null }) =>
+export const createTask = (body: { title: string; description?: string; assigned_to: number; due_date?: string | null }) =>
   api<Task>("/tasks", { method: "POST", body });
 export const toggleTaskDone = (id: number) => api<Task>(`/tasks/${id}/done`, { method: "POST" });
 
@@ -171,3 +174,9 @@ export const markNotificationRead = (id: number) =>
   api<Notification>(`/notifications/${id}/read`, { method: "POST" });
 export const markAllNotificationsRead = () => api<{ unread: number }>("/notifications/read-all", { method: "POST" });
 export const unreadCount = () => api<{ unread: number }>("/notifications/unread-count");
+
+// ---- inquiries (justcakeskosher.com submissions) ----
+export const listInquiries = (params: { handled?: boolean } = {}) =>
+  api<Inquiry[]>("/inquiries", { query: params });
+export const toggleInquiryHandled = (id: number) =>
+  api<Inquiry>(`/inquiries/${id}/handled`, { method: "POST" });

@@ -12,7 +12,7 @@ import React, {
   useState,
 } from "react";
 
-import { setAuthToken } from "../api/client";
+import { setAuthToken, setUnauthorizedHandler } from "../api/client";
 import * as endpoints from "../api/endpoints";
 import type { Role } from "../api/types";
 
@@ -76,6 +76,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     await AsyncStorage.removeItem(STORAGE_KEY);
   }, []);
+
+  // Any 401 (expired/invalid shift token) drops straight back to login,
+  // instead of leaving the app stuck on a stale "not connected" state.
+  useEffect(() => {
+    setUnauthorizedHandler(() => void logout());
+    return () => setUnauthorizedHandler(null);
+  }, [logout]);
 
   const value = useMemo(
     () => ({ user, ready, login, setupPin, logout }),

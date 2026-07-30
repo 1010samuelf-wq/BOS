@@ -12,11 +12,12 @@ import type {
 import { fromCents, toCents } from "./money";
 
 export interface DraftLine {
-  product_id: number;
+  product_id: number | null; // null = a custom, not-in-catalog item
   product_name: string;
   unit_price: string; // decimal string from the API
   quantity: number;
   note: string;
+  saveAsProduct?: boolean; // only meaningful when product_id is null
 }
 
 export interface Draft {
@@ -80,6 +81,21 @@ export function addProduct(draft: Draft, product: Product): Draft {
         quantity: 1,
         note: "",
       },
+    ],
+  };
+}
+
+export function addCustomItem(
+  draft: Draft,
+  name: string,
+  price: string,
+  saveAsProduct: boolean,
+): Draft {
+  return {
+    ...draft,
+    lines: [
+      ...draft.lines,
+      { product_id: null, product_name: name, unit_price: price, quantity: 1, note: "", saveAsProduct },
     ],
   };
 }
@@ -150,11 +166,17 @@ export function buildPayload(draft: Draft): OrderCreatePayload {
     payment_timing: draft.paymentTiming,
     // Backend rejects a method on pay-later orders — it's captured at mark-paid.
     payment_method: draft.paymentTiming === "now" ? draft.paymentMethod : null,
-    items: draft.lines.map((l) => ({
-      product_id: l.product_id,
-      quantity: l.quantity,
-      note: l.note.trim() || null,
-    })),
+    items: draft.lines.map((l) =>
+      l.product_id !== null
+        ? { product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null }
+        : {
+            custom_name: l.product_name.trim(),
+            custom_price: l.unit_price,
+            save_as_product: !!l.saveAsProduct,
+            quantity: l.quantity,
+            note: l.note.trim() || null,
+          },
+    ),
     notes,
   };
 }

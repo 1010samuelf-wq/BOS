@@ -5,6 +5,7 @@ import { api } from "./client";
 import type {
   Deliveries,
   Employee,
+  ExpenseOut,
   HoursReport,
   Notification,
   Order,
@@ -33,6 +34,10 @@ export const setPin = (user_id: number, pin: string, setup_code: string) =>
 // ---- products ----
 export const searchProducts = (q: string) =>
   api<Product[]>("/products/search", { query: { q, limit: 8 } });
+
+// Full catalog for the tap-to-add grid on the new-order screen.
+export const listProducts = (activeOnly = true) =>
+  api<Product[]>("/products", { query: activeOnly ? { active: true } : {} });
 
 // ---- orders ----
 export const createOrder = (payload: OrderCreatePayload) =>
@@ -123,10 +128,14 @@ export const getProduction = (params: { from?: string; to?: string; fulfillment?
 export const getStaffHours = (week?: string) =>
   api<HoursReport>("/reports/hours", { query: { week } });
 
+// ---- expenses ----
+export const createExpense = (body: { description: string; amount: string; category?: string; spent_on?: string }) =>
+  api<ExpenseOut>("/expenses", { method: "POST", body });
+
 // ---- tasks ----
 export const listTasks = (params: { employee_id?: number; date?: string; done?: boolean }) =>
   api<Task[]>("/tasks", { query: params });
-export const createTask = (body: { description: string; assigned_to: number; due_date?: string | null }) =>
+export const createTask = (body: { title: string; description?: string; assigned_to: number; due_date?: string | null }) =>
   api<Task>("/tasks", { method: "POST", body });
 export const toggleTaskDone = (id: number) =>
   api<Task>(`/tasks/${id}/done`, { method: "POST" });

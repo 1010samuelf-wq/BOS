@@ -27,7 +27,8 @@ class SalesReportOut(BaseModel):
     order_count: int
     ingredient_cost: Decimal  # COGS from recipes on sold items
     expenses_total: Decimal
-    profit: Decimal           # revenue - ingredient_cost - expenses_total
+    labor_cost: Decimal       # hours worked in period × each employee's hourly rate
+    profit: Decimal           # revenue - ingredient_cost - expenses_total - labor_cost
     payment_breakdown: PaymentBreakdown
     expenses: list[ExpenseOut]
 

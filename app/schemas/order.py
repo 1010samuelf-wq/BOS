@@ -18,9 +18,28 @@ from app.models.enums import (
 
 # ---- inputs ----
 class OrderItemIn(BaseModel):
-    product_id: int
+    # Exactly one of product_id / (custom_name + custom_price) is required —
+    # a catalog product, or an ad-hoc item entered for this order (spec: add
+    # a custom product+price at order time, optionally keep it as a regular
+    # product going forward via save_as_product).
+    product_id: int | None = None
+    custom_name: str | None = Field(default=None, min_length=1, max_length=200)
+    custom_price: Decimal | None = Field(default=None, ge=0)
+    save_as_product: bool = False
     quantity: int = Field(gt=0)
     note: str | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> "OrderItemIn":
+        has_product = self.product_id is not None
+        has_custom = self.custom_name is not None or self.custom_price is not None
+        if has_product == has_custom:  # neither, or both — both are wrong
+            raise ValueError(
+                "Provide either product_id or custom_name + custom_price, not both/neither."
+            )
+        if has_custom and (not self.custom_name or self.custom_price is None):
+            raise ValueError("A custom item needs both custom_name and custom_price.")
+        return self
 
 
 class OrderNoteIn(BaseModel):

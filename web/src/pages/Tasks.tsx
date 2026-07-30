@@ -11,6 +11,7 @@ import { Loading, PageHead } from "../components/ui";
 export default function Tasks() {
   const client = useQueryClient();
   const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [assignee, setAssignee] = useState<number | "">("");
   const [due, setDue] = useState("");
@@ -41,8 +42,13 @@ export default function Tasks() {
   });
   const create = useMutation({
     mutationFn: () =>
-      createTask({ description: desc.trim(), assigned_to: Number(assignee), due_date: due ? due.replace(" ", "T") : null }),
-    onSuccess: () => { setDesc(""); setAssignee(""); setDue(""); client.invalidateQueries({ queryKey: ["tasks"] }); },
+      createTask({
+        title: title.trim(),
+        description: desc.trim() || undefined,
+        assigned_to: Number(assignee),
+        due_date: due ? due.replace(" ", "T") : null,
+      }),
+    onSuccess: () => { setTitle(""); setDesc(""); setAssignee(""); setDue(""); client.invalidateQueries({ queryKey: ["tasks"] }); },
     onError: (e) => setError(e instanceof ApiRequestError ? e.message : "Create failed."),
   });
 
@@ -54,13 +60,14 @@ export default function Tasks() {
       <div className="card">
         <h2>New task</h2>
         <div className="row" style={{ flexWrap: "wrap" }}>
-          <input className="input" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} style={{ flex: 2, minWidth: 220 }} />
+          <input className="input" placeholder="Title *" value={title} onChange={(e) => setTitle(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+          <input className="input" placeholder="Details (optional)" value={desc} onChange={(e) => setDesc(e.target.value)} style={{ flex: 2, minWidth: 220 }} />
           <select className="input" value={assignee} onChange={(e) => setAssignee(e.target.value ? Number(e.target.value) : "")} style={{ maxWidth: 200 }}>
             <option value="">Assign to…</option>
             {(roster.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
           <input className="input" placeholder="Due (YYYY-MM-DD HH:MM)" value={due} onChange={(e) => setDue(e.target.value)} style={{ maxWidth: 220 }} />
-          <button className="btn primary" disabled={!desc.trim() || assignee === "" || create.isPending} onClick={() => create.mutate()}>
+          <button className="btn primary" disabled={!title.trim() || assignee === "" || create.isPending} onClick={() => create.mutate()}>
             Create
           </button>
         </div>
@@ -94,7 +101,10 @@ export default function Tasks() {
                       {t.done ? "✓" : ""}
                     </span>
                   </td>
-                  <td className={t.done ? "strike" : ""}>{t.description}</td>
+                  <td className={t.done ? "strike" : ""}>
+                    {t.title}
+                    {t.description && <div className="muted" style={{ fontSize: 12 }}>{t.description}</div>}
+                  </td>
                   <td>{nameOf(t.assigned_to)}</td>
                   <td>{t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}{t.is_overdue ? " · OVERDUE" : ""}</td>
                 </tr>

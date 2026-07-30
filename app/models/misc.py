@@ -4,6 +4,7 @@ second migration is needed later (spec §5). No Phase-1 API touches these yet.
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -97,7 +98,8 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
     assigned_to: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     assigned_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -107,3 +109,34 @@ class Task(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+
+
+class Inquiry(Base):
+    """A customer's public-site product selection (spec: justcakeskosher.com
+    menu). Not a real Order — no payment/fulfillment info is collected here;
+    staff call the customer back to finalize and place the actual order
+    through the normal app flow. `items_json` is a point-in-time snapshot
+    (product name + price + qty), so it stays meaningful even if the catalog
+    changes later."""
+
+    __tablename__ = "inquiries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)
+    handled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
+    handled_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    @property
+    def items(self) -> list[dict]:
+        """Parsed view of `items_json` for InquiryOut (schema reads this via
+        from_attributes, same shape as InquiryItemOut)."""
+        return json.loads(self.items_json)

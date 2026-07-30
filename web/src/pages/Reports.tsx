@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import {
+  createExpense,
   exportSummaryCsv,
   getDailyReport,
   getMonthlyReport,
@@ -92,6 +93,25 @@ function Metric({ label, value, tone, onClick }: { label: string; value: string;
   );
 }
 
+function AddExpense({ onAdded }: { onAdded: () => void }) {
+  const [desc, setDesc] = useState("");
+  const [amt, setAmt] = useState("");
+  const [spentOn, setSpentOn] = useState("");
+  const add = useMutation({
+    mutationFn: () => createExpense({ description: desc.trim(), amount: amt.trim(), spent_on: spentOn || undefined }),
+    onSuccess: () => { setDesc(""); setAmt(""); setSpentOn(""); onAdded(); },
+  });
+  const valid = desc.trim() !== "" && /^\d+(\.\d{1,2})?$/.test(amt.trim());
+  return (
+    <div className="row" style={{ flexWrap: "wrap", marginTop: 8 }}>
+      <input className="input" placeholder="Description" value={desc} onChange={(e) => setDesc(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+      <input className="input" placeholder="Amount" value={amt} onChange={(e) => setAmt(e.target.value)} style={{ maxWidth: 100 }} />
+      <input className="input" type="date" value={spentOn} onChange={(e) => setSpentOn(e.target.value)} style={{ maxWidth: 160 }} title="Date (defaults to today)" />
+      <button className="btn primary" disabled={!valid || add.isPending} onClick={() => add.mutate()}>Add expense</button>
+    </div>
+  );
+}
+
 export default function Reports() {
   const [mode, setMode] = useState<"daily" | "monthly">("daily");
   const [drill, setDrill] = useState<Drill | null>(null);
@@ -131,6 +151,7 @@ export default function Reports() {
             <Metric label="Orders" value={String(r.order_count)}
               onClick={() => open({ label: "Orders in this period", params: { exclude_cancelled: true } })} />
             <Metric label="Ingredient cost" value={`$${r.ingredient_cost}`} />
+            <Metric label="Labor cost" value={`$${r.labor_cost}`} />
             <Metric label="Profit" value={`$${r.profit}`} tone={+r.profit < 0 ? "var(--danger)" : "var(--success)"} />
           </div>
 
@@ -166,6 +187,7 @@ export default function Reports() {
                 </tbody>
               </table>
             )}
+            <AddExpense onAdded={() => client.invalidateQueries({ queryKey: ["report"] })} />
           </div>
         </>
       ) : null}

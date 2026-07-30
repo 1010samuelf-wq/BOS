@@ -4,13 +4,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
-import { createOrder, listProducts, searchProducts } from "../api/endpoints";
-import type { PaymentMethod, Product } from "../api/types";
+import { createOrder, listProducts, searchProducts, toggleInquiryHandled } from "../api/endpoints";
+import type { Inquiry, PaymentMethod, Product } from "../api/types";
 import { PageHead } from "../components/ui";
 import {
+  addCustomItem,
   addProduct,
   buildPayload,
   draftTotal,
@@ -23,6 +24,25 @@ import {
   type Draft,
 } from "../order/orderDraft";
 
+/** Prefill a draft from an Inquiries "Create order" hand-off — same shape as
+ * a normal draft, just seeded with what the customer picked on the menu site. */
+function draftFromInquiry(inq: Inquiry): Draft {
+  const base = emptyDraft();
+  return {
+    ...base,
+    clientName: inq.customer_name,
+    clientPhone: inq.customer_phone,
+    generalNotes: inq.note ?? "",
+    lines: inq.items.map((i) => ({
+      product_id: i.product_id,
+      product_name: i.product_name,
+      unit_price: i.unit_price,
+      quantity: i.quantity,
+      note: "",
+    })),
+  };
+}
+
 const METHODS: { key: PaymentMethod; label: string }[] = [
   { key: "cash", label: "Cash" },
   { key: "card", label: "Card" },
@@ -30,11 +50,17 @@ const METHODS: { key: PaymentMethod; label: string }[] = [
 ];
 
 export default function NewOrder() {
-  const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const location = useLocation();
+  const fromInquiry = (location.state as { fromInquiry?: Inquiry } | null)?.fromInquiry ?? null;
+  const [draft, setDraft] = useState<Draft>(() => (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
   const [search, setSearch] = useState("");
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+  const [customSave, setCustomSave] = useState(false);
   const navigate = useNavigate();
   const client = useQueryClient();
 
@@ -51,8 +77,12 @@ export default function NewOrder() {
 
   const submit = useMutation({
     mutationFn: createOrder,
-    onSuccess: () => {
+    onSuccess: async () => {
       client.invalidateQueries({ queryKey: ["orders"] });
+      if (fromInquiry && !fromInquiry.handled) {
+        try { await toggleInquiryHandled(fromInquiry.id); } catch { /* order is created either way; not fatal */ }
+        client.invalidateQueries({ queryKey: ["inquiries"] });
+      }
       navigate("/orders");
     },
     onError: (e) => setProblems([e instanceof ApiRequestError ? e.message : "Could not submit."]),
@@ -62,6 +92,15 @@ export default function NewOrder() {
   const pick = (p: Product) => {
     setDraft((d) => addProduct(d, p));
     setSearch("");
+  };
+  const customPriceValid = /^\d+(\.\d{1,2})?$/.test(customPrice.trim());
+  const addCustom = () => {
+    if (!customName.trim() || !customPriceValid) return;
+    setDraft((d) => addCustomItem(d, customName.trim(), customPrice.trim(), customSave));
+    setCustomName("");
+    setCustomPrice("");
+    setCustomSave(false);
+    setCustomOpen(false);
   };
   const chooseMethod = (m: PaymentMethod) => {
     set({ paymentMethod: m });
@@ -79,6 +118,12 @@ export default function NewOrder() {
   return (
     <div className="page">
       <PageHead title="New order" />
+
+      {fromInquiry && (
+        <div className="card" style={{ borderColor: "var(--primary)", background: "var(--bg-accent, #fff8f0)" }}>
+          <strong>From a justcakeskosher.com inquiry</strong> — review and edit as needed, then submit like any order.
+        </div>
+      )}
 
       {/* Customer & order info */}
       <div className="card">
@@ -169,13 +214,39 @@ export default function NewOrder() {
           </div>
         )}
 
+        {!customOpen ? (
+          <button className="btn neutral sm" style={{ marginTop: 8 }} onClick={() => setCustomOpen(true)}>
+            + Custom item
+          </button>
+        ) : (
+          <div className="row" style={{ flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+            <input className="input" placeholder="Item name" value={customName}
+              onChange={(e) => setCustomName(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+            <input className="input" placeholder="Price" value={customPrice}
+              onChange={(e) => setCustomPrice(e.target.value)} style={{ maxWidth: 100 }} />
+            <label className="row" style={{ gap: 6, alignItems: "center", fontSize: 13 }}>
+              <input type="checkbox" checked={customSave} onChange={(e) => setCustomSave(e.target.checked)} />
+              Save as a regular product
+            </label>
+            <button className="btn primary sm" disabled={!customName.trim() || !customPriceValid} onClick={addCustom}>
+              Add
+            </button>
+            <button className="btn neutral sm" onClick={() => { setCustomOpen(false); setCustomName(""); setCustomPrice(""); setCustomSave(false); }}>
+              Cancel
+            </button>
+          </div>
+        )}
+
         {draft.lines.length === 0 ? (
           <p className="muted" style={{ textAlign: "center" }}>No items yet — tap a product above or search.</p>
         ) : (
           draft.lines.map((l, i) => (
             <div key={`${l.product_id}-${i}`} className="row" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{l.product_name}</div>
+                <div style={{ fontWeight: 600 }}>
+                  {l.product_name}
+                  {l.product_id === null && <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}> · custom{l.saveAsProduct ? ", saved" : ""}</span>}
+                </div>
                 <input className="input" style={{ marginTop: 4, padding: "4px 8px" }} placeholder="Note for this item…"
                   value={l.note} onChange={(e) => setDraft((d) => setLineNote(d, i, e.target.value))} />
               </div>

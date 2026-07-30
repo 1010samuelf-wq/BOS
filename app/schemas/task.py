@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskCreate(BaseModel):
-    description: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str | None = None
     assigned_to: int
     due_date: datetime | None = None
 
@@ -20,7 +21,8 @@ class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    description: str
+    title: str
+    description: str | None
     assigned_to: int
     assigned_by: int
     due_date: datetime | None

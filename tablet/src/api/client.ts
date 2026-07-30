@@ -26,6 +26,15 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+// The shift token expires (12h) — when a request comes back 401, the token is
+// dead and never becoming valid again, so drop straight back to login instead
+// of leaving the app stuck showing a stale error. AuthProvider registers the
+// actual logout() here (this module has no context/navigation access of its own).
+let onUnauthorized: (() => void) | null = null;
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn;
+}
+
 // This device's networking layer corrupts URLs when several fetch() calls are
 // in flight at once (screens that fire multiple useQuery calls on mount saw
 // requests arrive at the server with a mangled, doubled-up URL; screens firing
@@ -55,6 +64,7 @@ export async function api<T>(
     });
 
     if (!res.ok) {
+      if (res.status === 401) onUnauthorized?.();
       let code = "http_error";
       let message = `Request failed (${res.status})`;
       try {

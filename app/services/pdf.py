@@ -141,6 +141,7 @@ def render_sales_report(report: SalesReportOut, profile: AppSettings | None) -> 
     kv("Orders", str(report.order_count))
     kv("Ingredient cost", f"${report.ingredient_cost}")
     kv("Expenses", f"${report.expenses_total}")
+    kv("Labor cost", f"${report.labor_cost}")
     kv("Profit", f"${report.profit}")
 
     pdf.ln(3)

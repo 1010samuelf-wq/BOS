@@ -79,7 +79,7 @@ def test_overdue_task_generates_notification(client, make_user):
     uid = next(e["id"] for e in client.get("/api/v1/employees").json() if e["name"] == "quinn")
     past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
     client.post("/api/v1/tasks", json={
-        "description": "Clean the oven", "assigned_to": uid, "due_date": past})
+        "title": "Clean the oven", "assigned_to": uid, "due_date": past})
 
     client.post("/api/v1/notifications/scan")
     feed = client.get("/api/v1/notifications", params={"type": "overdue_task"}).json()

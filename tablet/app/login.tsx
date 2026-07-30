@@ -20,6 +20,7 @@ import {
 import { ApiRequestError } from "../src/api/client";
 import { fetchRoster } from "../src/api/endpoints";
 import type { RosterEntry } from "../src/api/types";
+import { roleLabel } from "../src/api/types";
 import { useAuth } from "../src/auth/AuthContext";
 import { colors, radius, spacing } from "../src/components/theme";
 
@@ -185,7 +186,7 @@ export default function Login() {
             renderItem={({ item }) => (
               <Pressable style={styles.person} onPress={() => setSelected(item)}>
                 <Text style={styles.personName}>{item.name}</Text>
-                <Text style={styles.personRole}>{item.role}</Text>
+                <Text style={styles.personRole}>{roleLabel(item.role)}</Text>
               </Pressable>
             )}
           />

@@ -5,7 +5,7 @@ deduction has something to deduct. Writes are Admin-only (spec §4/§2I); reads
 require any authenticated user.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -23,6 +23,7 @@ from app.schemas.catalog import (
     RecipeCreate,
     RecipeOut,
 )
+from app.services import photos as photos_service
 
 router = APIRouter(tags=["catalog"])
 
@@ -90,6 +91,27 @@ def update_product(
         raise not_found(f"Product {product_id} not found")
     for k, v in payload.model_dump(exclude_unset=True).items():
         setattr(product, k, v)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.post("/products/{product_id}/photo", response_model=ProductOut)
+async def upload_product_photo(
+    product_id: int,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_section("settings")),
+):
+    """Upload a photo from disk (JPEG/PNG/WEBP, max 5MB) — stored in Tigris
+    object storage; sets the product's photo_url to the public result."""
+    product = db.get(Product, product_id)
+    if product is None:
+        raise not_found(f"Product {product_id} not found")
+
+    data = await file.read()
+    url = photos_service.upload_product_photo(product_id, file.content_type or "", data)
+    product.photo_url = url
     db.commit()
     db.refresh(product)
     return product

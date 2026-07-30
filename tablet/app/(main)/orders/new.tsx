@@ -12,19 +12,21 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 
 import { ApiRequestError } from "../../../src/api/client";
-import { createOrder, searchProducts } from "../../../src/api/endpoints";
+import { createOrder, listProducts, searchProducts } from "../../../src/api/endpoints";
 import type { PaymentMethod, Product } from "../../../src/api/types";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { DateField, TimeField } from "../../../src/components/DateTimeField";
 import { QtyControl } from "../../../src/components/QtyControl";
 import { colors, radius, spacing } from "../../../src/components/theme";
 import {
+  addCustomItem,
   addProduct,
   buildPayload,
   draftTotal,
@@ -49,6 +51,10 @@ export default function NewOrderScreen() {
   const [cardModal, setCardModal] = useState(false);
   const [cardNoteInput, setCardNoteInput] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPrice, setCustomPrice] = useState("");
+  const [customSave, setCustomSave] = useState(false);
   const queryClient = useQueryClient();
 
   // "Needed for" is date + an OPTIONAL time (not every order has a specific
@@ -71,6 +77,13 @@ export default function NewOrderScreen() {
     staleTime: 30_000,
   });
 
+  // Full catalog for the tap-to-add grid — browse & tap instead of typing.
+  const catalog = useQuery({
+    queryKey: ["products", "active"],
+    queryFn: () => listProducts(true),
+    staleTime: 60_000,
+  });
+
   const submit = useMutation({
     mutationFn: createOrder,
     onSuccess: () => {
@@ -88,6 +101,16 @@ export default function NewOrderScreen() {
   const pickProduct = (p: Product) => {
     setDraft((d) => addProduct(d, p));
     setSearch("");
+  };
+
+  const customPriceValid = /^\d+(\.\d{1,2})?$/.test(customPrice.trim());
+  const addCustom = () => {
+    if (!customName.trim() || !customPriceValid) return;
+    setDraft((d) => addCustomItem(d, customName.trim(), customPrice.trim(), customSave));
+    setCustomName("");
+    setCustomPrice("");
+    setCustomSave(false);
+    setCustomOpen(false);
   };
 
   const chooseMethod = (m: PaymentMethod) => {
@@ -169,16 +192,16 @@ export default function NewOrderScreen() {
                 onChangeText={(t) => set({ deliveryPrice: t })}
               />
               <TextInput
-                style={[styles.input, styles.grow, { minWidth: 200 }]}
-                placeholder="Delivery address *"
-                value={draft.deliveryAddress}
-                onChangeText={(t) => set({ deliveryAddress: t })}
-              />
-              <TextInput
                 style={[styles.input, styles.grow, { minWidth: 180 }]}
                 placeholder="Delivery name (recipient)"
                 value={draft.deliveryName}
                 onChangeText={(t) => set({ deliveryName: t })}
+              />
+              <TextInput
+                style={[styles.input, styles.grow, { minWidth: 200 }]}
+                placeholder="Delivery address *"
+                value={draft.deliveryAddress}
+                onChangeText={(t) => set({ deliveryAddress: t })}
               />
             </View>
           )}
@@ -217,13 +240,74 @@ export default function NewOrderScreen() {
             )}
           </View>
 
+          {/* Tap-to-add grid: every active product, tap to add to the order.
+              Faster than typing for the common items. */}
+          {catalog.isLoading ? (
+            <ActivityIndicator style={{ padding: spacing.m }} />
+          ) : (catalog.data ?? []).length > 0 ? (
+            <View style={styles.grid}>
+              {(catalog.data ?? []).map((p: Product) => (
+                <Pressable key={p.id} style={styles.gridItem} onPress={() => pickProduct(p)}>
+                  <Text style={styles.gridName} numberOfLines={2}>{p.name}</Text>
+                  <Text style={styles.gridPrice}>${p.price}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyItems}>No products in the catalog yet.</Text>
+          )}
+
+          {!customOpen ? (
+            <Pressable style={styles.customToggle} onPress={() => setCustomOpen(true)}>
+              <Text style={styles.customToggleText}>+ Custom item</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.customForm}>
+              <TextInput
+                style={[styles.input, styles.grow, { minWidth: 160 }]}
+                placeholder="Item name"
+                value={customName}
+                onChangeText={setCustomName}
+              />
+              <TextInput
+                style={[styles.input, { minWidth: 90, width: 90 }]}
+                placeholder="Price"
+                keyboardType="decimal-pad"
+                value={customPrice}
+                onChangeText={setCustomPrice}
+              />
+              <View style={styles.customSaveRow}>
+                <Switch value={customSave} onValueChange={setCustomSave} />
+                <Text style={styles.customSaveText}>Save as regular product</Text>
+              </View>
+              <Pressable
+                style={[styles.pill, (!customName.trim() || !customPriceValid) && { opacity: 0.5 }]}
+                disabled={!customName.trim() || !customPriceValid}
+                onPress={addCustom}
+              >
+                <Text style={styles.pillText}>Add</Text>
+              </Pressable>
+              <Pressable
+                style={styles.pill}
+                onPress={() => { setCustomOpen(false); setCustomName(""); setCustomPrice(""); setCustomSave(false); }}
+              >
+                <Text style={styles.pillText}>Cancel</Text>
+              </Pressable>
+            </View>
+          )}
+
           {draft.lines.length === 0 ? (
-            <Text style={styles.emptyItems}>No items yet — search above to add.</Text>
+            <Text style={styles.emptyItems}>No items yet — tap a product above to add.</Text>
           ) : (
             draft.lines.map((line, i) => (
               <View key={`${line.product_id}-${i}`} style={styles.line}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.lineName}>{line.product_name}</Text>
+                  <Text style={styles.lineName}>
+                    {line.product_name}
+                    {line.product_id === null && (
+                      <Text style={styles.customLabel}> · custom{line.saveAsProduct ? ", saved" : ""}</Text>
+                    )}
+                  </Text>
                   <TextInput
                     style={styles.lineNote}
                     placeholder="Note for this item…"
@@ -374,6 +458,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
     minHeight: 44,
   },
+  customToggle: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.m,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.s,
+  },
+  customToggleText: { color: colors.text, fontWeight: "600" },
+  customForm: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s, alignItems: "center" },
+  customSaveRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  customSaveText: { color: colors.textMuted, fontSize: 12 },
+  customLabel: { color: colors.textMuted, fontWeight: "400", fontSize: 12 },
   toggle: { flexDirection: "row", borderRadius: radius.m, backgroundColor: colors.bg, padding: 3 },
   toggleOpt: { paddingHorizontal: spacing.l, paddingVertical: spacing.s, borderRadius: radius.s },
   toggleOptActive: { backgroundColor: colors.primary },
@@ -401,6 +498,23 @@ const styles = StyleSheet.create({
   dropdownPrice: { color: colors.textMuted },
   dropdownEmpty: { padding: spacing.m, color: colors.textMuted },
   emptyItems: { color: colors.textMuted, textAlign: "center", padding: spacing.m },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s },
+  gridItem: {
+    minWidth: 110,
+    flexGrow: 1,
+    flexBasis: 110,
+    maxWidth: 180,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.m,
+    backgroundColor: colors.bg,
+    paddingHorizontal: spacing.m,
+    paddingVertical: spacing.m,
+    alignItems: "center",
+    gap: 4,
+  },
+  gridName: { color: colors.text, fontWeight: "600", fontSize: 14, textAlign: "center" },
+  gridPrice: { color: colors.textMuted, fontSize: 13 },
   line: { flexDirection: "row", alignItems: "center", gap: spacing.m },
   lineName: { fontWeight: "600", color: colors.text, fontSize: 15 },
   lineNote: {

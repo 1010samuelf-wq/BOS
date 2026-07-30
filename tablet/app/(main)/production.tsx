@@ -13,7 +13,7 @@ import { RequiresConnection } from "../../src/components/Chrome";
 import { Empty, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
-type Preset = "today" | "tomorrow" | "week";
+type Preset = "today" | "tomorrow" | "week" | "upcoming";
 
 function range(preset: Preset): { from: string; to: string } {
   const d = new Date();
@@ -24,8 +24,14 @@ function range(preset: Preset): { from: string; to: string } {
     t.setDate(d.getDate() + 1);
     return { from: iso(t), to: iso(t) };
   }
+  if (preset === "week") {
+    const end = new Date(d);
+    end.setDate(d.getDate() + 6);
+    return { from: iso(d), to: iso(end) };
+  }
+  // "upcoming": every not-yet-fulfilled order, no cutoff.
   const end = new Date(d);
-  end.setDate(d.getDate() + 6);
+  end.setFullYear(d.getFullYear() + 5);
   return { from: iso(d), to: iso(end) };
 }
 
@@ -44,14 +50,14 @@ export default function ProductionScreen() {
           title="Production"
           right={
             <View style={styles.tabs}>
-              {(["today", "tomorrow", "week"] as Preset[]).map((p) => (
+              {(["today", "tomorrow", "week", "upcoming"] as Preset[]).map((p) => (
                 <Pressable
                   key={p}
                   style={[styles.tab, preset === p && styles.tabActive]}
                   onPress={() => setPreset(p)}
                 >
                   <Text style={[styles.tabText, preset === p && styles.tabTextActive]}>
-                    {p === "week" ? "This week" : p[0].toUpperCase() + p.slice(1)}
+                    {p === "week" ? "This week" : p === "upcoming" ? "Upcoming (no limit)" : p[0].toUpperCase() + p.slice(1)}
                   </Text>
                 </Pressable>
               ))}

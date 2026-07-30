@@ -1,0 +1,25 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grain" x1="300" y1="200" x2="724" y2="824" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff6e8"/>
+      <stop offset="1" stop-color="#eecf9d"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Foreground only, no background — Android composites this over adaptive-icon backgroundColor.
+       Scaled down slightly and re-centered so the wheat stays inside the round/square safe zone. -->
+  <g transform="translate(512,512) scale(0.72) translate(-512,-512)">
+    <rect x="497" y="230" width="30" height="560" rx="15" fill="url(#grain)"/>
+    <g>
+      <ellipse cx="0" cy="0" rx="34" ry="86" fill="url(#grain)" transform="translate(430,290) rotate(-38)"/>
+      <ellipse cx="0" cy="0" rx="34" ry="86" fill="url(#grain)" transform="translate(594,290) rotate(38)"/>
+      <ellipse cx="0" cy="0" rx="34" ry="86" fill="url(#grain)" transform="translate(418,410) rotate(-38)"/>
+      <ellipse cx="0" cy="0" rx="34" ry="86" fill="url(#grain)" transform="translate(606,410) rotate(38)"/>
+      <ellipse cx="0" cy="0" rx="34" ry="86" fill="url(#grain)" transform="translate(410,530) rotate(-38)"/>
+      <ellipse cx="0" cy="0" rx="34" ry="86" fill="url(#grain)" transform="translate(614,530) rotate(38)"/>
+      <ellipse cx="0" cy="0" rx="30" ry="76" fill="url(#grain)" transform="translate(414,644) rotate(-32)"/>
+      <ellipse cx="0" cy="0" rx="30" ry="76" fill="url(#grain)" transform="translate(610,644) rotate(32)"/>
+    </g>
+    <ellipse cx="512" cy="222" rx="26" ry="46" fill="url(#grain)"/>
+  </g>
+</svg>

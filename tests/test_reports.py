@@ -50,6 +50,21 @@ def test_sales_report_revenue_breakdown_and_profit(client, make_product, make_in
     assert len(r["expenses"]) == 1
 
 
+def test_labor_cost_deducted_from_profit(client, make_user):
+    uid, _, _ = make_user("nadia", "cashier")
+    client.put(f"/api/v1/employees/{uid}", json={"hourly_rate": "20.00"})
+
+    today = date.today()
+    ci = _needed(today, 9)   # 09:00 UTC
+    co = _needed(today, 13)  # 13:00 UTC -- a 4h shift
+
+    client.post("/api/v1/time/entries", json={"user_id": uid, "clock_in": ci, "clock_out": co})
+
+    r = client.get("/api/v1/reports/daily", params={"day": today.isoformat()}).json()
+    assert Decimal(r["labor_cost"]) == Decimal("80.00")  # 4h × $20
+    assert Decimal(r["profit"]) == Decimal("0") - Decimal("80.00")  # no sales today, just labor
+
+
 def test_paylater_collection_lands_in_method_bucket(client, make_product):
     p = make_product(name="Loaf", price="8.00")
     oid = client.post("/api/v1/orders", json=order_payload(

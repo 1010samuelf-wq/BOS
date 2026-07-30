@@ -339,9 +339,9 @@ const styles = StyleSheet.create({
   flag: { color: colors.warn, fontSize: 12 },
   cardItems: { color: colors.textMuted, fontSize: 13 },
   cardBottom: { flexDirection: "row", alignItems: "center", gap: spacing.s, marginTop: spacing.xs },
-  cardType: { color: colors.textMuted, fontSize: 12, textTransform: "capitalize", flex: 1 },
+  cardType: { color: colors.textMuted, fontSize: 12, textTransform: "capitalize" },
   unpaid: { color: colors.warn, fontSize: 11, fontWeight: "700" },
-  cardTotal: { fontWeight: "700", color: colors.text },
+  cardTotal: { fontWeight: "700", color: colors.text, marginLeft: "auto" },
 
   // ---- List / filter tab ----
   filterCard: {

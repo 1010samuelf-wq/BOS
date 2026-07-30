@@ -65,14 +65,36 @@ def _build_items(db: Session, payload_items) -> tuple[list[OrderItem], Decimal]:
     items: list[OrderItem] = []
     subtotal = Decimal(0)
     for line in payload_items:
-        product = db.get(Product, line.product_id)
-        if product is None:
-            raise bad_request(
-                f"Product {line.product_id} not found", code="unknown_product"
+        if line.product_id is not None:
+            product = db.get(Product, line.product_id)
+            if product is None:
+                raise bad_request(
+                    f"Product {line.product_id} not found", code="unknown_product"
+                )
+            if not product.active:
+                raise bad_request(
+                    f"Product '{product.name}' is inactive", code="inactive_product"
+                )
+        elif line.custom_name and line.custom_price is not None:
+            # Ad-hoc item entered at order time (spec: custom item + price).
+            # Always a real Product row underneath — everything downstream
+            # (stock deduction, production, reports) already works off
+            # product_id, so this needs no schema change there. `active`
+            # is what "save as regular product" actually means: leave it
+            # inactive (hidden from search/tap-grid/menu) unless asked to
+            # keep it, in which case it behaves like any catalog product
+            # from now on.
+            product = Product(
+                name=line.custom_name.strip(),
+                price=line.custom_price,
+                active=line.save_as_product,
             )
-        if not product.active:
+            db.add(product)
+            db.flush()
+        else:
             raise bad_request(
-                f"Product '{product.name}' is inactive", code="inactive_product"
+                "Each item needs either a product_id or a custom_name + custom_price.",
+                code="invalid_item",
             )
         line_total = product.price * line.quantity
         subtotal += line_total

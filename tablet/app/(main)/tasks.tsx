@@ -23,7 +23,8 @@ function TaskRow({ task, name, onToggle }: { task: Task; name?: string; onToggle
         {task.done && <Text style={styles.check}>✓</Text>}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.taskText, task.done && styles.taskDone]}>{task.description}</Text>
+        <Text style={[styles.taskText, task.done && styles.taskDone]}>{task.title}</Text>
+        {task.description ? <Text style={styles.taskDesc}>{task.description}</Text> : null}
         <Text style={styles.taskMeta}>
           {name ? `${name} · ` : ""}
           {task.due_date ? `due ${new Date(task.due_date).toLocaleDateString()}` : "no due date"}
@@ -71,6 +72,7 @@ export default function TasksScreen() {
   });
 
   // create form
+  const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [assignee, setAssignee] = useState<number | null>(null);
   const [dueDate, setDueDate] = useState("");
@@ -78,11 +80,13 @@ export default function TasksScreen() {
   const create = useMutation({
     mutationFn: () =>
       createTask({
-        description: desc.trim(),
+        title: title.trim(),
+        description: desc.trim() || undefined,
         assigned_to: assignee!,
         due_date: dueDate.trim() ? `${dueDate.trim()}T${dueTime.trim() || "00:00"}` : null,
       }),
     onSuccess: () => {
+      setTitle("");
       setDesc("");
       setAssignee(null);
       setDueDate("");
@@ -117,7 +121,13 @@ export default function TasksScreen() {
               <Text style={styles.section}>New task</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Description"
+                placeholder="Title *"
+                value={title}
+                onChangeText={setTitle}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="Details (optional)"
                 value={desc}
                 onChangeText={setDesc}
               />
@@ -140,7 +150,7 @@ export default function TasksScreen() {
               <Button
                 label="Create task"
                 busy={create.isPending}
-                disabled={!desc.trim() || assignee === null}
+                disabled={!title.trim() || assignee === null}
                 onPress={() => create.mutate()}
               />
             </Card>
@@ -229,6 +239,7 @@ const styles = StyleSheet.create({
   check: { color: "#fff", fontWeight: "800" },
   taskText: { color: colors.text, fontSize: 15 },
   taskDone: { textDecorationLine: "line-through", color: colors.textMuted },
+  taskDesc: { color: colors.textMuted, fontSize: 13, marginTop: 1 },
   taskMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   input: {
     borderWidth: 1,
