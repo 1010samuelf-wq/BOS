@@ -1,0 +1,120 @@
+# Deploys to Fly.io from GitHub's runners rather than a developer machine.
+# The dev machine runs a content filter whose kernel drivers break both halves
+# of a local deploy: its filesystem minifilter corrupts the AF_UNIX reparse
+# points Docker Desktop uses for its own sockets (so the daemon won't start),
+# and its TLS interception makes flyctl's remote builder fail cert validation.
+# A runner has neither, so `flyctl deploy --remote-only` just works.
+#
+# Deploys are manual on purpose: this backend is a live POS (tablets on shift,
+# realtime WS), so releases happen when someone asks for one, not on every push.
+# Run from the Actions tab, or: gh workflow run deploy.yml -f target=backend
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which app to deploy
+        type: choice
+        default: backend
+        options:
+          - backend
+          - dashboard
+          - menu
+          - all
+
+concurrency:
+  # Never let two releases race for the same app.
+  group: deploy-${{ github.event.inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  # Gate every deploy on the backend suite against real Postgres — the same
+  # check ci.yml runs on push, repeated here so a manual deploy of an older or
+  # untested commit can't reach production unverified.
+  test:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bos
+          POSTGRES_PASSWORD: bos
+          POSTGRES_DB: bos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      BOS_DATABASE_URL: postgresql+psycopg://bos:bos@localhost:5432/bos_test
+      BOS_JWT_SECRET: ci-only-secret-please-override-in-production-000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Validate migrations apply on Postgres
+        run: alembic upgrade head
+      - name: Tests
+        run: pytest -q
+
+  backend:
+    name: Backend (just-cake-bakery)
+    needs: test
+    if: contains(fromJSON('["backend","all"]'), github.event.inputs.target)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # fly.toml's release_command runs `alembic upgrade head` and the
+      # idempotent bootstrap before traffic moves to the new release.
+      - run: flyctl deploy --remote-only --app just-cake-bakery
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  dashboard:
+    name: Web dashboard (just-cake-dashboard)
+    needs: test
+    if: contains(fromJSON('["dashboard","all"]'), github.event.inputs.target)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - name: Build (runs tsc)
+        run: npm run build
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --app just-cake-dashboard
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  menu:
+    name: Public menu site (just-cake-menu)
+    needs: test
+    if: contains(fromJSON('["menu","all"]'), github.event.inputs.target)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: menu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install
+      - run: npm run build
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --app just-cake-menu
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
