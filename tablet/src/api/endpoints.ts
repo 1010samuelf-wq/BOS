@@ -1,18 +1,21 @@
 // Typed API calls used by the screens. One function per endpoint keeps the
 // screens free of paths/param wrangling.
 
-import { api } from "./client";
+import { api, uploadFile } from "./client";
 import type {
+  BusinessProfile,
   Deliveries,
   Employee,
   ExpenseOut,
   HoursReport,
+  Ingredient,
   Notification,
   Order,
   OrderCreatePayload,
   Page,
   Product,
   ProductionReport,
+  Recipe,
   RosterEntry,
   SalesReport,
   StockLevel,
@@ -31,13 +34,38 @@ export const login = (user_id: number, pin: string) =>
 export const setPin = (user_id: number, pin: string, setup_code: string) =>
   api<void>("/auth/set-pin", { method: "POST", body: { user_id, pin, setup_code } });
 
-// ---- products ----
+// ---- catalog (Admin) ----
 export const searchProducts = (q: string) =>
   api<Product[]>("/products/search", { query: { q, limit: 8 } });
 
-// Full catalog for the tap-to-add grid on the new-order screen.
 export const listProducts = (activeOnly = true) =>
   api<Product[]>("/products", { query: activeOnly ? { active: true } : {} });
+export const createProduct = (body: { name: string; price: string; category?: string | null }) =>
+  api<Product>("/products", { method: "POST", body });
+export const updateProduct = (id: number, body: Partial<Product>) =>
+  api<Product>(`/products/${id}`, { method: "PUT", body });
+export const uploadProductPhoto = (id: number, asset: { uri: string; name: string; type: string }) =>
+  uploadFile<Product>(`/products/${id}/photo`, asset);
+
+export const listIngredients = (active?: boolean) =>
+  api<Ingredient[]>("/ingredients", { query: active === undefined ? {} : { active } });
+export const createIngredient = (body: {
+  name: string;
+  unit: string;
+  cost_per_unit: string;
+  low_stock_threshold: string;
+}) => api<Ingredient>("/ingredients", { method: "POST", body });
+export const updateIngredient = (id: number, body: Partial<Ingredient>) =>
+  api<Ingredient>(`/ingredients/${id}`, { method: "PUT", body });
+
+export const getRecipe = (productId: number) => api<Recipe>(`/recipes/${productId}`);
+export const upsertRecipe = (body: { product_id: number; yield_qty: number; items: { ingredient_id: number; quantity: string }[] }) =>
+  api<Recipe>("/recipes", { method: "POST", body });
+
+// ---- settings (Admin) ----
+export const getBusinessProfile = () => api<BusinessProfile>("/settings/business-profile");
+export const updateBusinessProfile = (body: BusinessProfile) =>
+  api<BusinessProfile>("/settings/business-profile", { method: "PUT", body });
 
 // ---- orders ----
 export const createOrder = (payload: OrderCreatePayload) =>

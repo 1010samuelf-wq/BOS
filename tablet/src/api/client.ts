@@ -93,3 +93,37 @@ export async function api<T>(
 export function wsUrl(token: string): string {
   return `${V1.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`;
 }
+
+// Multipart upload (e.g. a product photo picked from the gallery). RN's
+// fetch/FormData wants a {uri, name, type} descriptor, not a web File/Blob.
+export async function uploadFile<T>(
+  path: string,
+  asset: { uri: string; name: string; type: string },
+): Promise<T> {
+  const form = new FormData();
+  // React Native's FormData accepts this shape at runtime even though the DOM
+  // lib types (which this project's tsconfig uses) don't model it — hence the cast.
+  form.append("file", { uri: asset.uri, name: asset.name, type: asset.type } as unknown as Blob);
+
+  const res = await fetch(`${V1}${path}`, {
+    method: "POST",
+    headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+    body: form,
+  });
+  if (!res.ok) {
+    if (res.status === 401) onUnauthorized?.();
+    let code = "http_error";
+    let message = `Request failed (${res.status})`;
+    try {
+      const data = await res.json();
+      if (data?.error) {
+        code = data.error.code;
+        message = data.error.message;
+      }
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiRequestError(res.status, code, message);
+  }
+  return (await res.json()) as T;
+}

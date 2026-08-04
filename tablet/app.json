@@ -13,7 +13,7 @@
     ],
     "android": {
       "package": "com.bos.tablet",
-      "versionCode": 2,
+      "versionCode": 3,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -37,6 +37,14 @@
           "android": {
             "kotlinVersion": "1.9.25"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Just Cake to access your photos to attach a product photo.",
+          "cameraPermission": false,
+          "microphonePermission": false
         }
       ]
     ],

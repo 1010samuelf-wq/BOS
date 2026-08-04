@@ -12,7 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin
-from app.core.errors import conflict, not_found
+from app.core.errors import bad_request, conflict, not_found
 from app.core.permissions import GRANTABLE_SECTIONS, effective_sections
 from app.database import get_db
 from app.models import (
@@ -23,6 +23,7 @@ from app.models import (
     Task,
     TimeEntry,
     User,
+    UserRole,
 )
 from app.schemas.employee import EmployeeCreate, EmployeeOut, EmployeeUpdate
 from app.services import auth as auth_service
@@ -118,7 +119,18 @@ def reset_pin(
     _: User = Depends(require_admin),
 ):
     """Clear the employee's PIN and return them to first-login state, issuing a
-    fresh one-time setup code to hand over (spec §2E)."""
+    fresh one-time setup code to hand over (spec §2E).
+
+    Not available for admin accounts — an admin's PIN can't be reset from the
+    app by anyone (including another admin), so that access can't be taken
+    over or locked out through this flow."""
+    target = db.get(User, employee_id)
+    if target is None:
+        raise not_found(f"Employee {employee_id} not found")
+    if target.role == UserRole.admin:
+        raise bad_request(
+            "An admin's PIN can't be reset from the app.", code="cannot_reset_admin_pin"
+        )
     employee, code = auth_service.reset_pin(db, employee_id)
     db.commit()
     db.refresh(employee)

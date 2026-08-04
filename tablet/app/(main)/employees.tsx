@@ -215,7 +215,9 @@ export default function EmployeesScreen() {
                 </View>
                 {e.active ? (
                   <>
-                    <Button label="Reset PIN" tone="neutral" onPress={() => reset.mutate(e.id)} />
+                    {e.role !== "admin" && (
+                      <Button label="Reset PIN" tone="neutral" onPress={() => reset.mutate(e.id)} />
+                    )}
                     <Button label="Deactivate" tone="danger" onPress={() => deactivate.mutate(e.id)} />
                   </>
                 ) : (

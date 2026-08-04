@@ -19,7 +19,7 @@ import {
 } from "react-native";
 
 import { ApiRequestError } from "../../../src/api/client";
-import { createOrder, listProducts, searchProducts } from "../../../src/api/endpoints";
+import { createOrder, searchProducts } from "../../../src/api/endpoints";
 import type { PaymentMethod, Product } from "../../../src/api/types";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { DateField, TimeField } from "../../../src/components/DateTimeField";
@@ -75,13 +75,6 @@ export default function NewOrderScreen() {
     queryFn: () => searchProducts(search),
     enabled: search.trim().length >= 2,
     staleTime: 30_000,
-  });
-
-  // Full catalog for the tap-to-add grid — browse & tap instead of typing.
-  const catalog = useQuery({
-    queryKey: ["products", "active"],
-    queryFn: () => listProducts(true),
-    staleTime: 60_000,
   });
 
   const submit = useMutation({
@@ -240,23 +233,6 @@ export default function NewOrderScreen() {
             )}
           </View>
 
-          {/* Tap-to-add grid: every active product, tap to add to the order.
-              Faster than typing for the common items. */}
-          {catalog.isLoading ? (
-            <ActivityIndicator style={{ padding: spacing.m }} />
-          ) : (catalog.data ?? []).length > 0 ? (
-            <View style={styles.grid}>
-              {(catalog.data ?? []).map((p: Product) => (
-                <Pressable key={p.id} style={styles.gridItem} onPress={() => pickProduct(p)}>
-                  <Text style={styles.gridName} numberOfLines={2}>{p.name}</Text>
-                  <Text style={styles.gridPrice}>${p.price}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.emptyItems}>No products in the catalog yet.</Text>
-          )}
-
           {!customOpen ? (
             <Pressable style={styles.customToggle} onPress={() => setCustomOpen(true)}>
               <Text style={styles.customToggleText}>+ Custom item</Text>
@@ -297,7 +273,7 @@ export default function NewOrderScreen() {
           )}
 
           {draft.lines.length === 0 ? (
-            <Text style={styles.emptyItems}>No items yet — tap a product above to add.</Text>
+            <Text style={styles.emptyItems}>No items yet — search above to add.</Text>
           ) : (
             draft.lines.map((line, i) => (
               <View key={`${line.product_id}-${i}`} style={styles.line}>
@@ -498,23 +474,6 @@ const styles = StyleSheet.create({
   dropdownPrice: { color: colors.textMuted },
   dropdownEmpty: { padding: spacing.m, color: colors.textMuted },
   emptyItems: { color: colors.textMuted, textAlign: "center", padding: spacing.m },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s },
-  gridItem: {
-    minWidth: 110,
-    flexGrow: 1,
-    flexBasis: 110,
-    maxWidth: 180,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.m,
-    backgroundColor: colors.bg,
-    paddingHorizontal: spacing.m,
-    paddingVertical: spacing.m,
-    alignItems: "center",
-    gap: 4,
-  },
-  gridName: { color: colors.text, fontWeight: "600", fontSize: 14, textAlign: "center" },
-  gridPrice: { color: colors.textMuted, fontSize: 13 },
   line: { flexDirection: "row", alignItems: "center", gap: spacing.m },
   lineName: { fontWeight: "600", color: colors.text, fontSize: 15 },
   lineNote: {

@@ -224,7 +224,9 @@ export default function EmployeesHours() {
                     </div>
                     {e.active ? (
                       <>
-                        <button className="btn neutral sm" onClick={() => reset.mutate(e.id)}>Reset PIN</button>
+                        {e.role !== "admin" && (
+                          <button className="btn neutral sm" onClick={() => reset.mutate(e.id)}>Reset PIN</button>
+                        )}
                         <button className="btn danger sm" onClick={() => deactivate.mutate(e.id)}>Deactivate</button>
                       </>
                     ) : (

@@ -98,6 +98,13 @@ def test_non_admin_cannot_reset_pin(client, make_user):
     assert manager.post(f"/api/v1/employees/{uid}/reset-pin").status_code == 403
 
 
+def test_admin_pin_cannot_be_reset_even_by_another_admin(client, make_user):
+    uid, _, _ = make_user("olive", "admin")
+    r = client.post(f"/api/v1/employees/{uid}/reset-pin")
+    assert r.status_code == 400
+    assert r.json()["error"]["code"] == "cannot_reset_admin_pin"
+
+
 def test_deactivated_employee_cannot_use_token(client, make_user):
     uid, _, ivy = make_user("ivy", "cashier")
     # works before deactivation

@@ -41,6 +41,38 @@ export interface Product {
   active: boolean;
   photo_url: string | null;
 }
+export interface Ingredient {
+  id: number;
+  name: string;
+  unit: string;
+  cost_per_unit: string;
+  low_stock_threshold: string;
+  active: boolean;
+}
+export interface RecipeItem {
+  ingredient_id: number;
+  quantity: string;
+}
+export interface Recipe {
+  id: number;
+  product_id: number;
+  yield_qty: number;
+  items: RecipeItem[];
+}
+export interface BusinessProfile {
+  business_name: string | null;
+  business_address: string | null;
+  business_phone: string | null;
+}
+// Fixed preset — must match app/schemas/catalog.py's PRODUCT_CATEGORIES.
+export const PRODUCT_CATEGORIES = [
+  "Pareve Miniatures",
+  "Pareve Cakes",
+  "Dairy Miniatures",
+  "Dairy Cakes",
+  "Tarts",
+  "Seasonal",
+] as const;
 
 export interface OrderItemOut {
   id: number;

@@ -22,6 +22,7 @@ const RAIL = [
   { href: "/(main)/time", label: "Time", icon: "⏱️" },
   { href: "/(main)/tasks", label: "Tasks", icon: "✅" },
   { href: "/(main)/notifications", label: "Alerts", icon: "🔔" },
+  { href: "/(main)/settings", label: "Settings", icon: "⚙️", adminOnly: true },
 ] as const;
 
 export default function MainLayout() {
@@ -42,7 +43,7 @@ export default function MainLayout() {
       <View style={styles.rail}>
         <Text style={styles.brand}>BOS</Text>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.railScroll} showsVerticalScrollIndicator={false}>
-          {RAIL.map((item) => {
+          {RAIL.filter((item) => !("adminOnly" in item) || user.role === "admin").map((item) => {
             const active = pathname.startsWith(item.href.replace("/(main)", ""));
             const badge = item.label === "Alerts" ? (unread.data?.unread ?? 0) : 0;
             return (
