@@ -92,8 +92,20 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
+      # The API base is baked into dist/ at build time and the Dockerfile only
+      # copies the prebuilt dist/, so this variable MUST be set here. Without it
+      # client.ts falls back to http://localhost:8000 and the deployed SPA can't
+      # reach the backend at all.
       - name: Build (runs tsc)
         run: npm run build
+        env:
+          VITE_API_URL: https://just-cake-bakery.fly.dev
+      - name: Fail if the API base didn't get baked in
+        run: |
+          if grep -rq "localhost:8000" dist/; then
+            echo "dist/ still points at localhost:8000 - VITE_API_URL was not applied"
+            exit 1
+          fi
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only --app just-cake-dashboard
         env:
@@ -113,7 +125,16 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
+      # Same build-time bake as the dashboard - see the comment in that job.
       - run: npm run build
+        env:
+          VITE_API_URL: https://just-cake-bakery.fly.dev
+      - name: Fail if the API base didn't get baked in
+        run: |
+          if grep -rq "localhost:8000" dist/; then
+            echo "dist/ still points at localhost:8000 - VITE_API_URL was not applied"
+            exit 1
+          fi
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only --app just-cake-menu
         env:
