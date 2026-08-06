@@ -120,6 +120,11 @@ export const updateExpense = (id: number, body: { description?: string; amount?:
 
 // ---- catalog (Admin) ----
 export const listProducts = () => api<Product[]>("/products");
+// Active products in one category — backs the order screen's category buttons.
+export const listProductsByCategory = (category: string) =>
+  api<Product[]>("/products", { query: { category, active: true } });
+// Presets plus any category staff have added; also readable by cashiers.
+export const listCategories = () => api<string[]>("/products/categories");
 export const createProduct = (body: { name: string; price: string; category?: string | null; photo_url?: string | null }) =>
   api<Product>("/products", { method: "POST", body });
 export const updateProduct = (id: number, body: Partial<Product>) =>

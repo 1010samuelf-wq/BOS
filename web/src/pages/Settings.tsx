@@ -7,11 +7,75 @@ import { useEffect, useRef, useState } from "react";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
-import { PRODUCT_CATEGORIES } from "../api/types";
 import type { Ingredient, Product } from "../api/types";
 import { Loading, PageHead, Tabs } from "../components/ui";
 
 type Section = "products" | "ingredients" | "recipes" | "business";
+
+// Sentinel option value; no real category can collide with it because the
+// backend strips and rejects blank names, and this isn't a plausible one.
+const NEW_CATEGORY = "__new__";
+
+/** Category dropdown that can also mint a new one. Picking "New category…"
+ *  swaps the select for a free-text input, so staff never need a code change
+ *  to add a category. */
+function CategorySelect({
+  value,
+  onChange,
+  placeholder = "Category…",
+  style,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  style?: React.CSSProperties;
+}) {
+  const categories = useQuery({ queryKey: ["product-categories"], queryFn: api.listCategories });
+  const [typing, setTyping] = useState(false);
+
+  if (typing) {
+    return (
+      <span className="row" style={{ gap: 4 }}>
+        <input
+          className="input"
+          autoFocus
+          placeholder="New category name"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={style}
+        />
+        <button
+          className="btn neutral sm"
+          title="Pick from the list instead"
+          onClick={() => { onChange(""); setTyping(false); }}
+        >
+          ✕
+        </button>
+      </span>
+    );
+  }
+
+  // A just-typed category isn't in the server list until its product is saved,
+  // so keep it selectable in the meantime.
+  const known = categories.data ?? [];
+  const options = value && !known.includes(value) ? [...known, value] : known;
+
+  return (
+    <select
+      className="input"
+      value={value}
+      style={style}
+      onChange={(e) => {
+        if (e.target.value === NEW_CATEGORY) { onChange(""); setTyping(true); }
+        else onChange(e.target.value);
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {options.map((c: string) => <option key={c} value={c}>{c}</option>)}
+      <option value={NEW_CATEGORY}>＋ New category…</option>
+    </select>
+  );
+}
 
 export default function Settings() {
   const [section, setSection] = useState<Section>("products");
@@ -112,10 +176,7 @@ function ProductRow({
         <td><PhotoCell p={p} onUpload={onUploadPhoto} uploading={uploadingId === p.id} /></td>
         <td><input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ minWidth: 140 }} /></td>
         <td>
-          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 160 }}>
-            <option value="">—</option>
-            {PRODUCT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <CategorySelect value={category} onChange={setCategory} placeholder="—" style={{ maxWidth: 160 }} />
         </td>
         <td className="num"><input className="input" value={price} onChange={(e) => setPrice(e.target.value)} style={{ maxWidth: 90, textAlign: "right" }} /></td>
         <td>
@@ -148,16 +209,26 @@ function Products() {
   const client = useQueryClient();
   const { error, onErr } = useErr();
   const products = useQuery({ queryKey: ["products"], queryFn: api.listProducts });
-  const invalidate = () => client.invalidateQueries({ queryKey: ["products"] });
+  // Saving a product may have introduced a category, so refresh that list too.
+  const invalidate = () => {
+    client.invalidateQueries({ queryKey: ["products"] });
+    client.invalidateQueries({ queryKey: ["product-categories"] });
+  };
 
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
   const [uploadingId, setUploadingId] = useState<number | null>(null);
+  // Bumped after a save to remount CategorySelect, so a picker left in
+  // "type a new category" mode returns to the dropdown — where the category
+  // just created is now waiting.
+  const [formKey, setFormKey] = useState(0);
 
   const create = useMutation({
     mutationFn: () => api.createProduct({ name: name.trim(), price: price.trim(), category: category.trim() || null }),
-    onSuccess: () => { setName(""); setPrice(""); setCategory(""); invalidate(); },
+    onSuccess: () => {
+      setName(""); setPrice(""); setCategory(""); setFormKey((k) => k + 1); invalidate();
+    },
     onError: onErr,
   });
   const toggleActive = useMutation({
@@ -181,10 +252,7 @@ function Products() {
         <div className="row" style={{ flexWrap: "wrap" }}>
           <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 2, minWidth: 200 }} />
           <input className="input" placeholder="Price (e.g. 3.50)" value={price} onChange={(e) => setPrice(e.target.value)} style={{ maxWidth: 140 }} />
-          <select className="input" value={category} onChange={(e) => setCategory(e.target.value)} style={{ maxWidth: 180 }}>
-            <option value="">Category…</option>
-            {PRODUCT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <CategorySelect key={formKey} value={category} onChange={setCategory} style={{ maxWidth: 180 }} />
           <button className="btn primary" disabled={!name.trim() || !/^\d+(\.\d{1,2})?$/.test(price.trim()) || create.isPending} onClick={() => create.mutate()}>
             Add
           </button>

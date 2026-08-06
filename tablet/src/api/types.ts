@@ -64,15 +64,8 @@ export interface BusinessProfile {
   business_address: string | null;
   business_phone: string | null;
 }
-// Fixed preset — must match app/schemas/catalog.py's PRODUCT_CATEGORIES.
-export const PRODUCT_CATEGORIES = [
-  "Pareve Miniatures",
-  "Pareve Cakes",
-  "Dairy Miniatures",
-  "Dairy Cakes",
-  "Tarts",
-  "Seasonal",
-] as const;
+// Categories are staff-editable, so the list is fetched (listCategories) rather
+// than hardcoded here — the backend seeds it with presets.
 
 export interface OrderItemOut {
   id: number;

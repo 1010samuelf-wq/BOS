@@ -19,7 +19,7 @@ import {
 } from "react-native";
 
 import { ApiRequestError } from "../../../src/api/client";
-import { createOrder, searchProducts } from "../../../src/api/endpoints";
+import { createOrder, listCategories, listProductsByCategory, searchProducts } from "../../../src/api/endpoints";
 import type { PaymentMethod, Product } from "../../../src/api/types";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { DateField, TimeField } from "../../../src/components/DateTimeField";
@@ -48,6 +48,8 @@ const METHODS: { key: PaymentMethod; label: string }[] = [
 export default function NewOrderScreen() {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [search, setSearch] = useState("");
+  // Which category's grid is open; null means none. Tapping the open one closes it.
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [cardModal, setCardModal] = useState(false);
   const [cardNoteInput, setCardNoteInput] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
@@ -75,6 +77,20 @@ export default function NewOrderScreen() {
     queryFn: () => searchProducts(search),
     enabled: search.trim().length >= 2,
     staleTime: 30_000,
+  });
+
+  // Category buttons: browsing as an alternative to searching. Only the open
+  // category's products are fetched, so a large catalog never loads at once.
+  const categories = useQuery({
+    queryKey: ["product-categories"],
+    queryFn: listCategories,
+    staleTime: 5 * 60_000,
+  });
+  const categoryProducts = useQuery({
+    queryKey: ["products-by-category", openCategory],
+    queryFn: () => listProductsByCategory(openCategory as string),
+    enabled: openCategory !== null,
+    staleTime: 60_000,
   });
 
   const submit = useMutation({
@@ -233,6 +249,38 @@ export default function NewOrderScreen() {
             )}
           </View>
 
+          {/* Browse by category — tap to open a grid, tap again to close. */}
+          {(categories.data ?? []).length > 0 && (
+            <View style={styles.categoryRow}>
+              {(categories.data ?? []).map((c: string) => (
+                <Pressable
+                  key={c}
+                  style={[styles.categoryBtn, openCategory === c && styles.categoryBtnOn]}
+                  onPress={() => setOpenCategory((cur) => (cur === c ? null : c))}
+                >
+                  <Text style={openCategory === c ? styles.categoryTextOn : styles.categoryText}>{c}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {openCategory !== null && (
+            categoryProducts.isPending ? (
+              <ActivityIndicator style={{ padding: spacing.m }} />
+            ) : (categoryProducts.data ?? []).length === 0 ? (
+              <Text style={styles.emptyItems}>Nothing in {openCategory} yet.</Text>
+            ) : (
+              <View style={styles.grid}>
+                {(categoryProducts.data ?? []).map((p: Product) => (
+                  <Pressable key={p.id} style={styles.gridItem} onPress={() => pickProduct(p)}>
+                    <Text style={styles.gridName}>{p.name}</Text>
+                    <Text style={styles.gridPrice}>${p.price}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )
+          )}
+
           {!customOpen ? (
             <Pressable style={styles.customToggle} onPress={() => setCustomOpen(true)}>
               <Text style={styles.customToggleText}>+ Custom item</Text>
@@ -273,7 +321,7 @@ export default function NewOrderScreen() {
           )}
 
           {draft.lines.length === 0 ? (
-            <Text style={styles.emptyItems}>No items yet — search above to add.</Text>
+            <Text style={styles.emptyItems}>No items yet — search or pick a category above.</Text>
           ) : (
             draft.lines.map((line, i) => (
               <View key={`${line.product_id}-${i}`} style={styles.line}>
@@ -474,6 +522,30 @@ const styles = StyleSheet.create({
   dropdownPrice: { color: colors.textMuted },
   dropdownEmpty: { padding: spacing.m, color: colors.textMuted },
   emptyItems: { color: colors.textMuted, textAlign: "center", padding: spacing.m },
+  // browse-by-category: one category's grid at a time
+  categoryRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s, marginTop: spacing.m },
+  categoryBtn: {
+    paddingVertical: spacing.s,
+    paddingHorizontal: spacing.m,
+    borderRadius: radius.m,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  categoryBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  categoryText: { color: colors.text, fontSize: 14 },
+  categoryTextOn: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s, marginTop: spacing.m },
+  gridItem: {
+    minWidth: 150,
+    padding: spacing.m,
+    borderRadius: radius.m,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  gridName: { fontWeight: "600", color: colors.text, fontSize: 14 },
+  gridPrice: { color: colors.textMuted, marginTop: 2 },
   line: { flexDirection: "row", alignItems: "center", gap: spacing.m },
   lineName: { fontWeight: "600", color: colors.text, fontSize: 15 },
   lineNote: {

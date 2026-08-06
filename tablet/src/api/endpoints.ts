@@ -40,6 +40,11 @@ export const searchProducts = (q: string) =>
 
 export const listProducts = (activeOnly = true) =>
   api<Product[]>("/products", { query: activeOnly ? { active: true } : {} });
+// Active products in one category — backs the order screen's category buttons.
+export const listProductsByCategory = (category: string) =>
+  api<Product[]>("/products", { query: { category, active: true } });
+// Presets plus any category staff have added; also readable by cashiers.
+export const listCategories = () => api<string[]>("/products/categories");
 export const createProduct = (body: { name: string; price: string; category?: string | null }) =>
   api<Product>("/products", { method: "POST", body });
 export const updateProduct = (id: number, body: Partial<Product>) =>

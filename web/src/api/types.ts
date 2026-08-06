@@ -6,16 +6,8 @@ export type Role = "cashier" | "manager" | "admin";
 // Display label only — the wire value stays "cashier" (backend enum/permissions
 // are unchanged); this bakery just calls that role "Baker".
 export const roleLabel = (r: Role): string => (r === "cashier" ? "Baker" : r[0].toUpperCase() + r.slice(1));
-// Fixed preset — must match app/schemas/catalog.py's PRODUCT_CATEGORIES.
-export const PRODUCT_CATEGORIES = [
-  "Pareve Miniatures",
-  "Pareve Cakes",
-  "Dairy Miniatures",
-  "Dairy Cakes",
-  "Tarts",
-  "Seasonal",
-] as const;
-export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+// Categories are staff-editable, so the list is fetched (listCategories) rather
+// than hardcoded here — the backend seeds it with presets.
 
 export type FulfillmentType = "pickup" | "delivery";
 export type PaymentMethod = "cash" | "card" | "etransfer";

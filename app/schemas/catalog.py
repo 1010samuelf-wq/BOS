@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-# Fixed preset — the only categories a product can be assigned (spec: menu
-# filters + a consistent dropdown instead of free-text). Order here is the
-# display order everywhere (Settings dropdown, public menu filter tabs).
+# Seed categories, always offered first and in this order. Staff can add their
+# own from the product form, so this is a starting point rather than a closed
+# set — GET /products/categories returns these plus whatever is actually in use.
 PRODUCT_CATEGORIES: list[str] = [
     "Pareve Miniatures",
     "Pareve Cakes",
@@ -16,9 +17,17 @@ PRODUCT_CATEGORIES: list[str] = [
     "Tarts",
     "Seasonal",
 ]
-ProductCategory = Literal[
-    "Pareve Miniatures", "Pareve Cakes", "Dairy Miniatures", "Dairy Cakes", "Tarts", "Seasonal",
-]
+
+# Free text so a new category needs no code change, but bounded and stripped so
+# " Tarts" and "Tarts" don't become two categories that look identical in a list.
+ProductCategory = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
+def merge_categories(in_use: Iterable[str | None]) -> list[str]:
+    """The category list to show in pickers: presets first in their display
+    order, then anything staff have added since, alphabetically."""
+    extras = sorted({c for c in in_use if c and c not in PRODUCT_CATEGORIES})
+    return PRODUCT_CATEGORIES + extras
 
 
 # ---- Products ----

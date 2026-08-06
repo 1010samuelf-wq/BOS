@@ -39,9 +39,8 @@ def test_public_products_filters_by_category(client, anon_client, make_product):
     assert names == ["Apple Tart"]
 
 
-def test_create_product_rejects_category_outside_preset(client):
-    r = client.post("/api/v1/products", json={"name": "X", "price": "1.00", "category": "Not A Real Category"})
-    assert r.status_code == 400
+# Categories used to be a closed preset and this file asserted anything else was
+# rejected. They're staff-editable now — see tests/test_product_categories.py.
 
 
 def test_public_contact_returns_business_phone(client, anon_client):

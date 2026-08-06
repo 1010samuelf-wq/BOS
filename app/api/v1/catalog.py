@@ -22,6 +22,7 @@ from app.schemas.catalog import (
     ProductUpdate,
     RecipeCreate,
     RecipeOut,
+    merge_categories,
 )
 from app.services import photos as photos_service
 
@@ -45,12 +46,17 @@ def create_product(
 @router.get("/products", response_model=list[ProductOut])
 def list_products(
     active: bool | None = Query(default=None),
+    category: str | None = Query(default=None),
     db: Session = Depends(get_db),
     _: User = Depends(require_any_section("orders", "settings")),
 ):
     stmt = select(Product).order_by(Product.name)
     if active is not None:
         stmt = stmt.where(Product.active == active)
+    # Backs the order screen's category buttons: one category at a time, so a
+    # large catalog never renders as one giant grid.
+    if category is not None:
+        stmt = stmt.where(Product.category == category)
     return db.execute(stmt).scalars().all()
 
 
@@ -77,6 +83,20 @@ def search_products(
         .limit(limit)
     )
     return db.execute(stmt).scalars().all()
+
+
+@router.get("/products/categories", response_model=list[str])
+def list_product_categories(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_any_section("orders", "settings")),
+):
+    """Categories to offer in the product form and the order screen's buttons:
+    the presets plus any staff have since created. Declared above the
+    /products/{product_id} routes so "categories" isn't read as an id."""
+    rows = db.execute(
+        select(Product.category).distinct().where(Product.category.is_not(None))
+    ).scalars().all()
+    return merge_categories(rows)
 
 
 @router.put("/products/{product_id}", response_model=ProductOut)

@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
-import { createOrder, searchProducts, toggleInquiryHandled } from "../api/endpoints";
+import { createOrder, listCategories, listProductsByCategory, searchProducts, toggleInquiryHandled } from "../api/endpoints";
 import type { Inquiry, PaymentMethod, Product } from "../api/types";
 import { PageHead } from "../components/ui";
 import {
@@ -54,6 +54,8 @@ export default function NewOrder() {
   const fromInquiry = (location.state as { fromInquiry?: Inquiry } | null)?.fromInquiry ?? null;
   const [draft, setDraft] = useState<Draft>(() => (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
   const [search, setSearch] = useState("");
+  // Which category's grid is open; null means none. Tapping the open one closes it.
+  const [openCategory, setOpenCategory] = useState<string | null>(null);
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
@@ -69,6 +71,20 @@ export default function NewOrder() {
     queryFn: () => searchProducts(search),
     enabled: search.trim().length >= 2,
     staleTime: 30_000,
+  });
+
+  // Category buttons: browsing an alternative to searching. Only the open
+  // category's products are fetched, so a large catalog never loads at once.
+  const categories = useQuery({
+    queryKey: ["product-categories"],
+    queryFn: listCategories,
+    staleTime: 5 * 60_000,
+  });
+  const categoryProducts = useQuery({
+    queryKey: ["products-by-category", openCategory],
+    queryFn: () => listProductsByCategory(openCategory as string),
+    enabled: openCategory !== null,
+    staleTime: 60_000,
   });
 
   const submit = useMutation({
@@ -194,6 +210,39 @@ export default function NewOrder() {
           )}
         </div>
 
+        {/* Browse by category — tap to open a grid, tap again to close. */}
+        {(categories.data ?? []).length > 0 && (
+          <div className="category-row">
+            {(categories.data ?? []).map((c: string) => (
+              <button
+                key={c}
+                className={`btn sm ${openCategory === c ? "primary" : "neutral"}`}
+                aria-pressed={openCategory === c}
+                onClick={() => setOpenCategory((cur) => (cur === c ? null : c))}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {openCategory !== null && (
+          categoryProducts.isPending ? (
+            <p className="muted" style={{ textAlign: "center" }}>Loading {openCategory}…</p>
+          ) : (categoryProducts.data ?? []).length === 0 ? (
+            <p className="muted" style={{ textAlign: "center" }}>Nothing in {openCategory} yet.</p>
+          ) : (
+            <div className="product-grid">
+              {(categoryProducts.data ?? []).map((p: Product) => (
+                <button key={p.id} className="product-chip" onClick={() => pick(p)}>
+                  <span className="product-chip-name">{p.name}</span>
+                  <span className="muted">${p.price}</span>
+                </button>
+              ))}
+            </div>
+          )
+        )}
+
         {!customOpen ? (
           <button className="btn neutral sm" style={{ marginTop: 8 }} onClick={() => setCustomOpen(true)}>
             + Custom item
@@ -218,7 +267,7 @@ export default function NewOrder() {
         )}
 
         {draft.lines.length === 0 ? (
-          <p className="muted" style={{ textAlign: "center" }}>No items yet — search above to add.</p>
+          <p className="muted" style={{ textAlign: "center" }}>No items yet — search or pick a category above.</p>
         ) : (
           draft.lines.map((l, i) => (
             <div key={`${l.product_id}-${i}`} className="row" style={{ borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>

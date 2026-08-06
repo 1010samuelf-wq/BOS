@@ -19,7 +19,7 @@ from app.core.auth import current_user
 from app.database import get_db
 from app.models import AppSettings, Inquiry, Product, User
 from app.models.base import utcnow
-from app.schemas.catalog import PRODUCT_CATEGORIES, PublicProductOut
+from app.schemas.catalog import PublicProductOut, merge_categories
 from app.schemas.inquiry import InquiryCreate, InquiryOut, PublicContactOut
 
 public_router = APIRouter(prefix="/public", tags=["public"])
@@ -40,9 +40,15 @@ def public_products(category: str | None = Query(default=None), db: Session = De
 
 
 @public_router.get("/categories", response_model=list[str])
-def public_categories():
-    """Fixed preset, in display order — used for the menu's filter tabs."""
-    return PRODUCT_CATEGORIES
+def public_categories(db: Session = Depends(get_db)):
+    """Filter tabs for the menu: presets plus any category staff have created,
+    so a new one shows up publicly without a code change."""
+    rows = db.execute(
+        select(Product.category)
+        .distinct()
+        .where(Product.active.is_(True), Product.category.is_not(None))
+    ).scalars().all()
+    return merge_categories(rows)
 
 
 @public_router.get("/contact", response_model=PublicContactOut)

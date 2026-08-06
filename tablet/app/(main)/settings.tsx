@@ -23,6 +23,7 @@ import {
   createProduct,
   getBusinessProfile,
   getRecipe,
+  listCategories,
   listIngredients,
   listProducts,
   searchProducts,
@@ -33,7 +34,6 @@ import {
   upsertRecipe,
 } from "../../src/api/endpoints";
 import type { BusinessProfile, Ingredient, Product } from "../../src/api/types";
-import { PRODUCT_CATEGORIES } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -59,17 +59,47 @@ async function pickPhoto(): Promise<{ uri: string; name: string; type: string } 
   return { uri: asset.uri, name: asset.fileName ?? "photo.jpg", type: asset.mimeType ?? "image/jpeg" };
 }
 
+/** Category pills, plus a "＋ New" pill that swaps in a text field so staff can
+ *  add a category without a code change. */
 function CategoryPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const categories = useQuery({ queryKey: ["product-categories"], queryFn: listCategories });
+  const [typing, setTyping] = useState(false);
+
+  if (typing) {
+    return (
+      <View style={styles.newCategoryRow}>
+        <TextInput
+          style={[styles.input, { flex: 1 }]}
+          autoFocus
+          placeholder="New category name"
+          value={value}
+          onChangeText={onChange}
+        />
+        <Pressable style={styles.pill} onPress={() => { onChange(""); setTyping(false); }}>
+          <Text style={styles.pillText}>Cancel</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // A just-typed category isn't on the server until its product is saved, so
+  // keep it in the list meanwhile.
+  const known = categories.data ?? [];
+  const options = value && !known.includes(value) ? [...known, value] : known;
+
   return (
     <View style={styles.pillsRow}>
       <Pressable style={[styles.pill, value === "" && styles.pillOn]} onPress={() => onChange("")}>
         <Text style={value === "" ? styles.pillTextOn : styles.pillText}>No category</Text>
       </Pressable>
-      {PRODUCT_CATEGORIES.map((c) => (
+      {options.map((c: string) => (
         <Pressable key={c} style={[styles.pill, value === c && styles.pillOn]} onPress={() => onChange(c)}>
           <Text style={value === c ? styles.pillTextOn : styles.pillText}>{c}</Text>
         </Pressable>
       ))}
+      <Pressable style={styles.pill} onPress={() => { onChange(""); setTyping(true); }}>
+        <Text style={styles.pillText}>＋ New</Text>
+      </Pressable>
     </View>
   );
 }
@@ -167,7 +197,11 @@ function ProductsSection() {
   const queryClient = useQueryClient();
   const { error, onErr } = useErr();
   const products = useQuery({ queryKey: ["products", "all"], queryFn: () => listProducts(false) });
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["products"] });
+  // Saving a product may have introduced a category, so refresh that list too.
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: ["product-categories"] });
+  };
   const [uploadingId, setUploadingId] = useState<number | null>(null);
 
   const [name, setName] = useState("");
@@ -519,6 +553,7 @@ const styles = StyleSheet.create({
   fieldLabel: { color: colors.textMuted, fontSize: 12, marginTop: spacing.xs },
   saved: { color: colors.success, fontWeight: "700" },
   pillsRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.s },
+  newCategoryRow: { flexDirection: "row", alignItems: "center", gap: spacing.s },
   pill: {
     borderWidth: 1,
     borderColor: colors.border,
