@@ -12,13 +12,14 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import bad_request, conflict, not_found
 from app.models import (
     FulfillmentStatus,
     FulfillmentType,
+    Notification,
     Order,
     OrderItem,
     OrderNote,
@@ -27,6 +28,7 @@ from app.models import (
     PaymentMethod,
     PaymentTiming,
     Product,
+    StockAdjustment,
     User,
 )
 from app.models.base import utcnow
@@ -283,6 +285,22 @@ def cancel_order(db: Session, order_id: int, reverse_stock: bool, user: User) ->
     order.locked_by = None
     order.locked_at = None
     return order
+
+
+def delete_order(db: Session, order_id: int) -> None:
+    """Permanently remove an order (admin-only, cancel first — spec: clean up
+    test/mistake data, distinct from Cancel which keeps the record as an
+    audit trail). Items/notes cascade; the stock-adjustment audit log and any
+    notification referencing this order are detached (order_id set to null)
+    rather than deleted, so inventory/notification history survives."""
+    order = _load(db, order_id, lock=True)
+    if order.status != OrderStatus.cancelled:
+        raise bad_request(
+            "Cancel the order before permanently deleting it.", code="order_not_cancelled"
+        )
+    db.execute(update(StockAdjustment).where(StockAdjustment.order_id == order_id).values(order_id=None))
+    db.execute(update(Notification).where(Notification.related_order_id == order_id).values(related_order_id=None))
+    db.delete(order)
 
 
 def mark_paid(

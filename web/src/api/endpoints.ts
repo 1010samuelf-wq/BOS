@@ -65,6 +65,7 @@ export const markPaid = (id: number, payment_method?: string) =>
 export const fulfillOrder = (id: number) => api<Order>(`/orders/${id}/fulfill`, { method: "POST" });
 export const cancelOrder = (id: number, reverse_stock: boolean) =>
   api<Order>(`/orders/${id}/cancel`, { method: "POST", body: { reverse_stock } });
+export const deleteOrder = (id: number) => api<void>(`/orders/${id}`, { method: "DELETE" });
 export const addOrderNote = (id: number, text: string) =>
   api<Order>(`/orders/${id}/notes`, { method: "POST", body: { text, type: "general" } });
 export const toggleOrderNote = (id: number, noteId: number) =>

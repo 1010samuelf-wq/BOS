@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import current_user
+from app.core.auth import current_user, require_admin
 from app.core.pagination import Page, PageParams
 from app.core.permissions import require_section
 from app.core.realtime import broadcaster
@@ -113,6 +113,21 @@ def update_order(
     broadcaster.publish(_ORDERS)
     broadcaster.publish(_STOCK)  # item edits re-sync stock
     return order
+
+
+@router.delete("/{order_id}", status_code=204)
+def delete_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Permanently remove an order — admin-only, and only once it's already
+    cancelled (Cancel already excludes it from every report/revenue figure;
+    this is for actually clearing out test or mistaken entries)."""
+    order_service.delete_order(db, order_id)
+    db.commit()
+    broadcaster.publish(_ORDERS)
+    broadcaster.publish(_STOCK)
 
 
 @router.post("/{order_id}/lock", response_model=OrderOut)

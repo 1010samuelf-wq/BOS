@@ -6,6 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
+  Linking,
   Modal,
   Pressable,
   ScrollView,
@@ -20,6 +22,7 @@ import * as api from "../../../src/api/endpoints";
 import type { Order, PaymentMethod } from "../../../src/api/types";
 import { printReceipt } from "../../../src/order/receipt";
 import { formatNeeded, neededDeadline } from "../../../src/order/dates";
+import { useAuth } from "../../../src/auth/AuthContext";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
@@ -40,6 +43,7 @@ export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const orderId = Number(id);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reverseStock, setReverseStock] = useState(true);
   const [payOpen, setPayOpen] = useState(false);
@@ -65,6 +69,11 @@ export default function OrderDetail() {
   const markPaid = run((m?: string) => api.markPaid(orderId, m));
   const fulfill = run(() => api.fulfillOrder(orderId));
   const cancel = run((rev: boolean) => api.cancelOrder(orderId, rev));
+  const del = useMutation({
+    mutationFn: () => api.deleteOrder(orderId),
+    onSuccess: () => { invalidate(); router.back(); },
+    onError: (e) => setActionError(e instanceof ApiRequestError ? e.message : "Action failed."),
+  });
 
   if (q.isLoading) return <Loading />;
   if (q.isError || !q.data) return <ErrorText>Couldn't load order #{orderId}.</ErrorText>;
@@ -82,14 +91,21 @@ export default function OrderDetail() {
 
         <View style={[styles.titleRow, overdue && styles.overdueBox]}>
           <View>
-            <Text style={[styles.title, overdue && { color: colors.danger }]}>
-              Order #{o.id} · {o.client_name}
+            <Text style={styles.orderMeta}>
+              Order #{o.id} · <Text style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</Text>
             </Text>
-            <Text style={styles.sub}>
-              {o.fulfillment_type} · {o.client_phone ?? "no phone"}
-              {o.needed_for_date ? ` · needed ${formatNeeded(o.needed_for_date)}` : ""}
-              {overdue ? " · OVERDUE" : ""}
-            </Text>
+            <Text style={[styles.title, overdue && { color: colors.danger }]}>{o.client_name}</Text>
+
+            {o.client_phone && (
+              <Pressable onPress={() => Linking.openURL(`tel:${o.client_phone}`)}>
+                <Text style={styles.infoLine}>📞 {o.client_phone}</Text>
+              </Pressable>
+            )}
+            {o.needed_for_date && (
+              <Text style={[styles.infoLine, overdue && styles.infoLineOverdue]}>
+                📅 {formatNeeded(o.needed_for_date)}{overdue ? " — OVERDUE" : ""}
+              </Text>
+            )}
             {o.locked_by != null && (
               <Text style={styles.locked}>Being edited on another device (read-only)</Text>
             )}
@@ -209,9 +225,28 @@ export default function OrderDetail() {
           </Text>
         )}
         {o.status === "cancelled" && (
-          <Text style={styles.cancelledBanner}>
-            ✕ Cancelled{o.stock_reversed ? " · stock reversed" : ""}
-          </Text>
+          <View style={styles.cancelledRow}>
+            <Text style={styles.cancelledBanner}>
+              ✕ Cancelled{o.stock_reversed ? " · stock reversed" : ""}
+            </Text>
+            {user?.role === "admin" && (
+              <Button
+                label="Delete permanently"
+                tone="danger"
+                busy={del.isPending}
+                onPress={() =>
+                  Alert.alert(
+                    `Permanently delete order #${o.id}?`,
+                    "This can't be undone.",
+                    [
+                      { text: "Keep it", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => del.mutate() },
+                    ],
+                  )
+                }
+              />
+            )}
+          </View>
         )}
       </ScrollView>
 
@@ -275,9 +310,11 @@ const styles = StyleSheet.create({
   back: { color: colors.textMuted, fontSize: 15 },
   titleRow: { flexDirection: "row", alignItems: "flex-start" },
   overdueBox: { borderLeftWidth: 4, borderLeftColor: colors.danger, paddingLeft: spacing.m },
-  title: { fontSize: 20, fontWeight: "700", color: colors.text },
-  sub: { color: colors.textMuted, marginTop: 2, textTransform: "capitalize" },
-  locked: { color: colors.warn, marginTop: 4, fontStyle: "italic" },
+  orderMeta: { color: colors.textMuted, fontSize: 13 },
+  title: { fontSize: 26, fontWeight: "800", color: colors.text, marginTop: 2, marginBottom: 6 },
+  infoLine: { fontSize: 17, fontWeight: "700", color: colors.text, marginTop: 4 },
+  infoLineOverdue: { color: colors.danger },
+  locked: { color: colors.warn, marginTop: 6, fontStyle: "italic" },
   total: { fontSize: 24, fontWeight: "800", color: colors.text },
   paid: { fontWeight: "700", color: colors.success },
   section: { fontSize: 15, fontWeight: "700", color: colors.text },
@@ -329,7 +366,8 @@ const styles = StyleSheet.create({
   stageTextActive: { color: "#fff", fontWeight: "700", textTransform: "capitalize" },
   actionRow: { flexDirection: "row", gap: spacing.m, flexWrap: "wrap", marginTop: spacing.s },
   doneBanner: { color: colors.success, fontWeight: "700", fontSize: 16, textAlign: "center" },
-  cancelledBanner: { color: colors.danger, fontWeight: "700", fontSize: 16, textAlign: "center" },
+  cancelledRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  cancelledBanner: { color: colors.danger, fontWeight: "700", fontSize: 16 },
   modalWrap: { flex: 1, backgroundColor: colors.overlay, alignItems: "center", justifyContent: "center" },
   modal: { width: 460, backgroundColor: colors.surface, borderRadius: radius.l, padding: spacing.l, gap: spacing.l },
   modalTitle: { fontSize: 18, fontWeight: "700", color: colors.text },

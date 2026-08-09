@@ -110,6 +110,8 @@ export const releaseLock = (id: number) =>
 export const cancelOrder = (id: number, reverse_stock: boolean) =>
   api<Order>(`/orders/${id}/cancel`, { method: "POST", body: { reverse_stock } });
 
+export const deleteOrder = (id: number) => api<void>(`/orders/${id}`, { method: "DELETE" });
+
 export const markPaid = (id: number, payment_method?: string) =>
   api<Order>(`/orders/${id}/mark-paid`, {
     method: "POST",
@@ -160,6 +162,8 @@ export const getDailyReport = (day?: string) =>
   api<SalesReport>("/reports/daily", { query: { day } });
 export const getMonthlyReport = (year?: number, month?: number) =>
   api<SalesReport>("/reports/monthly", { query: { year, month } });
+export const getSummary = (from: string, to: string) =>
+  api<SalesReport>("/reports/summary", { query: { from, to } });
 export const getProduction = (params: { from?: string; to?: string; fulfillment?: string }) =>
   api<ProductionReport>("/reports/production", { query: params });
 export const getStaffHours = (week?: string) =>

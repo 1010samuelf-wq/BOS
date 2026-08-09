@@ -97,6 +97,15 @@ tr.overdue td { background: #fdf1ef; color: var(--danger); }
 
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
+
+/* order detail: phone + needed-for, big and unmissable — staff read these
+   at a glance to call the customer or know when it's due */
+.order-info-line {
+  display: block; font-size: 19px; font-weight: 700; color: var(--text);
+  margin-top: 4px; text-decoration: none;
+}
+a.order-info-line:hover { text-decoration: underline; }
+.order-info-overdue { color: var(--danger); }
 .dot { width: 10px; height: 10px; border-radius: 5px; display: inline-block; }
 
 /* stock tones */

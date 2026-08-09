@@ -8,6 +8,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { Order, PaymentMethod } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 import { ErrorMsg, Loading } from "../components/ui";
 import { formatNeeded, neededDeadline } from "../order/dates";
 
@@ -24,6 +25,7 @@ export default function OrderDetail() {
   const orderId = Number(id);
   const navigate = useNavigate();
   const client = useQueryClient();
+  const { user } = useAuth();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reverseStock, setReverseStock] = useState(true);
   const [payOpen, setPayOpen] = useState(false);
@@ -40,6 +42,11 @@ export default function OrderDetail() {
   const markPaid = useMutation({ mutationFn: (m: string) => api.markPaid(orderId, m), onSuccess: invalidate, onError: onErr });
   const fulfill = useMutation({ mutationFn: () => api.fulfillOrder(orderId), onSuccess: invalidate, onError: onErr });
   const cancel = useMutation({ mutationFn: (rev: boolean) => api.cancelOrder(orderId, rev), onSuccess: invalidate, onError: onErr });
+  const del = useMutation({
+    mutationFn: () => api.deleteOrder(orderId),
+    onSuccess: () => { invalidate(); navigate("/orders"); },
+    onError: onErr,
+  });
 
   if (q.isLoading) return <div className="page"><Loading /></div>;
   if (q.isError || !q.data) return <div className="page"><ErrorMsg>Couldn't load order #{orderId}.</ErrorMsg></div>;
@@ -54,13 +61,20 @@ export default function OrderDetail() {
 
       <div className="row" style={{ margin: "16px 0", alignItems: "flex-start" }}>
         <div style={overdue ? { borderLeft: "4px solid var(--danger)", paddingLeft: 12 } : undefined}>
-          <h1 style={{ margin: 0, ...(overdue ? { color: "var(--danger)" } : {}) }}>Order #{o.id} · {o.client_name}</h1>
-          <div className="muted" style={{ textTransform: "capitalize" }}>
-            {o.fulfillment_type} · {o.client_phone ?? "no phone"}
-            {o.needed_for_date ? ` · needed ${formatNeeded(o.needed_for_date)}` : ""}
-            {overdue ? " · OVERDUE" : ""}
-          </div>
-          {o.locked_by != null && <div style={{ color: "var(--warn)", fontStyle: "italic" }}>Being edited on another device</div>}
+          <div className="muted" style={{ fontSize: 14 }}>Order #{o.id} · <span style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</span></div>
+          <h1 style={{ margin: "2px 0 10px", fontSize: 32, ...(overdue ? { color: "var(--danger)" } : {}) }}>{o.client_name}</h1>
+
+          {o.client_phone && (
+            <a href={`tel:${o.client_phone}`} className="order-info-line">
+              📞 {o.client_phone}
+            </a>
+          )}
+          {o.needed_for_date && (
+            <div className={`order-info-line${overdue ? " order-info-overdue" : ""}`}>
+              📅 {formatNeeded(o.needed_for_date)}{overdue ? " — OVERDUE" : ""}
+            </div>
+          )}
+          {o.locked_by != null && <div style={{ color: "var(--warn)", fontStyle: "italic", marginTop: 6 }}>Being edited on another device</div>}
         </div>
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
           <div style={{ fontSize: 26, fontWeight: 800 }}>${o.total}</div>
@@ -120,7 +134,21 @@ export default function OrderDetail() {
         </div>
       )}
       {o.fulfillment_status === "fulfilled" && <p style={{ color: "var(--success)", fontWeight: 700 }}>✓ {o.fulfillment_type === "delivery" ? "Delivered" : "Picked up"}</p>}
-      {o.status === "cancelled" && <p style={{ color: "var(--danger)", fontWeight: 700 }}>✕ Cancelled</p>}
+      {o.status === "cancelled" && (
+        <div className="row" style={{ alignItems: "center" }}>
+          <p style={{ color: "var(--danger)", fontWeight: 700, margin: 0 }}>✕ Cancelled</p>
+          {user?.role === "admin" && (
+            <button
+              className="btn danger sm"
+              style={{ marginLeft: "auto" }}
+              disabled={del.isPending}
+              onClick={() => { if (confirm(`Permanently delete order #${o.id}? This can't be undone.`)) del.mutate(); }}
+            >
+              Delete permanently
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Cancel dialog */}
       {cancelOpen && (
