@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Linking,
@@ -22,6 +22,14 @@ import * as api from "../../../src/api/endpoints";
 import type { Order, PaymentMethod } from "../../../src/api/types";
 import { printReceipt } from "../../../src/order/receipt";
 import { formatNeeded, neededDeadline } from "../../../src/order/dates";
+import { OrderHeaderFields, OrderItemsEditor } from "../../../src/order/OrderFormFields";
+import {
+  buildUpdatePayload,
+  draftFromOrder,
+  draftTotal,
+  validateEditDraft,
+  type Draft,
+} from "../../../src/order/orderDraft";
 import { useAuth } from "../../../src/auth/AuthContext";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading } from "../../../src/components/ui";
@@ -49,18 +57,25 @@ export default function OrderDetail() {
   const [payOpen, setPayOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [editProblems, setEditProblems] = useState<string[]>([]);
+  // Mirrors `editing` for the unmount-cleanup effect below, which can't see
+  // the latest state from a closure captured when the component first mounted.
+  const editingRef = useRef(false);
+  editingRef.current = editing;
 
   const q = useQuery({ queryKey: ["orders", orderId], queryFn: () => api.getOrder(orderId) });
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["orders"] });
   };
+  const onErr = (e: unknown) => setActionError(e instanceof ApiRequestError ? e.message : "Action failed.");
   const run = <A extends unknown[]>(fn: (...a: A) => Promise<unknown>) =>
     useMutation({
       mutationFn: (args: A) => fn(...args),
       onSuccess: invalidate,
-      onError: (e) =>
-        setActionError(e instanceof ApiRequestError ? e.message : "Action failed."),
+      onError: onErr,
     });
 
   const setStatus = run((s: string) => api.updateOrder(orderId, { status: s }));
@@ -72,8 +87,44 @@ export default function OrderDetail() {
   const del = useMutation({
     mutationFn: () => api.deleteOrder(orderId),
     onSuccess: () => { invalidate(); router.back(); },
-    onError: (e) => setActionError(e instanceof ApiRequestError ? e.message : "Action failed."),
+    onError: onErr,
   });
+
+  const startEdit = useMutation({
+    mutationFn: (o: Order) => api.lockOrder(orderId).then(() => o),
+    onSuccess: (o) => { setDraft(draftFromOrder(o)); setEditProblems([]); setEditing(true); },
+    onError: onErr,
+  });
+  const saveEdit = useMutation({
+    mutationFn: (d: Draft) => api.updateOrder(orderId, buildUpdatePayload(d)),
+    onSuccess: () => {
+      void api.releaseLock(orderId);
+      setEditing(false);
+      setDraft(null);
+      invalidate();
+    },
+    onError: onErr,
+  });
+  const cancelEdit = () => {
+    void api.releaseLock(orderId).catch(() => { /* best-effort */ });
+    setEditing(false);
+    setDraft(null);
+    setEditProblems([]);
+  };
+  const saveEditClick = () => {
+    if (!draft) return;
+    const problems = validateEditDraft(draft);
+    setEditProblems(problems);
+    if (problems.length === 0) saveEdit.mutate(draft);
+  };
+
+  // If the screen closes or the app backgrounds mid-edit, release the lock
+  // rather than leaving the order stuck read-only for everyone else.
+  useEffect(() => {
+    return () => {
+      if (editingRef.current) void api.releaseLock(orderId).catch(() => { /* best-effort */ });
+    };
+  }, [orderId]);
 
   if (q.isLoading) return <Loading />;
   if (q.isError || !q.data) return <ErrorText>Couldn't load order #{orderId}.</ErrorText>;
@@ -81,6 +132,8 @@ export default function OrderDetail() {
   const o: Order = q.data;
   const overdue = isOverdue(o);
   const fulfilLabel = o.fulfillment_type === "delivery" ? "Mark as delivered" : "Mark as picked up";
+  const lockedByOther = o.locked_by != null && o.locked_by !== user?.id;
+  const canEdit = o.status !== "cancelled" && !lockedByOther;
 
   return (
     <RequiresConnection>
@@ -90,28 +143,32 @@ export default function OrderDetail() {
         </Pressable>
 
         <View style={[styles.titleRow, overdue && styles.overdueBox]}>
-          <View>
-            <Text style={styles.orderMeta}>
-              Order #{o.id} · <Text style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</Text>
-            </Text>
-            <Text style={[styles.title, overdue && { color: colors.danger }]}>{o.client_name}</Text>
-
-            {o.client_phone && (
-              <Pressable onPress={() => Linking.openURL(`tel:${o.client_phone}`)}>
-                <Text style={styles.infoLine}>📞 {o.client_phone}</Text>
-              </Pressable>
-            )}
-            {o.needed_for_date && (
-              <Text style={[styles.infoLine, overdue && styles.infoLineOverdue]}>
-                📅 {formatNeeded(o.needed_for_date)}{overdue ? " — OVERDUE" : ""}
+          {!editing ? (
+            <View>
+              <Text style={styles.orderMeta}>
+                Order #{o.id} · <Text style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</Text>
               </Text>
-            )}
-            {o.locked_by != null && (
-              <Text style={styles.locked}>Being edited on another device (read-only)</Text>
-            )}
-          </View>
+              <Text style={[styles.title, overdue && { color: colors.danger }]}>{o.client_name}</Text>
+
+              {o.client_phone && (
+                <Pressable onPress={() => Linking.openURL(`tel:${o.client_phone}`)}>
+                  <Text style={styles.infoLine}>📞 {o.client_phone}</Text>
+                </Pressable>
+              )}
+              {o.needed_for_date && (
+                <Text style={[styles.infoLine, overdue && styles.infoLineOverdue]}>
+                  📅 {formatNeeded(o.needed_for_date)}{overdue ? " — OVERDUE" : ""}
+                </Text>
+              )}
+              {lockedByOther && (
+                <Text style={styles.locked}>Being edited on another device (read-only)</Text>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.orderMeta}>Editing order #{o.id}</Text>
+          )}
           <View style={{ marginLeft: "auto", alignItems: "flex-end" }}>
-            <Text style={styles.total}>${o.total}</Text>
+            <Text style={styles.total}>${editing && draft ? draftTotal(draft) : o.total}</Text>
             <Text style={[styles.paid, o.paid_status === "unpaid" && { color: colors.warn }]}>
               {o.paid_status.toUpperCase()}
               {o.payment_method ? ` · ${o.payment_method}` : ""}
@@ -121,39 +178,62 @@ export default function OrderDetail() {
 
         {actionError && <ErrorText>{actionError}</ErrorText>}
 
-        <View style={{ flexDirection: "row" }}>
-          <Button
-            label="🖨  Print receipt"
-            tone="neutral"
-            onPress={() =>
-              printReceipt(o.id).catch((e) =>
-                setActionError(e instanceof Error ? e.message : "Could not print the receipt."),
-              )
-            }
-          />
-        </View>
+        {!editing && (
+          <View style={{ flexDirection: "row", gap: spacing.s }}>
+            <Button
+              label="🖨  Print receipt"
+              tone="neutral"
+              onPress={() =>
+                printReceipt(o.id).catch((e) =>
+                  setActionError(e instanceof Error ? e.message : "Could not print the receipt."),
+                )
+              }
+            />
+            {canEdit && (
+              <Button label="✎ Edit order" tone="neutral" busy={startEdit.isPending} onPress={() => startEdit.mutate(o)} />
+            )}
+          </View>
+        )}
 
-        {/* Items */}
-        <Card>
-          <Text style={styles.section}>Items</Text>
-          {o.items.map((it) => (
-            <View key={it.id} style={styles.item}>
-              <Text style={styles.itemQty}>{it.quantity}×</Text>
-              <Text style={styles.itemName}>{it.product_name}</Text>
-              {it.note ? <Text style={styles.itemNote}>({it.note})</Text> : null}
-              <Text style={styles.itemPrice}>${it.unit_price}</Text>
+        {!editing ? (
+          <Card>
+            <Text style={styles.section}>Items</Text>
+            {o.items.map((it) => (
+              <View key={it.id} style={styles.item}>
+                <Text style={styles.itemQty}>{it.quantity}×</Text>
+                <Text style={styles.itemName}>{it.product_name}</Text>
+                {it.note ? <Text style={styles.itemNote}>({it.note})</Text> : null}
+                <Text style={styles.itemPrice}>${it.unit_price}</Text>
+              </View>
+            ))}
+            {o.card_message ? (
+              <Text style={styles.cardMsg}>🎂 “{o.card_message}”</Text>
+            ) : null}
+            {o.delivery_address ? (
+              <Text style={styles.addr}>
+                📍 {o.delivery_address}
+                {o.delivery_name ? ` · for ${o.delivery_name}` : ""}
+              </Text>
+            ) : null}
+          </Card>
+        ) : draft && (
+          <>
+            <OrderHeaderFields draft={draft} set={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))} />
+            <OrderItemsEditor
+              draft={draft}
+              setDraft={(update) =>
+                setDraft((d) => (d ? (typeof update === "function" ? (update as (d: Draft) => Draft)(d) : update) : d))
+              }
+            />
+            {editProblems.map((p) => (
+              <Text key={p} style={styles.problem}>• {p}</Text>
+            ))}
+            <View style={styles.actionRow}>
+              <Button label="Save changes" tone="primary" busy={saveEdit.isPending} onPress={saveEditClick} />
+              <Button label="Cancel" tone="neutral" onPress={cancelEdit} />
             </View>
-          ))}
-          {o.card_message ? (
-            <Text style={styles.cardMsg}>🎂 “{o.card_message}”</Text>
-          ) : null}
-          {o.delivery_address ? (
-            <Text style={styles.addr}>
-              📍 {o.delivery_address}
-              {o.delivery_name ? ` · for ${o.delivery_name}` : ""}
-            </Text>
-          ) : null}
-        </Card>
+          </>
+        )}
 
         {/* Notes with done checkboxes */}
         <Card>
@@ -318,6 +398,7 @@ const styles = StyleSheet.create({
   total: { fontSize: 24, fontWeight: "800", color: colors.text },
   paid: { fontWeight: "700", color: colors.success },
   section: { fontSize: 15, fontWeight: "700", color: colors.text },
+  problem: { color: colors.danger },
   item: { flexDirection: "row", alignItems: "center", gap: spacing.s },
   itemQty: { fontWeight: "700", color: colors.text, width: 36 },
   itemName: { color: colors.text, flex: 1 },

@@ -1,12 +1,14 @@
 // Smoke tests for the core POS flow (spec §10): add item via search → set
 // quantity → build the submit payload. Pure logic — no RN renderer needed.
 
-import type { Product } from "../src/api/types";
+import type { Order, Product } from "../src/api/types";
 import { fromCents, toCents } from "../src/order/money";
 import {
   addCustomItem,
   addProduct,
   buildPayload,
+  buildUpdatePayload,
+  draftFromOrder,
   draftTotal,
   emptyDraft,
   lineTotal,
@@ -14,6 +16,7 @@ import {
   setLineNote,
   setQuantity,
   validateDraft,
+  validateEditDraft,
 } from "../src/order/orderDraft";
 
 const croissant: Product = {
@@ -146,5 +149,75 @@ describe("core POS flow: search-add → quantity → submit payload", () => {
 
     d = { ...d, deliveryAddress: "12 Baker St", paymentTiming: "now", paymentMethod: null };
     expect(validateDraft(d)).toContain("Choose a payment method.");
+  });
+});
+
+const existingOrder: Order = {
+  id: 9,
+  idempotency_key: "order-9-key",
+  client_name: "Rivka Cohen",
+  client_phone: "555-0199",
+  order_date: "2026-08-01T12:00:00Z",
+  needed_for_date: "2026-08-02T14:00:00",
+  fulfillment_type: "pickup",
+  delivery_price: null,
+  delivery_address: null,
+  delivery_name: null,
+  card_message: null,
+  payment_timing: "now",
+  payment_method: "cash",
+  paid_status: "paid",
+  status: "pending",
+  fulfillment_status: "pending",
+  stock_reversed: false,
+  total: "7.00",
+  locked_by: null,
+  items: [
+    { id: 1, product_id: 1, product_name: "Croissant", quantity: 2, unit_price: "3.50", note: null },
+  ],
+  notes: [],
+};
+
+describe("editing an existing order (draftFromOrder / buildUpdatePayload)", () => {
+  it("round-trips an order's fields and items into a Draft", () => {
+    const d = draftFromOrder(existingOrder);
+    expect(d.clientName).toBe("Rivka Cohen");
+    expect(d.clientPhone).toBe("555-0199");
+    expect(d.neededFor).toBe("2026-08-02T14:00:00");
+    expect(d.fulfillment).toBe("pickup");
+    expect(d.lines).toEqual([
+      { product_id: 1, product_name: "Croissant", unit_price: "3.50", quantity: 2, note: "" },
+    ]);
+    expect(draftTotal(d)).toBe("7.00");
+  });
+
+  it("editing quantity and adding an item produces the right update payload", () => {
+    let d = draftFromOrder(existingOrder);
+    d = setQuantity(d, 0, 3);
+    d = addProduct(d, brownie);
+
+    expect(validateEditDraft(d)).toEqual([]);
+    const payload = buildUpdatePayload(d);
+    expect(payload.client_name).toBe("Rivka Cohen");
+    expect(payload.items).toEqual([
+      { product_id: 1, quantity: 3, note: null },
+      { product_id: 2, quantity: 1, note: null },
+    ]);
+    // The update payload has no idempotency_key/payment fields — editing never
+    // touches those (payment has its own mark-paid flow).
+    expect(payload).not.toHaveProperty("idempotency_key");
+    expect(payload).not.toHaveProperty("payment_method");
+  });
+
+  it("switching to delivery mid-edit requires an address, same as a new order", () => {
+    let d = draftFromOrder(existingOrder);
+    d = { ...d, fulfillment: "delivery", deliveryAddress: "" };
+    expect(validateEditDraft(d)).toContain("Delivery address is required for delivery orders.");
+  });
+
+  it("does not require a payment method, unlike validateDraft for a new order", () => {
+    const d = draftFromOrder(existingOrder);
+    // paymentMethod is carried over from the order but edit validation never checks it
+    expect(validateEditDraft({ ...d, paymentMethod: null })).toEqual([]);
   });
 });

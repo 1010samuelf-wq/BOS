@@ -127,6 +127,21 @@ export interface OrderCreatePayload {
   notes: { text: string; type: NoteType }[];
 }
 
+// Payload for PUT /orders/{id} (mirrors backend OrderUpdate). Every field is
+// optional — sent fields replace, omitted fields are left as-is; `items` when
+// present replaces the whole set (same item shape as create).
+export interface OrderUpdatePayload {
+  client_name?: string;
+  client_phone?: string | null;
+  needed_for_date?: string | null;
+  fulfillment_type?: FulfillmentType;
+  delivery_price?: string | null;
+  delivery_address?: string | null;
+  delivery_name?: string | null;
+  card_message?: string | null;
+  items?: OrderCreatePayload["items"];
+}
+
 export interface WeeklyHours {
   user_id: number;
   week_start: string;

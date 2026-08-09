@@ -16,6 +16,7 @@ import type {
   Notification,
   Order,
   OrderCreatePayload,
+  OrderUpdatePayload,
   Page,
   Product,
   ProductionReport,
@@ -97,10 +98,8 @@ export const listOrders = (params: {
 
 export const getOrder = (id: number) => api<Order>(`/orders/${id}`);
 
-export const updateOrder = (
-  id: number,
-  patch: Partial<{ status: string; client_name: string; client_phone: string }>,
-) => api<Order>(`/orders/${id}`, { method: "PUT", body: patch });
+export const updateOrder = (id: number, patch: OrderUpdatePayload) =>
+  api<Order>(`/orders/${id}`, { method: "PUT", body: patch });
 
 export const lockOrder = (id: number) =>
   api<Order>(`/orders/${id}/lock`, { method: "POST" });

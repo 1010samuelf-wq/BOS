@@ -2,7 +2,7 @@
 // pipeline, mark-paid (method), fulfill, cancel (± reverse stock), print receipt.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
@@ -11,6 +11,8 @@ import type { Order, PaymentMethod } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorMsg, Loading } from "../components/ui";
 import { formatNeeded, neededDeadline } from "../order/dates";
+import { OrderHeaderFields, OrderItemsEditor } from "../order/OrderFormFields";
+import { buildUpdatePayload, draftFromOrder, draftTotal, validateEditDraft, type Draft } from "../order/orderDraft";
 
 const PIPELINE: Order["status"][] = ["pending", "in_progress", "ready"];
 const METHODS: PaymentMethod[] = ["cash", "card", "etransfer"];
@@ -31,6 +33,13 @@ export default function OrderDetail() {
   const [payOpen, setPayOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [editProblems, setEditProblems] = useState<string[]>([]);
+  // Mirrors `editing` for the unmount-cleanup effect below, which can't see
+  // the latest state from a closure captured when the component first mounted.
+  const editingRef = useRef(false);
+  editingRef.current = editing;
 
   const q = useQuery({ queryKey: ["orders", orderId], queryFn: () => api.getOrder(orderId) });
   const invalidate = () => client.invalidateQueries({ queryKey: ["orders"] });
@@ -48,57 +57,122 @@ export default function OrderDetail() {
     onError: onErr,
   });
 
+  const startEdit = useMutation({
+    mutationFn: (o: Order) => api.lockOrder(orderId).then(() => o),
+    onSuccess: (o) => { setDraft(draftFromOrder(o)); setEditProblems([]); setEditing(true); },
+    onError: onErr,
+  });
+  const saveEdit = useMutation({
+    mutationFn: (d: Draft) => api.updateOrder(orderId, buildUpdatePayload(d)),
+    onSuccess: () => {
+      void api.releaseOrderLock(orderId);
+      setEditing(false);
+      setDraft(null);
+      invalidate();
+    },
+    onError: onErr,
+  });
+  const cancelEdit = () => {
+    void api.releaseOrderLock(orderId).catch(() => { /* best-effort */ });
+    setEditing(false);
+    setDraft(null);
+    setEditProblems([]);
+  };
+  const saveEditClick = () => {
+    if (!draft) return;
+    const problems = validateEditDraft(draft);
+    setEditProblems(problems);
+    if (problems.length === 0) saveEdit.mutate(draft);
+  };
+
+  // If the tab closes or the user navigates away mid-edit, release the lock
+  // rather than leaving the order stuck read-only for everyone else.
+  useEffect(() => {
+    return () => {
+      if (editingRef.current) void api.releaseOrderLock(orderId).catch(() => { /* best-effort */ });
+    };
+  }, [orderId]);
+
   if (q.isLoading) return <div className="page"><Loading /></div>;
   if (q.isError || !q.data) return <div className="page"><ErrorMsg>Couldn't load order #{orderId}.</ErrorMsg></div>;
 
   const o = q.data;
   const overdue = isOverdue(o);
   const fulfilLabel = o.fulfillment_type === "delivery" ? "Mark as delivered" : "Mark as picked up";
+  const lockedByOther = o.locked_by != null && o.locked_by !== user?.id;
+  const canEdit = o.status !== "cancelled" && !lockedByOther;
 
   return (
     <div className="page">
       <button className="btn neutral sm" onClick={() => navigate("/orders")}>← Orders</button>
 
       <div className="row" style={{ margin: "16px 0", alignItems: "flex-start" }}>
-        <div style={overdue ? { borderLeft: "4px solid var(--danger)", paddingLeft: 12 } : undefined}>
-          <div className="muted" style={{ fontSize: 14 }}>Order #{o.id} · <span style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</span></div>
-          <h1 style={{ margin: "2px 0 10px", fontSize: 32, ...(overdue ? { color: "var(--danger)" } : {}) }}>{o.client_name}</h1>
+        {!editing ? (
+          <div style={overdue ? { borderLeft: "4px solid var(--danger)", paddingLeft: 12 } : undefined}>
+            <div className="muted" style={{ fontSize: 14 }}>Order #{o.id} · <span style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</span></div>
+            <h1 style={{ margin: "2px 0 10px", fontSize: 32, ...(overdue ? { color: "var(--danger)" } : {}) }}>{o.client_name}</h1>
 
-          {o.client_phone && (
-            <a href={`tel:${o.client_phone}`} className="order-info-line">
-              📞 {o.client_phone}
-            </a>
-          )}
-          {o.needed_for_date && (
-            <div className={`order-info-line${overdue ? " order-info-overdue" : ""}`}>
-              📅 {formatNeeded(o.needed_for_date)}{overdue ? " — OVERDUE" : ""}
-            </div>
-          )}
-          {o.locked_by != null && <div style={{ color: "var(--warn)", fontStyle: "italic", marginTop: 6 }}>Being edited on another device</div>}
-        </div>
+            {o.client_phone && (
+              <a href={`tel:${o.client_phone}`} className="order-info-line">
+                📞 {o.client_phone}
+              </a>
+            )}
+            {o.needed_for_date && (
+              <div className={`order-info-line${overdue ? " order-info-overdue" : ""}`}>
+                📅 {formatNeeded(o.needed_for_date)}{overdue ? " — OVERDUE" : ""}
+              </div>
+            )}
+            {lockedByOther && <div style={{ color: "var(--warn)", fontStyle: "italic", marginTop: 6 }}>Being edited on another device</div>}
+          </div>
+        ) : (
+          <div className="muted" style={{ fontSize: 14 }}>Editing order #{o.id}</div>
+        )}
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
-          <div style={{ fontSize: 26, fontWeight: 800 }}>${o.total}</div>
+          <div style={{ fontSize: 26, fontWeight: 800 }}>${editing && draft ? draftTotal(draft) : o.total}</div>
           <span className={`pill ${o.paid_status}`}>{o.paid_status.toUpperCase()}{o.payment_method ? ` · ${o.payment_method}` : ""}</span>
         </div>
       </div>
 
       {err && <ErrorMsg>{err}</ErrorMsg>}
-      <button className="btn neutral" style={{ marginBottom: 16 }} onClick={() => api.receiptPdf(o.id).catch(onErr)}>🖨 Print receipt</button>
+      {!editing && (
+        <div className="row" style={{ marginBottom: 16 }}>
+          <button className="btn neutral" onClick={() => api.receiptPdf(o.id).catch(onErr)}>🖨 Print receipt</button>
+          {canEdit && <button className="btn neutral" disabled={startEdit.isPending} onClick={() => startEdit.mutate(o)}>✎ Edit order</button>}
+        </div>
+      )}
 
-      {/* Items */}
-      <div className="card">
-        <h2>Items</h2>
-        {o.items.map((it) => (
-          <div key={it.id} className="row" style={{ padding: "4px 0" }}>
-            <strong style={{ width: 40 }}>{it.quantity}×</strong>
-            <span style={{ flex: 1 }}>{it.product_name}{it.note ? ` — ${it.note}` : ""}</span>
-            <span className="muted">${it.unit_price}</span>
+      {!editing ? (
+        <div className="card">
+          <h2>Items</h2>
+          {o.items.map((it) => (
+            <div key={it.id} className="row" style={{ padding: "4px 0" }}>
+              <strong style={{ width: 40 }}>{it.quantity}×</strong>
+              <span style={{ flex: 1 }}>{it.product_name}{it.note ? ` — ${it.note}` : ""}</span>
+              <span className="muted">${it.unit_price}</span>
+            </div>
+          ))}
+          {o.card_message && <p style={{ fontStyle: "italic" }}>🎂 “{o.card_message}”</p>}
+          {o.delivery_name && <p>🧑 {o.delivery_name}</p>}
+          {o.delivery_address && <p>📍 {o.delivery_address}</p>}
+        </div>
+      ) : draft && (
+        <>
+          <OrderHeaderFields draft={draft} set={(patch) => setDraft((d) => (d ? { ...d, ...patch } : d))} />
+          <OrderItemsEditor
+            draft={draft}
+            setDraft={(update) =>
+              setDraft((d) => (d ? (typeof update === "function" ? (update as (d: Draft) => Draft)(d) : update) : d))
+            }
+          />
+          {editProblems.map((p) => <p key={p} className="error">• {p}</p>)}
+          <div className="row" style={{ marginBottom: 16 }}>
+            <button className="btn primary" disabled={saveEdit.isPending} onClick={saveEditClick}>
+              {saveEdit.isPending ? "Saving…" : "Save changes"}
+            </button>
+            <button className="btn neutral" onClick={cancelEdit}>Cancel</button>
           </div>
-        ))}
-        {o.card_message && <p style={{ fontStyle: "italic" }}>🎂 “{o.card_message}”</p>}
-        {o.delivery_name && <p>🧑 {o.delivery_name}</p>}
-        {o.delivery_address && <p>📍 {o.delivery_address}</p>}
-      </div>
+        </>
+      )}
 
       {/* Notes */}
       <div className="card">

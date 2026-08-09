@@ -4,7 +4,9 @@
 
 import type {
   FulfillmentType,
+  Order,
   OrderCreatePayload,
+  OrderUpdatePayload,
   PaymentMethod,
   PaymentTiming,
   Product,
@@ -120,6 +122,72 @@ export function validateDraft(d: Draft): string[] {
   if (d.deliveryPrice.trim() !== "" && !/^\d+(\.\d{1,2})?$/.test(d.deliveryPrice.trim()))
     p.push("Delivery price must be a number like 5 or 5.50.");
   return p;
+}
+
+// Editing an existing order never touches payment_timing/payment_method (those
+// have their own flow — mark-paid), so it skips that one check from validateDraft.
+export function validateEditDraft(d: Draft): string[] {
+  const p: string[] = [];
+  if (!d.clientName.trim()) p.push("Client name is required.");
+  if (d.lines.length === 0) p.push("Add at least one item.");
+  if (d.fulfillment === "delivery" && !d.deliveryAddress.trim())
+    p.push("Delivery address is required for delivery orders.");
+  if (d.deliveryPrice.trim() !== "" && !/^\d+(\.\d{1,2})?$/.test(d.deliveryPrice.trim()))
+    p.push("Delivery price must be a number like 5 or 5.50.");
+  return p;
+}
+
+// An existing order's items are always real catalog products (a custom item
+// gets turned into one at creation, per app/services/order.py::_build_items),
+// so every line round-trips through product_id — no custom-item branch needed.
+export function draftFromOrder(o: Order): Draft {
+  return {
+    clientName: o.client_name,
+    clientPhone: o.client_phone ?? "",
+    neededFor: o.needed_for_date,
+    fulfillment: o.fulfillment_type,
+    deliveryPrice: o.delivery_price ?? "",
+    deliveryAddress: o.delivery_address ?? "",
+    deliveryName: o.delivery_name ?? "",
+    cardMessage: o.card_message ?? "",
+    paymentTiming: o.payment_timing,
+    paymentMethod: o.payment_method,
+    cardPaymentNote: "",
+    generalNotes: "",
+    lines: o.items.map((i) => ({
+      product_id: i.product_id,
+      product_name: i.product_name,
+      unit_price: i.unit_price,
+      quantity: i.quantity,
+      note: i.note ?? "",
+    })),
+    idempotencyKey: newIdempotencyKey(), // unused by the update payload; kept so Draft stays one shape
+  };
+}
+
+export function buildUpdatePayload(d: Draft): OrderUpdatePayload {
+  const isDelivery = d.fulfillment === "delivery";
+  return {
+    client_name: d.clientName.trim(),
+    client_phone: d.clientPhone.trim() || null,
+    needed_for_date: d.neededFor,
+    fulfillment_type: d.fulfillment,
+    delivery_price: isDelivery && d.deliveryPrice.trim() !== "" ? d.deliveryPrice.trim() : null,
+    delivery_address: isDelivery ? d.deliveryAddress.trim() : null,
+    delivery_name: isDelivery ? d.deliveryName.trim() || null : null,
+    card_message: d.cardMessage.trim() || null,
+    items: d.lines.map((l) =>
+      l.product_id !== null
+        ? { product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null }
+        : {
+            custom_name: l.product_name.trim(),
+            custom_price: l.unit_price,
+            save_as_product: !!l.saveAsProduct,
+            quantity: l.quantity,
+            note: l.note.trim() || null,
+          },
+    ),
+  };
 }
 
 export function buildPayload(d: Draft): OrderCreatePayload {
