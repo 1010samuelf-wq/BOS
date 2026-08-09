@@ -22,6 +22,7 @@ import type { Employee, Role } from "../api/types";
 import { roleLabel } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Loading, PageHead } from "../components/ui";
+import { formatDate } from "../order/dates";
 
 const ROLES: Role[] = ["cashier", "manager", "admin"];
 
@@ -102,7 +103,7 @@ export default function EmployeesHours() {
   const monday = weekMonday(weekOffset);
   const rangeLabel = (() => {
     const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
-    return `${monday.toLocaleDateString()} - ${sunday.toLocaleDateString()}`;
+    return `${formatDate(monday)} - ${formatDate(sunday)}`;
   })();
 
   const hours = useQuery({ queryKey: ["staff-hours", weekOffset], queryFn: () => getStaffHours(ymd(monday)) });

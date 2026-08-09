@@ -20,6 +20,7 @@ import {
 import type { TimeEntry } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { Loading, PageHead } from "../components/ui";
+import { formatDate, formatTime, formatWeekdayDate } from "../order/dates";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -35,10 +36,8 @@ function hoursOf(e: TimeEntry): number {
   const end = e.clock_out ? new Date(e.clock_out).getTime() : Date.now();
   return Math.max(0, (end - start) / 3_600_000);
 }
-const fmtTime = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "— open —";
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+const fmtTime = (iso: string | null) => (iso ? formatTime(new Date(iso)) : "— open —");
+const fmtDay = (iso: string) => formatWeekdayDate(new Date(iso));
 function toLocalInput(iso: string): string {
   const d = new Date(iso);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -129,7 +128,7 @@ export default function Time() {
   const selPay = targetRate != null ? selHours * targetRate : null;
 
   const whoName = people.find((p) => p.id === targetId)?.name ?? user?.name ?? "Me";
-  const rangeLabel = `${monday.toLocaleDateString()} – ${sunday.toLocaleDateString()}`;
+  const rangeLabel = `${formatDate(monday)} – ${formatDate(sunday)}`;
   const cols = 4 + (isAdmin ? 1 : 0) + 1 + (isManager ? 1 : 0); // checkbox? day in out hours paid actions?
 
   return (

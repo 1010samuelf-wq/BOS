@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 import { listInquiries, toggleInquiryHandled } from "../api/endpoints";
 import type { Inquiry } from "../api/types";
 import { Loading, PageHead, Tabs } from "../components/ui";
+import { formatDateTime } from "../order/dates";
 
 function InquiryCard({
   inq, onReopen, busy,
@@ -30,7 +31,7 @@ function InquiryCard({
           <div style={{ fontWeight: 700, fontSize: 16 }}>{inq.customer_name}</div>
           <a className="muted" href={`tel:${inq.customer_phone}`} style={{ fontSize: 14 }}>{inq.customer_phone}</a>
           <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-            {new Date(inq.created_at).toLocaleString()}
+            {formatDateTime(new Date(inq.created_at))}
           </div>
         </div>
         <div style={{ textAlign: "right" }}>

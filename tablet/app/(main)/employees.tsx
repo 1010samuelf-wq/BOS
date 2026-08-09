@@ -20,6 +20,7 @@ import {
 } from "../../src/api/endpoints";
 import type { Employee, Role, StaffHoursRow } from "../../src/api/types";
 import { roleLabel } from "../../src/api/types";
+import { formatDate } from "../../src/order/dates";
 import { useAuth } from "../../src/auth/AuthContext";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -65,7 +66,7 @@ export default function EmployeesScreen() {
   const monday = weekMonday(weekOffset);
   const rangeLabel = (() => {
     const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
-    return `${monday.toLocaleDateString()} - ${sunday.toLocaleDateString()}`;
+    return `${formatDate(monday)} - ${formatDate(sunday)}`;
   })();
 
   const hours = useQuery({

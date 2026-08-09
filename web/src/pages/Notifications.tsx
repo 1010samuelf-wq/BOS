@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../api/endpoints";
 import { Loading, PageHead } from "../components/ui";
+import { formatDateTime } from "../order/dates";
 
 const ICON: Record<string, string> = { low_stock: "📦", overdue_order: "⏰", overdue_task: "✅" };
 
@@ -41,7 +42,7 @@ export default function Notifications() {
               <span style={{ fontSize: 20 }}>{ICON[n.type] ?? "🔔"}</span>
               <div style={{ flex: 1 }}>
                 <div>{n.message}</div>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 400 }}>{new Date(n.created_at).toLocaleString()}</div>
+                <div className="muted" style={{ fontSize: 12, fontWeight: 400 }}>{formatDateTime(new Date(n.created_at))}</div>
               </div>
               {!n.read && <span className="dot" style={{ background: "var(--primary)" }} />}
             </div>

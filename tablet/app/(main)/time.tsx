@@ -30,6 +30,7 @@ import { RequiresConnection } from "../../src/components/Chrome";
 import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
+import { formatDate, formatTime, formatWeekdayDate } from "../../src/order/dates";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -45,10 +46,8 @@ function hoursOf(e: TimeEntry): number {
   const end = e.clock_out ? new Date(e.clock_out).getTime() : Date.now();
   return Math.max(0, (end - start) / 3_600_000);
 }
-const fmtTime = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "— open —";
-const fmtDay = (iso: string) =>
-  new Date(iso).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+const fmtTime = (iso: string | null) => (iso ? formatTime(new Date(iso)) : "— open —");
+const fmtDay = (iso: string) => formatWeekdayDate(new Date(iso));
 
 // Plain text date+time fields (no native picker dependency) for edit/add.
 function toParts(iso: string): { date: string; time: string } {
@@ -129,7 +128,7 @@ export default function TimeScreen() {
     : rosterData.map((r) => ({ id: r.id, name: r.name, rate: null as number | null }));
   const targetRate = people.find((p) => p.id === targetId)?.rate ?? null;
   const whoName = people.find((p) => p.id === targetId)?.name ?? user?.name ?? "Me";
-  const rangeLabel = `${monday.toLocaleDateString()} - ${sunday.toLocaleDateString()}`;
+  const rangeLabel = `${formatDate(monday)} - ${formatDate(sunday)}`;
 
   const entriesQ = useQuery({
     queryKey: ["time-entries", targetId, ymd(monday)],

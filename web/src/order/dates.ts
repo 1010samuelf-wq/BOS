@@ -30,8 +30,37 @@ export function neededDeadline(iso: string): number {
   return d.getTime();
 }
 
+// Fixed "day month year" + 12-hour clock, regardless of device/browser locale
+// (the built-in toLocaleDateString/toLocaleString follow whatever locale the
+// OS is set to, which on a shared shop device is not something to rely on —
+// and React Native's JS engine often lacks full ICU data for them anyway).
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** "6 Aug 2026" */
+export function formatDate(d: Date): string {
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+/** "2:05 PM" */
+export function formatTime(d: Date): string {
+  let h = d.getHours();
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${String(d.getMinutes()).padStart(2, "0")} ${ampm}`;
+}
+/** "6 Aug 2026, 2:05 PM" */
+export function formatDateTime(d: Date): string {
+  return `${formatDate(d)}, ${formatTime(d)}`;
+}
+/** "Thu, 6 Aug" — for compact per-row date columns. */
+export function formatWeekdayDate(d: Date): string {
+  return `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
 /** Human label: just the date when there's no time, otherwise date + time. */
 export function formatNeeded(iso: string): string {
   const d = asDate(iso);
-  return isDateOnly(iso) ? d.toLocaleDateString() : d.toLocaleString();
+  return isDateOnly(iso) ? formatDate(d) : formatDateTime(d);
 }

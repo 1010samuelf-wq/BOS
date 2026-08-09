@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { ApiRequestError } from "../api/client";
 import { createTask, fetchRoster, listTasks, toggleTaskDone } from "../api/endpoints";
 import { Loading, PageHead } from "../components/ui";
+import { formatDate } from "../order/dates";
 
 export default function Tasks() {
   const client = useQueryClient();
@@ -106,7 +107,7 @@ export default function Tasks() {
                     {t.description && <div className="muted" style={{ fontSize: 12 }}>{t.description}</div>}
                   </td>
                   <td>{nameOf(t.assigned_to)}</td>
-                  <td>{t.due_date ? new Date(t.due_date).toLocaleDateString() : "—"}{t.is_overdue ? " · OVERDUE" : ""}</td>
+                  <td>{t.due_date ? formatDate(new Date(t.due_date)) : "—"}{t.is_overdue ? " · OVERDUE" : ""}</td>
                 </tr>
               ))}
               {tasks.isSuccess && tasks.data.length === 0 && (

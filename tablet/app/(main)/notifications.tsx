@@ -15,6 +15,7 @@ import {
 } from "../../src/api/endpoints";
 import type { Notification } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
+import { formatDateTime } from "../../src/order/dates";
 import { Button, Empty, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 
@@ -59,7 +60,7 @@ export default function NotificationsScreen() {
                 <Text style={styles.icon}>{ICON[item.type] ?? "🔔"}</Text>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.msg, !item.read && styles.msgUnread]}>{item.message}</Text>
-                  <Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>
+                  <Text style={styles.time}>{formatDateTime(new Date(item.created_at))}</Text>
                 </View>
                 {!item.read && <View style={styles.dot} />}
               </Pressable>

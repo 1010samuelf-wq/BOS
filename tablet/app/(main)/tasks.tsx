@@ -15,6 +15,7 @@ import { RequiresConnection } from "../../src/components/Chrome";
 import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
+import { formatDate } from "../../src/order/dates";
 
 function TaskRow({ task, name, onToggle }: { task: Task; name?: string; onToggle: () => void }) {
   return (
@@ -27,7 +28,7 @@ function TaskRow({ task, name, onToggle }: { task: Task; name?: string; onToggle
         {task.description ? <Text style={styles.taskDesc}>{task.description}</Text> : null}
         <Text style={styles.taskMeta}>
           {name ? `${name} · ` : ""}
-          {task.due_date ? `due ${new Date(task.due_date).toLocaleDateString()}` : "no due date"}
+          {task.due_date ? `due ${formatDate(new Date(task.due_date))}` : "no due date"}
           {task.is_overdue ? " · OVERDUE" : ""}
         </Text>
       </View>
