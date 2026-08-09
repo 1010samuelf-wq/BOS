@@ -106,7 +106,15 @@ def sales_report(db: Session, from_date: date, to_date: date) -> SalesReportOut:
     cost_cache: dict = {}
 
     for order in orders:
-        revenue += order.total
+        # Cash-basis: revenue (and the COGS matched against it) only count once
+        # money has actually changed hands. An unpaid order still shows up in
+        # order_count and the "unpaid" breakdown bucket below, so it isn't
+        # invisible — it just isn't counted as income until it's paid.
+        if order.paid_status == PaidStatus.paid:
+            revenue += order.total
+            for item in order.items:
+                ingredient_cost += product_ingredient_cost(db, item.product_id, cost_cache) * item.quantity
+
         if order.paid_status == PaidStatus.unpaid:
             breakdown["unpaid"] += order.total
         elif order.payment_method == PaymentMethod.cash:
@@ -117,9 +125,6 @@ def sales_report(db: Session, from_date: date, to_date: date) -> SalesReportOut:
             breakdown["etransfer"] += order.total
         else:
             breakdown["unspecified"] += order.total
-
-        for item in order.items:
-            ingredient_cost += product_ingredient_cost(db, item.product_id, cost_cache) * item.quantity
 
     expenses = db.execute(
         select(Expense)
@@ -145,8 +150,8 @@ def sales_report(db: Session, from_date: date, to_date: date) -> SalesReportOut:
     )
 
 
-# ---- payroll cost (accrual: hours worked in the period × the employee's rate,
-# same accrual basis as ingredient cost/expenses — regardless of paid status) --
+# ---- payroll cost (cash-basis: only shifts actually paid out count, matching
+# revenue above — an unpaid shift is a liability, not yet an incurred cost) ----
 def _labor_cost(db: Session, start: datetime, end: datetime) -> Decimal:
     rows = db.execute(
         select(TimeEntry.user_id, TimeEntry.clock_in, TimeEntry.clock_out, User.hourly_rate)
@@ -155,6 +160,7 @@ def _labor_cost(db: Session, start: datetime, end: datetime) -> Decimal:
             TimeEntry.clock_in >= start,
             TimeEntry.clock_in < end,
             TimeEntry.clock_out.is_not(None),
+            TimeEntry.paid.is_(True),
         )
     ).all()
     total = Decimal(0)
@@ -207,7 +213,13 @@ def production_report(
                 StockLevel.item_id == product_id,
             )
         ) or Decimal(0)
-        to_bake = needed - in_stock
+        # NOT `needed - in_stock`: every order already deducted the product's
+        # finished-goods stock the moment it was created (deduct_for_order runs
+        # unconditionally, spec §2B/§2C), so `in_stock` going negative already
+        # *is* the unmet demand from these same orders. Subtracting `needed` as
+        # well double-counts it — 5 on hand with 7 ordered leaves in_stock at
+        # -2, and the shortfall is 2, not (7 - -2) = 9.
+        to_bake = -in_stock
         if to_bake < 0:
             to_bake = Decimal(0)
         total_needed += needed

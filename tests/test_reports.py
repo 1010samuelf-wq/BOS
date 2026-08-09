@@ -37,11 +37,13 @@ def test_sales_report_revenue_breakdown_and_profit(client, make_product, make_in
     client.post("/api/v1/expenses", json={"description": "gas", "amount": "5.00"})
 
     r = client.get("/api/v1/reports/daily").json()
-    assert Decimal(r["revenue"]) == Decimal("40")     # 20 + 10 + 10
+    # Cash-basis: the still-unpaid cake counts toward order_count and the
+    # "unpaid" breakdown bucket, but not toward revenue/COGS/profit.
+    assert Decimal(r["revenue"]) == Decimal("30")     # 20 + 10 paid; the 10 unpaid excluded
     assert r["order_count"] == 3
-    assert Decimal(r["ingredient_cost"]) == Decimal("4")   # 4 cakes × 1.00
+    assert Decimal(r["ingredient_cost"]) == Decimal("3")   # 3 paid cakes × 1.00
     assert Decimal(r["expenses_total"]) == Decimal("5")
-    assert Decimal(r["profit"]) == Decimal("31")      # 40 - 4 - 5
+    assert Decimal(r["profit"]) == Decimal("22")      # 30 - 3 - 5
 
     pb = r["payment_breakdown"]
     assert Decimal(pb["cash"]) == Decimal("20")
@@ -58,7 +60,17 @@ def test_labor_cost_deducted_from_profit(client, make_user):
     ci = _needed(today, 9)   # 09:00 UTC
     co = _needed(today, 13)  # 13:00 UTC -- a 4h shift
 
-    client.post("/api/v1/time/entries", json={"user_id": uid, "clock_in": ci, "clock_out": co})
+    eid = client.post(
+        "/api/v1/time/entries", json={"user_id": uid, "clock_in": ci, "clock_out": co}
+    ).json()["id"]
+
+    # Cash-basis: an unpaid shift is a liability, not yet a cost — it shouldn't
+    # move the report until it's actually paid out.
+    r = client.get("/api/v1/reports/daily", params={"day": today.isoformat()}).json()
+    assert Decimal(r["labor_cost"]) == Decimal("0")
+    assert Decimal(r["profit"]) == Decimal("0")
+
+    client.post("/api/v1/time/entries/mark-paid", json={"ids": [eid], "paid": True})
 
     r = client.get("/api/v1/reports/daily", params={"day": today.isoformat()}).json()
     assert Decimal(r["labor_cost"]) == Decimal("80.00")  # 4h × $20
@@ -107,10 +119,27 @@ def test_production_report_to_bake_uses_stock(client, make_product):
     row = next(x for x in r["rows"] if x["product_id"] == p["id"])
     assert row["total_quantity"] == 7
     assert row["order_count"] == 2
-    # sales already deducted 7 finished units (5 - 7 = -2 on hand); to_bake clamps
-    # needed(7) - in_stock(-2) = 9
+    # Both orders already deducted stock at creation (5 - 7 = -2 on hand) —
+    # in_stock going negative *is* the unmet demand, so to_bake is just
+    # -in_stock (2), not needed - in_stock (which would double-count as 9).
     assert Decimal(row["in_stock"]) == Decimal("-2")
-    assert Decimal(row["to_bake"]) == Decimal("9")
+    assert Decimal(row["to_bake"]) == Decimal("2")
+
+
+def test_production_to_bake_is_zero_when_stock_covers_demand(client, make_product):
+    today = datetime.now(timezone.utc).date()
+    p = make_product(name="Muffin", price="1.50")
+    # 20 on hand, only 6 ordered — plenty of stock, nothing to bake.
+    client.post("/api/v1/stock/adjust", json={
+        "item_type": "product", "item_id": p["id"], "delta": "20", "reason": "init"})
+    client.post("/api/v1/orders", json=order_payload(
+        p["id"], "prod-surplus", needed_for_date=_needed(today),
+        items=[{"product_id": p["id"], "quantity": 6}]))
+
+    r = client.get("/api/v1/reports/production").json()
+    row = next(x for x in r["rows"] if x["product_id"] == p["id"])
+    assert Decimal(row["in_stock"]) == Decimal("14")
+    assert Decimal(row["to_bake"]) == Decimal("0")
 
 
 def test_production_excludes_fulfilled_and_cancelled(client, make_product):
