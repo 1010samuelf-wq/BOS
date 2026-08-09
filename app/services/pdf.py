@@ -17,7 +17,7 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from app.models import AppSettings, Order
-from app.schemas.report import SalesReportOut
+from app.schemas.report import DeliveriesOut, SalesReportOut
 
 
 import os
@@ -28,6 +28,13 @@ _LOGO_ASPECT = 805 / 933  # height / width of the trimmed logo
 
 def _s(text: object) -> str:
     return str(text).encode("latin-1", "replace").decode("latin-1")
+
+
+def _format_12h(dt) -> str:
+    # "%-I" (no leading zero) is a Linux-only strftime flag and breaks on
+    # Windows dev machines, so build the 12-hour label by hand instead.
+    hour = dt.hour % 12 or 12
+    return f"{hour}:{dt.minute:02d} {'PM' if dt.hour >= 12 else 'AM'}"
 
 
 def _header(pdf: FPDF, profile: AppSettings | None) -> None:
@@ -160,5 +167,67 @@ def render_sales_report(report: SalesReportOut, profile: AppSettings | None) -> 
         for e in report.expenses:
             pdf.cell(130, 6, _s(e.description))
             pdf.cell(0, 6, _s(f"${e.amount}"), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    return bytes(pdf.output())
+
+
+def render_deliveries_manifest(manifest: DeliveriesOut, profile: AppSettings | None) -> bytes:
+    """One stop per block, large and glanceable — this is handed to whoever is
+    driving, not read at a desk. No sidebar/app chrome (spec: a driver-facing
+    PDF, not a screenshot of the dashboard), and a checkbox to tick off each
+    drop as it's made."""
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    _header(pdf, profile)
+
+    pdf.set_font("Helvetica", "B", 13)
+    span = f"{manifest.from_date}" if manifest.from_date == manifest.to_date else f"{manifest.from_date} to {manifest.to_date}"
+    pdf.cell(0, 8, _s(f"Deliveries - {span}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(2)
+
+    if not manifest.rows:
+        pdf.set_font("Helvetica", "I", 11)
+        pdf.cell(0, 8, "No deliveries in this range.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        return bytes(pdf.output())
+
+    for row in manifest.rows:
+        top = pdf.get_y()
+        if top > pdf.h - pdf.b_margin - 45:  # keep a stop from splitting across pages
+            pdf.add_page()
+
+        pdf.set_draw_color(210, 210, 210)
+        pdf.rect(pdf.l_margin, pdf.get_y(), 6, 6)  # checkbox for "delivered"
+
+        pdf.set_x(pdf.l_margin + 10)
+        pdf.set_font("Helvetica", "B", 13)
+        time_str = _format_12h(row.needed_for_date) if row.needed_for_date else "no time set"
+        pdf.cell(0, 7, _s(f"{time_str}  -  {row.delivery_name or row.client_name}"),
+                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.set_x(pdf.l_margin + 10)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.multi_cell(0, 6, _s(row.delivery_address or "no address on file"))
+
+        pdf.set_x(pdf.l_margin + 10)
+        pdf.set_font("Helvetica", "", 10)
+        contact = row.client_phone or "no phone"
+        if row.delivery_name and row.delivery_name != row.client_name:
+            contact = f"{row.client_name} (orderer)  -  {contact}"
+        pdf.cell(0, 6, _s(contact), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.set_x(pdf.l_margin + 10)
+        items = ", ".join(f"{i.quantity}x {i.product_name}" for i in row.items)
+        pdf.multi_cell(0, 6, _s(items))
+
+        pdf.set_x(pdf.l_margin + 10)
+        pdf.set_font("Helvetica", "B", 10)
+        paid = "PAID" if row.paid_status == "paid" else "COLLECT ON DELIVERY"
+        pdf.cell(0, 6, _s(f"${row.total}  -  {paid}"), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+        pdf.ln(4)
+        pdf.set_draw_color(210, 210, 210)
+        pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+        pdf.ln(4)
 
     return bytes(pdf.output())

@@ -61,3 +61,21 @@ def test_report_pdf_requires_manager(client, make_user):
     p = make_product = client.post("/api/v1/products", json={"name": "Bun", "price": "1"}).json()
     oid = client.post("/api/v1/orders", json=order_payload(p["id"], "rcpt-cash")).json()["id"]
     assert cashier.get(f"/api/v1/orders/{oid}/receipt").status_code == 200
+
+
+def test_deliveries_pdf_empty_range(client):
+    # No deliveries at all — should render an empty-state PDF, not crash.
+    r = client.get("/api/v1/deliveries/pdf")
+    assert _pdf_ok(r)
+
+
+def test_deliveries_pdf_with_stops(client, make_product):
+    p = make_product(name="Cake", price="20.00")
+    client.post("/api/v1/orders", json=order_payload(
+        p["id"], "deliv-pdf-1", fulfillment_type="delivery", delivery_price="5.00",
+        delivery_address="12 Baker St", delivery_name="Sam",
+    ))
+    r = client.get("/api/v1/deliveries/pdf")
+    assert _pdf_ok(r)
+    assert "deliveries-" in r.headers.get("content-disposition", "")
+    assert len(r.content) > 500

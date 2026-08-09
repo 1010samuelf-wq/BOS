@@ -6,11 +6,15 @@
 import { api, downloadCsv, openPdf, uploadFile } from "./client";
 import type {
   BusinessProfile,
+  Company,
+  CompanyDetail,
+  CompanyType,
   Deliveries,
   Employee,
   HoursReport,
   Ingredient,
   Inquiry,
+  LedgerEntryType,
   Notification,
   Order,
   OrderCreatePayload,
@@ -103,6 +107,8 @@ export const getDeliveries = (params: { from?: string; to?: string }) =>
   api<Deliveries>("/deliveries", { query: params });
 export const exportDeliveriesCsv = (from: string, to: string) =>
   downloadCsv(`/deliveries/export?from=${from}&to=${to}`, `deliveries_${from}_${to}.csv`);
+export const deliveriesPdf = (from: string, to: string) =>
+  openPdf(`/deliveries/pdf?from=${from}&to=${to}`);
 export const exportProductionCsv = (from: string, to: string) =>
   downloadCsv(`/reports/production/export?from=${from}&to=${to}`, `production_${from}_${to}.csv`);
 
@@ -185,3 +191,18 @@ export const listInquiries = (params: { handled?: boolean } = {}) =>
   api<Inquiry[]>("/inquiries", { query: params });
 export const toggleInquiryHandled = (id: number) =>
   api<Inquiry>(`/inquiries/${id}/handled`, { method: "POST" });
+
+// ---- bookkeeping (accounts payable/receivable) ----
+export const listCompanies = (includeInactive = false) =>
+  api<Company[]>("/bookkeeping/companies", { query: { include_inactive: includeInactive } });
+export const getCompany = (id: number) => api<CompanyDetail>(`/bookkeeping/companies/${id}`);
+export const createCompany = (body: { name: string; type: CompanyType }) =>
+  api<Company>("/bookkeeping/companies", { method: "POST", body });
+export const updateCompany = (id: number, body: Partial<{ name: string; type: CompanyType; active: boolean }>) =>
+  api<Company>(`/bookkeeping/companies/${id}`, { method: "PUT", body });
+export const addLedgerEntry = (
+  companyId: number,
+  body: { entry_date: string; type: LedgerEntryType; amount: string; note?: string | null },
+) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries`, { method: "POST", body });
+export const deleteLedgerEntry = (companyId: number, entryId: number) =>
+  api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });

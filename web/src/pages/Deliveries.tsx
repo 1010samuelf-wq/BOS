@@ -4,7 +4,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { exportDeliveriesCsv, getDeliveries } from "../api/endpoints";
+import { deliveriesPdf, exportDeliveriesCsv, getDeliveries } from "../api/endpoints";
 import { Loading, PageHead, Tabs } from "../components/ui";
 import { formatNeeded } from "../order/dates";
 
@@ -47,7 +47,7 @@ export default function Deliveries() {
             { key: "upcoming", label: "Upcoming (no limit)" },
           ]}
         />
-        <button className="btn neutral" onClick={() => window.print()}>Print</button>
+        <button className="btn neutral" onClick={() => void deliveriesPdf(r.from, r.to)}>🖨 Driver PDF</button>
         <button className="btn neutral" onClick={() => void exportDeliveriesCsv(r.from, r.to)}>Export CSV</button>
       </PageHead>
 

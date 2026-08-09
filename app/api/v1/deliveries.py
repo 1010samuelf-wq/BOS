@@ -2,16 +2,17 @@
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import current_user
 from app.core.permissions import require_section
 from app.core.csv_export import csv_response
 from app.database import get_db
-from app.models import User
+from app.models import AppSettings, User
 from app.models.base import utc_today
 from app.schemas.report import DeliveriesOut
+from app.services import pdf as pdf_service
 from app.services import reports as reports_service
 
 router = APIRouter(
@@ -34,6 +35,26 @@ def deliveries(
 ):
     f, t = _range(from_date, to_date)
     return reports_service.deliveries_manifest(db, f, t)
+
+
+@router.get("/pdf")
+def deliveries_pdf(
+    from_date: date | None = Query(default=None, alias="from"),
+    to_date: date | None = Query(default=None, alias="to"),
+    db: Session = Depends(get_db),
+    _: User = Depends(current_user),
+):
+    """A driver-facing sheet — one stop per block, no dashboard chrome (unlike
+    the old browser window.print(), which printed the whole app page)."""
+    f, t = _range(from_date, to_date)
+    manifest = reports_service.deliveries_manifest(db, f, t)
+    profile = db.get(AppSettings, 1)
+    content = pdf_service.render_deliveries_manifest(manifest, profile)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="deliveries-{f}-{t}.pdf"'},
+    )
 
 
 @router.get("/export")
