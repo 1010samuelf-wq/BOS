@@ -4,11 +4,15 @@
 import { api, uploadFile } from "./client";
 import type {
   BusinessProfile,
+  Company,
+  CompanyDetail,
+  CompanyType,
   Deliveries,
   Employee,
   ExpenseOut,
   HoursReport,
   Ingredient,
+  LedgerEntryType,
   Notification,
   Order,
   OrderCreatePayload,
@@ -188,6 +192,21 @@ export const updateEmployee = (
   id: number,
   body: { name?: string; role?: string; active?: boolean; hourly_rate?: string },
 ) => api<Employee>(`/employees/${id}`, { method: "PUT", body });
+
+// ---- bookkeeping (accounts payable/receivable) ----
+export const listCompanies = (includeInactive = false) =>
+  api<Company[]>("/bookkeeping/companies", { query: { include_inactive: includeInactive } });
+export const getCompany = (id: number) => api<CompanyDetail>(`/bookkeeping/companies/${id}`);
+export const createCompany = (body: { name: string; type: CompanyType }) =>
+  api<Company>("/bookkeeping/companies", { method: "POST", body });
+export const updateCompany = (id: number, body: Partial<{ name: string; type: CompanyType; active: boolean }>) =>
+  api<Company>(`/bookkeeping/companies/${id}`, { method: "PUT", body });
+export const addLedgerEntry = (
+  companyId: number,
+  body: { entry_date: string; type: LedgerEntryType; amount: string; note?: string | null },
+) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries`, { method: "POST", body });
+export const deleteLedgerEntry = (companyId: number, entryId: number) =>
+  api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });
 
 // ---- notifications ----
 export const listNotifications = (params: { unread_only?: boolean; limit?: number }) =>

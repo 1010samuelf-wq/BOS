@@ -296,6 +296,28 @@ export interface Notification {
   created_at: string;
 }
 
+// ---- bookkeeping (accounts payable/receivable) ----
+export type CompanyType = "payable" | "receivable"; // payable = we owe them, receivable = they owe us
+export type LedgerEntryType = "charge" | "payment";
+
+export interface LedgerEntry {
+  id: number;
+  entry_date: string;
+  type: LedgerEntryType;
+  amount: string;
+  note: string | null;
+}
+export interface Company {
+  id: number;
+  name: string;
+  type: CompanyType;
+  active: boolean;
+  balance: string; // sum(charges) - sum(payments); computed server-side
+}
+export interface CompanyDetail extends Company {
+  entries: LedgerEntry[];
+}
+
 // Events pushed over /api/v1/ws (see bos/app/api/v1/ws.py).
 export type RealtimeEvent =
   | { type: "orders_changed" }

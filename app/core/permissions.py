@@ -31,6 +31,7 @@ ALL_SECTIONS: list[str] = [
     "time",
     "settings",
     "employees",
+    "bookkeeping",
 ]
 
 # Sections an admin may toggle per employee (everything except employees mgmt).

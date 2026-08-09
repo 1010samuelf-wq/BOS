@@ -19,6 +19,8 @@ import Time from "./pages/Time";
 import Tasks from "./pages/Tasks";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
+import Bookkeeping from "./pages/Bookkeeping";
+import CompanyDetail from "./pages/CompanyDetail";
 
 // Each nav item maps to a section; the sidebar and route guards show/allow only
 // the sections in the logged-in employee's effective set (per-employee override
@@ -34,6 +36,7 @@ const NAV = [
   { to: "/time", label: "My time", icon: "⏱", section: "time" },
   { to: "/tasks", label: "Tasks", icon: "✅", section: "tasks" },
   { to: "/notifications", label: "Notifications", icon: "🔔", section: "notifications" },
+  { to: "/bookkeeping", label: "Bookkeeping", icon: "📒", section: "bookkeeping" },
   { to: "/settings", label: "Admin / Settings", icon: "⚙️", section: "settings" },
 ];
 
@@ -166,6 +169,8 @@ export default function App() {
         <Route path="/time" element={<RequireSection section="time"><Time /></RequireSection>} />
         <Route path="/tasks" element={<RequireSection section="tasks"><Tasks /></RequireSection>} />
         <Route path="/notifications" element={<RequireSection section="notifications"><Notifications /></RequireSection>} />
+        <Route path="/bookkeeping" element={<RequireSection section="bookkeeping"><Bookkeeping /></RequireSection>} />
+        <Route path="/bookkeeping/:id" element={<RequireSection section="bookkeeping"><CompanyDetail /></RequireSection>} />
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>

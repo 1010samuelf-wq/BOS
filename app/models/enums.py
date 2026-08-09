@@ -53,3 +53,15 @@ class ItemType(str, enum.Enum):
 
     ingredient = "ingredient"
     product = "product"
+
+
+class CompanyType(str, enum.Enum):
+    """Which direction a bookkeeping company's balance runs."""
+
+    payable = "payable"       # a supplier/vendor — we owe them
+    receivable = "receivable"  # a customer/other party — they owe us
+
+
+class LedgerEntryType(str, enum.Enum):
+    charge = "charge"    # increases what's owed (e.g. an invoice, an order made)
+    payment = "payment"  # reduces what's owed

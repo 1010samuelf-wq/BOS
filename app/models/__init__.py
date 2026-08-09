@@ -8,9 +8,11 @@ daily_reports) exist so later phases add endpoints without a second migration.
 
 from app.models.base import Base
 from app.models.enums import (
+    CompanyType,
     FulfillmentStatus,
     FulfillmentType,
     ItemType,
+    LedgerEntryType,
     NoteType,
     OrderStatus,
     PaidStatus,
@@ -18,6 +20,7 @@ from app.models.enums import (
     PaymentTiming,
     UserRole,
 )
+from app.models.bookkeeping import Company, LedgerEntry
 from app.models.catalog import Ingredient, Product, Recipe, RecipeItem
 from app.models.order import Order, OrderItem, OrderNote
 from app.models.settings import AppSettings
@@ -34,15 +37,19 @@ from app.models.misc import (
 
 __all__ = [
     "Base",
+    "CompanyType",
     "FulfillmentStatus",
     "FulfillmentType",
     "ItemType",
+    "LedgerEntryType",
     "NoteType",
     "OrderStatus",
     "PaidStatus",
     "PaymentMethod",
     "PaymentTiming",
     "UserRole",
+    "Company",
+    "LedgerEntry",
     "Ingredient",
     "Product",
     "Recipe",

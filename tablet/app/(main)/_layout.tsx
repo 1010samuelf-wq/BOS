@@ -22,6 +22,7 @@ const RAIL = [
   { href: "/(main)/time", label: "Time", icon: "⏱️" },
   { href: "/(main)/tasks", label: "Tasks", icon: "✅" },
   { href: "/(main)/notifications", label: "Alerts", icon: "🔔" },
+  { href: "/(main)/bookkeeping", label: "Bookkeeping", icon: "📒" },
   { href: "/(main)/settings", label: "Settings", icon: "⚙️", adminOnly: true },
 ] as const;
 

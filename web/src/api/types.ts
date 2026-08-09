@@ -293,3 +293,25 @@ export interface Inquiry {
   handled_at: string | null;
   created_at: string;
 }
+
+// ---- bookkeeping (accounts payable/receivable) ----
+export type CompanyType = "payable" | "receivable"; // payable = we owe them, receivable = they owe us
+export type LedgerEntryType = "charge" | "payment";
+
+export interface LedgerEntry {
+  id: number;
+  entry_date: string;
+  type: LedgerEntryType;
+  amount: string;
+  note: string | null;
+}
+export interface Company {
+  id: number;
+  name: string;
+  type: CompanyType;
+  active: boolean;
+  balance: string; // sum(charges) - sum(payments); computed server-side
+}
+export interface CompanyDetail extends Company {
+  entries: LedgerEntry[];
+}
