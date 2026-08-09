@@ -10,6 +10,7 @@ import {
   exportSummaryCsv,
   getDailyReport,
   getMonthlyReport,
+  getSummary,
   listOrders,
   openSummaryPdf,
   updateExpense,
@@ -113,15 +114,24 @@ function AddExpense({ onAdded }: { onAdded: () => void }) {
 }
 
 export default function Reports() {
-  const [mode, setMode] = useState<"daily" | "monthly">("daily");
+  const [mode, setMode] = useState<"daily" | "monthly" | "custom">("daily");
   const [drill, setDrill] = useState<Drill | null>(null);
   const client = useQueryClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
   const q = useQuery({
-    queryKey: ["report", mode],
-    queryFn: () => (mode === "daily" ? getDailyReport() : getMonthlyReport()),
+    queryKey: ["report", mode, mode === "custom" ? customFrom : null, mode === "custom" ? customTo : null],
+    queryFn: () => {
+      if (mode === "daily") return getDailyReport();
+      if (mode === "monthly") return getMonthlyReport();
+      return getSummary(customFrom, customTo);
+    },
+    enabled: mode !== "custom" || (!!customFrom && !!customTo && customFrom <= customTo),
   });
   const r = q.data;
-  const today = new Date().toISOString().slice(0, 10);
+  const exportFrom = mode === "custom" ? customFrom : (r?.from_date ?? today);
+  const exportTo = mode === "custom" ? customTo : (r?.to_date ?? today);
   const open = (d: Drill) => setDrill((cur) => (cur?.label === d.label ? null : d));
 
   const breakdownSegments = (rep: SalesReport) => {
@@ -138,9 +148,15 @@ export default function Reports() {
     <div className="page">
       <PageHead title="Reports">
         <Tabs value={mode} onChange={(m) => { setMode(m); setDrill(null); }}
-          options={[{ key: "daily", label: "Daily" }, { key: "monthly", label: "Monthly" }]} />
-        <button className="btn neutral" onClick={() => void exportSummaryCsv(today, today)}>Export CSV</button>
-        <button className="btn neutral" onClick={() => void openSummaryPdf(today, today)}>Export PDF</button>
+          options={[{ key: "daily", label: "Daily" }, { key: "monthly", label: "Monthly" }, { key: "custom", label: "Custom range" }]} />
+        {mode === "custom" && (
+          <>
+            <input className="input" type="date" style={{ maxWidth: 150 }} value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <input className="input" type="date" style={{ maxWidth: 150 }} value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </>
+        )}
+        <button className="btn neutral" onClick={() => void exportSummaryCsv(exportFrom, exportTo)}>Export CSV</button>
+        <button className="btn neutral" onClick={() => void openSummaryPdf(exportFrom, exportTo)}>Export PDF</button>
       </PageHead>
 
       {q.isLoading ? <Loading /> : q.isError ? <ErrorMsg>Reports require the reports section.</ErrorMsg> : r ? (

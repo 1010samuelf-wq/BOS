@@ -8,10 +8,11 @@ import { router } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
-import { createExpense, getDailyReport, getMonthlyReport, listOrders } from "../../src/api/endpoints";
+import { createExpense, getDailyReport, getMonthlyReport, getSummary, listOrders } from "../../src/api/endpoints";
 import type { ExpenseOut, Order, SalesReport } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
+import { DateField } from "../../src/components/DateTimeField";
 import { colors, radius, spacing } from "../../src/components/theme";
 
 interface Drill {
@@ -142,12 +143,20 @@ function AddExpense({ onAdded }: { onAdded: () => void }) {
 }
 
 export default function ReportsScreen() {
-  const [mode, setMode] = useState<"daily" | "monthly">("daily");
+  const [mode, setMode] = useState<"daily" | "monthly" | "custom">("daily");
   const [drill, setDrill] = useState<Drill | null>(null);
   const queryClient = useQueryClient();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [customFrom, setCustomFrom] = useState(todayStr);
+  const [customTo, setCustomTo] = useState(todayStr);
   const report = useQuery({
-    queryKey: ["report", mode],
-    queryFn: () => (mode === "daily" ? getDailyReport() : getMonthlyReport()),
+    queryKey: ["report", mode, mode === "custom" ? customFrom : null, mode === "custom" ? customTo : null],
+    queryFn: () => {
+      if (mode === "daily") return getDailyReport();
+      if (mode === "monthly") return getMonthlyReport();
+      return getSummary(customFrom, customTo);
+    },
+    enabled: mode !== "custom" || (!!customFrom && !!customTo && customFrom <= customTo),
   });
 
   return (
@@ -157,20 +166,27 @@ export default function ReportsScreen() {
           title="Reports"
           right={
             <View style={styles.tabs}>
-              {(["daily", "monthly"] as const).map((m) => (
+              {(["daily", "monthly", "custom"] as const).map((m) => (
                 <Pressable
                   key={m}
                   style={[styles.tab, mode === m && styles.tabActive]}
                   onPress={() => setMode(m)}
                 >
                   <Text style={[styles.tabText, mode === m && styles.tabTextActive]}>
-                    {m === "daily" ? "Daily" : "Monthly"}
+                    {m === "daily" ? "Daily" : m === "monthly" ? "Monthly" : "Custom"}
                   </Text>
                 </Pressable>
               ))}
             </View>
           }
         />
+
+        {mode === "custom" && (
+          <View style={{ flexDirection: "row", gap: spacing.s }}>
+            <DateField value={customFrom} onChange={setCustomFrom} style={{ flex: 1 }} />
+            <DateField value={customTo} onChange={setCustomTo} style={{ flex: 1 }} />
+          </View>
+        )}
 
         {report.isLoading ? (
           <Loading />

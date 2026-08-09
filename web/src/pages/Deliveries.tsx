@@ -8,9 +8,9 @@ import { deliveriesPdf, exportDeliveriesCsv, getDeliveries } from "../api/endpoi
 import { Loading, PageHead, Tabs } from "../components/ui";
 import { formatNeeded } from "../order/dates";
 
-type Preset = "today" | "tomorrow" | "week" | "upcoming";
+type Preset = "today" | "tomorrow" | "week" | "upcoming" | "custom";
 
-function range(preset: Preset): { from: string; to: string } {
+function range(preset: Exclude<Preset, "custom">): { from: string; to: string } {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const now = new Date();
   if (preset === "today") return { from: iso(now), to: iso(now) };
@@ -31,8 +31,15 @@ function range(preset: Preset): { from: string; to: string } {
 
 export default function Deliveries() {
   const [preset, setPreset] = useState<Preset>("today");
-  const r = range(preset);
-  const q = useQuery({ queryKey: ["deliveries", preset], queryFn: () => getDeliveries(r) });
+  const today = new Date().toISOString().slice(0, 10);
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
+  const r = preset === "custom" ? { from: customFrom, to: customTo } : range(preset);
+  const q = useQuery({
+    queryKey: ["deliveries", preset, r.from, r.to],
+    queryFn: () => getDeliveries(r),
+    enabled: preset !== "custom" || (!!customFrom && !!customTo && customFrom <= customTo),
+  });
 
   return (
     <div className="page">
@@ -45,8 +52,15 @@ export default function Deliveries() {
             { key: "tomorrow", label: "Tomorrow" },
             { key: "week", label: "This week" },
             { key: "upcoming", label: "Upcoming (no limit)" },
+            { key: "custom", label: "Custom range" },
           ]}
         />
+        {preset === "custom" && (
+          <>
+            <input className="input" type="date" style={{ maxWidth: 150 }} value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <input className="input" type="date" style={{ maxWidth: 150 }} value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </>
+        )}
         <button className="btn neutral" onClick={() => void deliveriesPdf(r.from, r.to)}>🖨 Driver PDF</button>
         <button className="btn neutral" onClick={() => void exportDeliveriesCsv(r.from, r.to)}>Export CSV</button>
       </PageHead>

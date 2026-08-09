@@ -11,11 +11,12 @@ import { getProduction } from "../../src/api/endpoints";
 import type { ProductionRow } from "../../src/api/types";
 import { RequiresConnection } from "../../src/components/Chrome";
 import { Empty, Loading, ScreenHeader } from "../../src/components/ui";
+import { DateField } from "../../src/components/DateTimeField";
 import { colors, radius, spacing } from "../../src/components/theme";
 
-type Preset = "today" | "tomorrow" | "week" | "upcoming";
+type Preset = "today" | "tomorrow" | "week" | "upcoming" | "custom";
 
-function range(preset: Preset): { from: string; to: string } {
+function range(preset: Exclude<Preset, "custom">): { from: string; to: string } {
   const d = new Date();
   const iso = (x: Date) => x.toISOString().slice(0, 10);
   if (preset === "today") return { from: iso(d), to: iso(d) };
@@ -37,10 +38,14 @@ function range(preset: Preset): { from: string; to: string } {
 
 export default function ProductionScreen() {
   const [preset, setPreset] = useState<Preset>("today");
-  const r = range(preset);
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [customFrom, setCustomFrom] = useState(todayStr);
+  const [customTo, setCustomTo] = useState(todayStr);
+  const r = preset === "custom" ? { from: customFrom, to: customTo } : range(preset);
   const prod = useQuery({
-    queryKey: ["production", preset],
+    queryKey: ["production", preset, r.from, r.to],
     queryFn: () => getProduction({ from: r.from, to: r.to }),
+    enabled: preset !== "custom" || (!!customFrom && !!customTo && customFrom <= customTo),
   });
 
   return (
@@ -50,7 +55,7 @@ export default function ProductionScreen() {
           title="Production"
           right={
             <View style={styles.tabs}>
-              {(["today", "tomorrow", "week", "upcoming"] as Preset[]).map((p) => (
+              {(["today", "tomorrow", "week", "upcoming", "custom"] as Preset[]).map((p) => (
                 <Pressable
                   key={p}
                   style={[styles.tab, preset === p && styles.tabActive]}
@@ -64,6 +69,12 @@ export default function ProductionScreen() {
             </View>
           }
         />
+        {preset === "custom" && (
+          <View style={{ flexDirection: "row", gap: spacing.s, paddingHorizontal: spacing.l, paddingTop: spacing.m }}>
+            <DateField value={customFrom} onChange={setCustomFrom} style={{ flex: 1 }} />
+            <DateField value={customTo} onChange={setCustomTo} style={{ flex: 1 }} />
+          </View>
+        )}
         {prod.isLoading ? (
           <Loading />
         ) : (
