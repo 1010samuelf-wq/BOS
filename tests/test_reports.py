@@ -175,11 +175,17 @@ def test_deliveries_manifest_box_count(client, make_product):
 def test_all_staff_hours_report(client, make_user):
     from app.database import SessionLocal
     from app.models import TimeEntry
+    from app.services.time_tracking import week_bounds
 
     uid, _, _ = make_user("olive", "cashier")
-    now = datetime.now(timezone.utc)
+    # Anchored to Wednesday noon UTC of *this* week rather than "now" — a shift
+    # built from now - 3h flakes whenever the suite runs in the first few hours
+    # of a Monday (UTC), since clock_in then lands on Sunday, the previous
+    # week, and the report's Mon-Sun window excludes it entirely.
+    monday, _ = week_bounds(datetime.now(timezone.utc).date())
+    shift_start = datetime(monday.year, monday.month, monday.day, tzinfo=timezone.utc) + timedelta(days=2, hours=12)
     with SessionLocal() as db:
-        db.add(TimeEntry(user_id=uid, clock_in=now - timedelta(hours=3), clock_out=now))
+        db.add(TimeEntry(user_id=uid, clock_in=shift_start, clock_out=shift_start + timedelta(hours=3)))
         db.commit()
 
     r = client.get("/api/v1/reports/hours").json()
