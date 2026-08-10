@@ -13,7 +13,6 @@ import Reports from "./pages/Reports";
 import Production from "./pages/Production";
 import Deliveries from "./pages/Deliveries";
 import Inquiries from "./pages/Inquiries";
-import Stock from "./pages/Stock";
 import EmployeesHours from "./pages/EmployeesHours";
 import Time from "./pages/Time";
 import Tasks from "./pages/Tasks";
@@ -30,7 +29,6 @@ const NAV = [
   { to: "/inquiries", label: "Inquiries", icon: "📥", section: "orders" },
   { to: "/production", label: "Production", icon: "🥐", section: "production" },
   { to: "/deliveries", label: "Deliveries", icon: "🚚", section: "deliveries" },
-  { to: "/stock", label: "Stock", icon: "📦", section: "stock" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
   { to: "/employees", label: "Employees & hours", icon: "👥", section: "employees" },
   { to: "/time", label: "My time", icon: "⏱", section: "time" },
@@ -163,7 +161,6 @@ export default function App() {
         <Route path="/production" element={<RequireSection section="production"><Production /></RequireSection>} />
         <Route path="/inquiries" element={<RequireSection section="orders"><Inquiries /></RequireSection>} />
         <Route path="/deliveries" element={<RequireSection section="deliveries"><Deliveries /></RequireSection>} />
-        <Route path="/stock" element={<RequireSection section="stock"><Stock /></RequireSection>} />
         <Route path="/reports" element={<RequireSection section="reports"><Reports /></RequireSection>} />
         <Route path="/employees" element={<RequireSection section="employees"><EmployeesHours /></RequireSection>} />
         <Route path="/time" element={<RequireSection section="time"><Time /></RequireSection>} />

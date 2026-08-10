@@ -23,7 +23,6 @@ import type {
   Recipe,
   RosterEntry,
   SalesReport,
-  StockLevel,
   Task,
   TimeEntry,
   TokenOut,
@@ -125,17 +124,6 @@ export const addNote = (id: number, text: string, type: "general" | "payment" = 
 
 export const toggleNoteDone = (id: number, noteId: number) =>
   api<Order>(`/orders/${id}/notes/${noteId}/done`, { method: "POST" });
-
-// ---- stock ----
-export const getStock = (params: { item_type?: string; low_only?: boolean; q?: string }) =>
-  api<StockLevel[]>("/stock", { query: params });
-
-export const adjustStock = (body: {
-  item_type: string;
-  item_id: number;
-  delta: string;
-  reason: string;
-}) => api<unknown>("/stock/adjust", { method: "POST", body });
 
 // ---- time ----
 export const clockIn = () => api<unknown>("/time/clock-in", { method: "POST" });

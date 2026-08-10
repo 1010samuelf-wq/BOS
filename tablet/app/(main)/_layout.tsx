@@ -1,4 +1,4 @@
-// Main shell (§11): persistent side rail (Orders, Stock, Reports, Employees,
+// Main shell (§11): persistent side rail (Orders, Reports, Employees,
 // Time, Tasks, Notifications w/ badge) + current-user chip, offline banner and
 // toast stack overlaying every screen.
 
@@ -16,7 +16,6 @@ const RAIL = [
   { href: "/(main)/orders", label: "Orders", icon: "🧾" },
   { href: "/(main)/production", label: "Bake list", icon: "🥐" },
   { href: "/(main)/deliveries", label: "Deliveries", icon: "🚚" },
-  { href: "/(main)/stock", label: "Stock", icon: "📦" },
   { href: "/(main)/reports", label: "Reports", icon: "📊" },
   { href: "/(main)/employees", label: "Employees", icon: "👥" },
   { href: "/(main)/time", label: "Time", icon: "⏱️" },

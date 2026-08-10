@@ -37,9 +37,3 @@ export function Tabs<T extends string>({
     </div>
   );
 }
-
-export function stockTone(quantity: string, isLow: boolean | null): string {
-  if (parseFloat(quantity) < 0) return "tone-neg";
-  if (isLow) return "tone-low";
-  return "tone-ok";
-}

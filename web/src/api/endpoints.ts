@@ -1,7 +1,7 @@
 // Typed API calls the web client uses. The web is now a full client at parity
 // with the tablet (user decision): order-taking, first-login PIN, clock in/out,
 // and order management — plus the oversight screens (reports, production,
-// deliveries, stock, employees & hours, tasks, notifications, Admin/Settings).
+// deliveries, employees & hours, tasks, notifications, Admin/Settings).
 
 import { api, downloadCsv, openPdf, uploadFile } from "./client";
 import type {
@@ -25,7 +25,6 @@ import type {
   Recipe,
   RosterEntry,
   SalesReport,
-  StockLevel,
   Task,
   TimeEntry,
   TokenOut,
@@ -117,12 +116,6 @@ export const deliveriesPdf = (from: string, to: string) =>
   openPdf(`/deliveries/pdf?from=${from}&to=${to}`);
 export const exportProductionCsv = (from: string, to: string) =>
   downloadCsv(`/reports/production/export?from=${from}&to=${to}`, `production_${from}_${to}.csv`);
-
-// ---- stock ----
-export const getStock = (params: { item_type?: string; low_only?: boolean; q?: string }) =>
-  api<StockLevel[]>("/stock", { query: params });
-export const adjustStock = (body: { item_type: string; item_id: number; delta: string; reason: string }) =>
-  api<unknown>("/stock/adjust", { method: "POST", body });
 
 // ---- expenses ----
 export const createExpense = (body: { description: string; amount: string; category?: string; spent_on?: string }) =>
