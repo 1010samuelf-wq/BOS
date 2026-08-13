@@ -23,6 +23,14 @@ function isOverdue(o: Order): boolean {
   );
 }
 
+// Overdue (late) beats ready (done) — a ready order past its needed time is
+// still a problem worth flagging red, not green.
+function rowClass(o: Order): string {
+  if (isOverdue(o)) return "overdue";
+  if (o.status === "ready") return "row-ready";
+  return "";
+}
+
 function statusLabel(s: OrderStatus): string {
   return s === "in_progress" ? "In progress" : s;
 }
@@ -113,7 +121,7 @@ function DateOrdersView() {
             </thead>
             <tbody>
               {rows.map((o) => (
-                <tr key={o.id} className={isOverdue(o) ? "overdue" : ""} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${o.id}`)}>
+                <tr key={o.id} className={rowClass(o)} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${o.id}`)}>
                   <td>#{o.id}</td>
                   <td>{o.client_name}</td>
                   <td>{o.needed_for_date ? formatNeeded(o.needed_for_date) : "No date set"}</td>
@@ -202,7 +210,7 @@ function OrdersList() {
             <thead><tr><th>Order</th><th>Client</th><th>Needed for</th><th>Type</th><th>Status</th><th>Paid</th><th className="num">Total</th></tr></thead>
             <tbody>
               {(q.data?.items ?? []).map((o) => (
-                <tr key={o.id} className={isOverdue(o) ? "overdue" : ""} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${o.id}`)}>
+                <tr key={o.id} className={rowClass(o)} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${o.id}`)}>
                   <td>#{o.id}</td>
                   <td>{o.client_name}</td>
                   <td>{o.needed_for_date ? formatNeeded(o.needed_for_date) : "—"}</td>

@@ -28,6 +28,14 @@ function unresolvedNotes(o: Order): number {
   return o.notes.filter((n) => !n.done).length;
 }
 
+// Overdue (late) beats ready (done) — a ready order past its needed time is
+// still a problem worth flagging red, not green.
+function rowStyle(o: Order) {
+  if (isOverdue(o)) return styles.cardOverdue;
+  if (o.status === "ready") return styles.rowReady;
+  return undefined;
+}
+
 function statusLabel(s: OrderStatus): string {
   return s === "in_progress" ? "In progress" : s;
 }
@@ -179,7 +187,7 @@ function DateOrdersView() {
           {rows.map((o) => (
             <Pressable
               key={o.id}
-              style={[styles.listRow, isOverdue(o) && styles.cardOverdue]}
+              style={[styles.listRow, rowStyle(o)]}
               onPress={() => router.navigate(`/(main)/orders/${o.id}` as never)}
             >
               <Text style={[styles.listCell, { width: 50 }]}>#{o.id}</Text>
@@ -315,7 +323,7 @@ function OrdersList() {
           {rows.map((o) => (
             <Pressable
               key={o.id}
-              style={[styles.listRow, isOverdue(o) && styles.cardOverdue]}
+              style={[styles.listRow, rowStyle(o)]}
               onPress={() => router.navigate(`/(main)/orders/${o.id}` as never)}
             >
               <Text style={[styles.listCell, { width: 50 }]}>#{o.id}</Text>
@@ -427,6 +435,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   cardOverdue: { borderColor: colors.danger, backgroundColor: "#fdf1ef" },
+  rowReady: { borderColor: colors.success, backgroundColor: "#eaf3e9" },
   cardTop: { flexDirection: "row", alignItems: "center" },
   cardClient: { fontWeight: "700", color: colors.text, flex: 1 },
   flag: { color: colors.warn, fontSize: 12 },
