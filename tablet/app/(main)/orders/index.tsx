@@ -1,6 +1,7 @@
-// Order status board (§11): three columns (Pending / In progress / Ready),
-// live via WS invalidation, overdue cards red, tap → detail. A Fulfilled tab
-// shows completed orders. New-order button top-right.
+// Order status (§11): a "By date" view — all outstanding orders sorted by
+// needed-for date, with Today/Tomorrow/This week/Custom presets — live via WS
+// invalidation, overdue rows red, tap → detail. List/filter and Fulfilled tabs
+// alongside. New-order button top-right.
 
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -12,13 +13,7 @@ import type { Order, OrderStatus } from "../../../src/api/types";
 import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Empty, ErrorText, Loading, ScreenHeader } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
-import { formatNeeded, neededDeadline } from "../../../src/order/dates";
-
-const COLUMNS: { key: OrderStatus; label: string }[] = [
-  { key: "pending", label: "Pending" },
-  { key: "in_progress", label: "In progress" },
-  { key: "ready", label: "Ready" },
-];
+import { asDate, formatNeeded, neededDeadline } from "../../../src/order/dates";
 
 function isOverdue(o: Order): boolean {
   return (
@@ -31,6 +26,20 @@ function isOverdue(o: Order): boolean {
 
 function unresolvedNotes(o: Order): number {
   return o.notes.filter((n) => !n.done).length;
+}
+
+function statusLabel(s: OrderStatus): string {
+  return s === "in_progress" ? "In progress" : s;
+}
+
+function StatusPill({ status }: { status: OrderStatus }) {
+  const bg = status === "ready" ? styles.statusReadyBg : status === "in_progress" ? styles.statusProgressBg : styles.statusPendingBg;
+  const text = status === "ready" ? styles.statusReadyText : status === "in_progress" ? styles.statusProgressText : styles.statusPendingText;
+  return (
+    <View style={[styles.statusPillBase, bg]}>
+      <Text style={[styles.statusPillText, text]}>{statusLabel(status)}</Text>
+    </View>
+  );
 }
 
 function OrderCard({ order }: { order: Order }) {
@@ -82,6 +91,120 @@ function Pills<T extends string>({
         </Pressable>
       ))}
     </View>
+  );
+}
+
+type DatePreset = "today" | "tomorrow" | "week" | "custom";
+
+function localDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function presetRange(preset: Exclude<DatePreset, "custom">): { from: string; to: string } {
+  const now = new Date();
+  if (preset === "today") return { from: localDay(now), to: localDay(now) };
+  if (preset === "tomorrow") {
+    const t = addDays(now, 1);
+    return { from: localDay(t), to: localDay(t) };
+  }
+  return { from: localDay(now), to: localDay(addDays(now, 6)) };
+}
+
+function DateOrdersView() {
+  const [preset, setPreset] = useState<DatePreset>("today");
+  const today = localDay(new Date());
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
+  const range = preset === "custom" ? { from: customFrom, to: customTo } : presetRange(preset);
+
+  const q = useQuery({
+    queryKey: ["orders", "outstanding"],
+    queryFn: () => listOrders({ limit: 200, fulfillment_status: "pending", exclude_cancelled: true }),
+  });
+
+  const rows: Order[] = (q.data?.items ?? [])
+    .filter((o: Order) => {
+      if (!o.needed_for_date) return true; // no date to bucket — always show
+      const day = localDay(asDate(o.needed_for_date));
+      return day >= range.from && day <= range.to;
+    })
+    .sort((a: Order, b: Order) => {
+      if (!a.needed_for_date && !b.needed_for_date) return 0;
+      if (!a.needed_for_date) return -1;
+      if (!b.needed_for_date) return 1;
+      return asDate(a.needed_for_date).getTime() - asDate(b.needed_for_date).getTime();
+    });
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: spacing.l, gap: spacing.m }}>
+      <View style={styles.filterCard}>
+        <View style={styles.rowWrap}>
+          <Pills
+            options={[
+              { key: "today", label: "Today" },
+              { key: "tomorrow", label: "Tomorrow" },
+              { key: "week", label: "This week" },
+              { key: "custom", label: "Custom range" },
+            ]}
+            value={preset}
+            onChange={setPreset}
+          />
+          {preset === "custom" && (
+            <>
+              <TextInput
+                style={[styles.input, { width: 120 }]}
+                placeholder="From (YYYY-MM-DD)"
+                value={customFrom}
+                onChangeText={setCustomFrom}
+              />
+              <TextInput
+                style={[styles.input, { width: 120 }]}
+                placeholder="To (YYYY-MM-DD)"
+                value={customTo}
+                onChangeText={setCustomTo}
+              />
+            </>
+          )}
+        </View>
+      </View>
+
+      {q.isLoading ? (
+        <Loading />
+      ) : (
+        <View style={{ gap: spacing.s }}>
+          {rows.map((o) => (
+            <Pressable
+              key={o.id}
+              style={[styles.listRow, isOverdue(o) && styles.cardOverdue]}
+              onPress={() => router.navigate(`/(main)/orders/${o.id}` as never)}
+            >
+              <Text style={[styles.listCell, { width: 50 }]}>#{o.id}</Text>
+              <Text style={[styles.listCell, { flex: 1 }]}>{o.client_name}</Text>
+              <Text style={[styles.listCell, { width: 130 }]}>
+                {o.needed_for_date ? formatNeeded(o.needed_for_date) : "No date set"}
+              </Text>
+              <Text style={[styles.listCell, { width: 80, textTransform: "capitalize" }]}>
+                {o.fulfillment_type}
+              </Text>
+              <View style={{ width: 100 }}>
+                <StatusPill status={o.status} />
+              </View>
+              <Text style={[styles.listCell, { width: 70 }, o.paid_status === "unpaid" && styles.unpaid]}>
+                {o.paid_status}
+              </Text>
+              <Text style={[styles.listCell, { width: 70, fontWeight: "700", textAlign: "right" }]}>
+                ${o.total}
+              </Text>
+            </Pressable>
+          ))}
+          {q.isSuccess && rows.length === 0 && <Empty>No orders in this range.</Empty>}
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -153,7 +276,6 @@ function OrdersList() {
             options={[
               { key: "", label: "Any status" },
               { key: "pending", label: "Pending" },
-              { key: "in_progress", label: "In progress" },
               { key: "ready", label: "Ready" },
               { key: "cancelled", label: "Cancelled" },
             ]}
@@ -204,9 +326,13 @@ function OrdersList() {
               <Text style={[styles.listCell, { width: 80, textTransform: "capitalize" }]}>
                 {o.fulfillment_type}
               </Text>
-              <Text style={[styles.listCell, { width: 90, textTransform: "capitalize" }]}>
-                {o.fulfillment_status === "fulfilled" ? "fulfilled" : o.status.replace("_", " ")}
-              </Text>
+              <View style={{ width: 100 }}>
+                {o.fulfillment_status === "fulfilled" ? (
+                  <Text style={styles.listCell}>fulfilled</Text>
+                ) : (
+                  <StatusPill status={o.status} />
+                )}
+              </View>
               <Text
                 style={[
                   styles.listCell,
@@ -229,20 +355,13 @@ function OrdersList() {
 }
 
 export default function OrdersBoard() {
-  const [tab, setTab] = useState<"board" | "list" | "fulfilled">("board");
+  const [tab, setTab] = useState<"date" | "list" | "fulfilled">("date");
 
-  const active = useQuery({
-    queryKey: ["orders", "active"],
-    queryFn: () => listOrders({ limit: 100, fulfillment_status: "pending" }),
-    enabled: tab === "board",
-  });
   const fulfilled = useQuery({
     queryKey: ["orders", "fulfilled"],
     queryFn: () => listOrders({ limit: 100, fulfillment_status: "fulfilled" }),
     enabled: tab === "fulfilled",
   });
-
-  const activeOrders: Order[] = (active.data?.items ?? []).filter((o: Order) => o.status !== "cancelled");
 
   return (
     <RequiresConnection>
@@ -252,14 +371,14 @@ export default function OrdersBoard() {
           right={
             <>
               <View style={styles.tabs}>
-                {(["board", "list", "fulfilled"] as const).map((t) => (
+                {(["date", "list", "fulfilled"] as const).map((t) => (
                   <Pressable
                     key={t}
                     style={[styles.tab, tab === t && styles.tabActive]}
                     onPress={() => setTab(t)}
                   >
                     <Text style={[styles.tabText, tab === t && styles.tabTextActive]}>
-                      {t === "board" ? "Board" : t === "list" ? "List / filter" : "Fulfilled"}
+                      {t === "date" ? "By date" : t === "list" ? "List / filter" : "Fulfilled"}
                     </Text>
                   </Pressable>
                 ))}
@@ -269,35 +388,14 @@ export default function OrdersBoard() {
           }
         />
 
-        {tab === "board" ? (
-          active.isLoading ? (
-            <Loading />
-          ) : active.isError ? (
-            <ErrorText>Couldn't load orders — retrying…</ErrorText>
-          ) : (
-            <View style={styles.board}>
-              {COLUMNS.map((col) => {
-                const cards = activeOrders.filter((o) => o.status === col.key);
-                return (
-                  <View key={col.key} style={styles.column}>
-                    <Text style={styles.columnTitle}>
-                      {col.label} <Text style={styles.count}>{cards.length}</Text>
-                    </Text>
-                    <ScrollView contentContainerStyle={{ gap: spacing.s, paddingBottom: spacing.l }}>
-                      {cards.map((o) => (
-                        <OrderCard key={o.id} order={o} />
-                      ))}
-                      {cards.length === 0 && <Text style={styles.colEmpty}>—</Text>}
-                    </ScrollView>
-                  </View>
-                );
-              })}
-            </View>
-          )
+        {tab === "date" ? (
+          <DateOrdersView />
         ) : tab === "list" ? (
           <OrdersList />
         ) : fulfilled.isLoading ? (
           <Loading />
+        ) : fulfilled.isError ? (
+          <ErrorText>Couldn't load orders — retrying…</ErrorText>
         ) : (
           <ScrollView contentContainerStyle={{ padding: spacing.l, gap: spacing.s }}>
             {(fulfilled.data?.items ?? []).map((o: Order) => (
@@ -320,11 +418,6 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: colors.bg },
   tabText: { color: colors.textMuted },
   tabTextActive: { color: colors.text, fontWeight: "600" },
-  board: { flex: 1, flexDirection: "row", gap: spacing.m, padding: spacing.l },
-  column: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.l, padding: spacing.m },
-  columnTitle: { fontWeight: "700", color: colors.text, marginBottom: spacing.s, fontSize: 15 },
-  count: { color: colors.textMuted },
-  colEmpty: { color: colors.textMuted, textAlign: "center", marginTop: spacing.m },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radius.m,
@@ -343,7 +436,16 @@ const styles = StyleSheet.create({
   unpaid: { color: colors.warn, fontSize: 11, fontWeight: "700" },
   cardTotal: { fontWeight: "700", color: colors.text, marginLeft: "auto" },
 
-  // ---- List / filter tab ----
+  statusPillBase: { alignSelf: "flex-start", paddingHorizontal: spacing.s, paddingVertical: 2, borderRadius: 999 },
+  statusPillText: { fontSize: 11, fontWeight: "700", textTransform: "capitalize" },
+  statusReadyBg: { backgroundColor: "#eaf3e9" },
+  statusReadyText: { color: colors.success },
+  statusPendingBg: { backgroundColor: "#faf3e3" },
+  statusPendingText: { color: colors.warn },
+  statusProgressBg: { backgroundColor: "#eef1f5" },
+  statusProgressText: { color: colors.textMuted },
+
+  // ---- filter cards / lists (shared by "By date" and "List / filter") ----
   filterCard: {
     backgroundColor: colors.surface,
     borderRadius: radius.l,

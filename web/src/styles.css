@@ -94,6 +94,9 @@ tr.overdue td { background: #fdf1ef; color: var(--danger); }
 .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
 .pill.unpaid { background: #faf3e3; color: var(--warn); }
 .pill.paid { background: #eaf3e9; color: var(--success); }
+.pill.status-ready { background: #eaf3e9; color: var(--success); text-transform: capitalize; }
+.pill.status-pending { background: #faf3e3; color: var(--warn); text-transform: capitalize; }
+.pill.status-progress { background: #eef1f5; color: var(--muted); text-transform: capitalize; }
 
 .muted { color: var(--muted); }
 .error { color: var(--danger); }

@@ -14,7 +14,7 @@ import { formatNeeded, neededDeadline } from "../order/dates";
 import { OrderHeaderFields, OrderItemsEditor } from "../order/OrderFormFields";
 import { buildUpdatePayload, draftFromOrder, draftTotal, validateEditDraft, type Draft } from "../order/orderDraft";
 
-const PIPELINE: Order["status"][] = ["pending", "in_progress", "ready"];
+const PIPELINE: Order["status"][] = ["pending", "ready"];
 const METHODS: PaymentMethod[] = ["cash", "card", "etransfer"];
 
 function isOverdue(o: Order): boolean {

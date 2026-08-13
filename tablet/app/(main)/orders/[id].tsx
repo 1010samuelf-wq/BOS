@@ -35,7 +35,7 @@ import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Card, ErrorText, Loading } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
 
-const PIPELINE: Order["status"][] = ["pending", "in_progress", "ready"];
+const PIPELINE: Order["status"][] = ["pending", "ready"];
 const METHODS: PaymentMethod[] = ["cash", "card", "etransfer"];
 
 function isOverdue(o: Order): boolean {

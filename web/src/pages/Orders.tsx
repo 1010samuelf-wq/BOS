@@ -1,6 +1,9 @@
-// Orders (§2A/§11): a status Board (Pending/In progress/Ready) and a filterable
-// List — product-name search, date range (order or needed-for), and status /
-// paid / fulfillment dropdowns with Clear. Overdue rows red; click → detail.
+// Orders (§2A/§11): a "By date" view — all outstanding orders sorted by
+// needed-for date, with Today/Tomorrow/This week/Custom preset filters — and a
+// filterable List — product-name search, date range (order or needed-for), and
+// status / paid / fulfillment dropdowns with Clear. Overdue rows red; click →
+// detail. Orders with no needed-for date always show (nothing to bucket them
+// into) rather than silently disappearing under a preset.
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -8,14 +11,8 @@ import { useNavigate } from "react-router-dom";
 
 import { listOrders } from "../api/endpoints";
 import type { Order, OrderStatus } from "../api/types";
-import { Loading, PageHead } from "../components/ui";
-import { formatNeeded, neededDeadline } from "../order/dates";
-
-const COLUMNS: { key: OrderStatus; label: string }[] = [
-  { key: "pending", label: "Pending" },
-  { key: "in_progress", label: "In progress" },
-  { key: "ready", label: "Ready" },
-];
+import { Loading, PageHead, Tabs } from "../components/ui";
+import { asDate, formatNeeded, neededDeadline } from "../order/dates";
 
 function isOverdue(o: Order): boolean {
   return (
@@ -26,22 +23,113 @@ function isOverdue(o: Order): boolean {
   );
 }
 
-function BoardCard({ o, onClick }: { o: Order; onClick: () => void }) {
-  const overdue = isOverdue(o);
-  const flags = o.notes.filter((n) => !n.done).length;
+function statusLabel(s: OrderStatus): string {
+  return s === "in_progress" ? "In progress" : s;
+}
+function statusPillClass(s: OrderStatus): string {
+  if (s === "ready") return "pill status-ready";
+  if (s === "in_progress") return "pill status-progress";
+  return "pill status-pending";
+}
+
+type DatePreset = "today" | "tomorrow" | "week" | "custom";
+
+function localDay(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function presetRange(preset: Exclude<DatePreset, "custom">): { from: string; to: string } {
+  const now = new Date();
+  if (preset === "today") return { from: localDay(now), to: localDay(now) };
+  if (preset === "tomorrow") {
+    const t = addDays(now, 1);
+    return { from: localDay(t), to: localDay(t) };
+  }
+  return { from: localDay(now), to: localDay(addDays(now, 6)) };
+}
+
+function DateOrdersView() {
+  const navigate = useNavigate();
+  const [preset, setPreset] = useState<DatePreset>("today");
+  const today = localDay(new Date());
+  const [customFrom, setCustomFrom] = useState(today);
+  const [customTo, setCustomTo] = useState(today);
+  const range = preset === "custom" ? { from: customFrom, to: customTo } : presetRange(preset);
+
+  const q = useQuery({
+    queryKey: ["orders", "outstanding"],
+    queryFn: () => listOrders({ limit: 200, fulfillment_status: "pending", exclude_cancelled: true }),
+  });
+
+  const rows = (q.data?.items ?? [])
+    .filter((o) => {
+      if (!o.needed_for_date) return true; // no date to bucket — always show
+      const day = localDay(asDate(o.needed_for_date));
+      return day >= range.from && day <= range.to;
+    })
+    .sort((a, b) => {
+      if (!a.needed_for_date && !b.needed_for_date) return 0;
+      if (!a.needed_for_date) return -1;
+      if (!b.needed_for_date) return 1;
+      return asDate(a.needed_for_date).getTime() - asDate(b.needed_for_date).getTime();
+    });
+
   return (
-    <button className="order-card" style={overdue ? { borderColor: "var(--danger)", background: "#fdf1ef" } : undefined} onClick={onClick}>
-      <div className="row">
-        <strong style={overdue ? { color: "var(--danger)" } : undefined}>#{o.id} {o.client_name}</strong>
-        {flags > 0 && <span style={{ marginLeft: "auto", color: "var(--warn)", fontSize: 12 }}>🚩{flags}</span>}
+    <div>
+      <div className="card">
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <Tabs
+            value={preset}
+            onChange={setPreset}
+            options={[
+              { key: "today", label: "Today" },
+              { key: "tomorrow", label: "Tomorrow" },
+              { key: "week", label: "This week" },
+              { key: "custom", label: "Custom range" },
+            ]}
+          />
+          {preset === "custom" && (
+            <>
+              <input className="input" type="date" style={{ maxWidth: 150 }} value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+              <input className="input" type="date" style={{ maxWidth: 150 }} value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            </>
+          )}
+        </div>
       </div>
-      <div className="muted" style={{ fontSize: 13 }}>{o.items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}</div>
-      <div className="row" style={{ marginTop: 4 }}>
-        <span className="muted" style={{ fontSize: 12, textTransform: "capitalize" }}>{o.fulfillment_type}</span>
-        {o.paid_status === "unpaid" && <span className="pill unpaid" style={{ marginLeft: 4 }}>UNPAID</span>}
-        <strong style={{ marginLeft: "auto" }}>${o.total}</strong>
-      </div>
-    </button>
+
+      {q.isLoading ? (
+        <Loading />
+      ) : (
+        <div className="card">
+          <table>
+            <thead>
+              <tr>
+                <th>Order</th><th>Client</th><th>Needed for</th><th>Items</th><th>Type</th><th>Status</th><th>Paid</th><th className="num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((o) => (
+                <tr key={o.id} className={isOverdue(o) ? "overdue" : ""} style={{ cursor: "pointer" }} onClick={() => navigate(`/orders/${o.id}`)}>
+                  <td>#{o.id}</td>
+                  <td>{o.client_name}</td>
+                  <td>{o.needed_for_date ? formatNeeded(o.needed_for_date) : "No date set"}</td>
+                  <td className="muted">{o.items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}</td>
+                  <td style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</td>
+                  <td><span className={statusPillClass(o.status)}>{statusLabel(o.status)}</span></td>
+                  <td><span className={`pill ${o.paid_status}`}>{o.paid_status}</span></td>
+                  <td className="num">${o.total}</td>
+                </tr>
+              ))}
+              {q.isSuccess && rows.length === 0 && <tr><td colSpan={8} className="muted">No orders in this range.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -86,7 +174,6 @@ function OrdersList() {
           <select className="input" style={{ maxWidth: 140 }} value={f.status} onChange={(e) => set({ status: e.target.value })}>
             <option value="">Any status</option>
             <option value="pending">Pending</option>
-            <option value="in_progress">In progress</option>
             <option value="ready">Ready</option>
             <option value="cancelled">Cancelled</option>
           </select>
@@ -120,7 +207,7 @@ function OrdersList() {
                   <td>{o.client_name}</td>
                   <td>{o.needed_for_date ? formatNeeded(o.needed_for_date) : "—"}</td>
                   <td style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</td>
-                  <td style={{ textTransform: "capitalize" }}>{o.fulfillment_status === "fulfilled" ? "fulfilled" : o.status.replace("_", " ")}</td>
+                  <td>{o.fulfillment_status === "fulfilled" ? "fulfilled" : <span className={statusPillClass(o.status)}>{statusLabel(o.status)}</span>}</td>
                   <td className={o.paid_status === "unpaid" ? "tone-low" : ""}>{o.paid_status}</td>
                   <td className="num">${o.total}</td>
                 </tr>
@@ -135,46 +222,23 @@ function OrdersList() {
 }
 
 export default function Orders() {
-  const [tab, setTab] = useState<"board" | "list">("board");
+  const [tab, setTab] = useState<"date" | "list">("date");
   const navigate = useNavigate();
-  const active = useQuery({
-    queryKey: ["orders", "active"],
-    queryFn: () => listOrders({ limit: 100, fulfillment_status: "pending" }),
-    enabled: tab === "board",
-  });
-  const activeOrders = (active.data?.items ?? []).filter((o) => o.status !== "cancelled");
 
   return (
     <div className="page">
       <PageHead title="Orders">
         <div className="tabs">
-          {(["board", "list"] as const).map((t) => (
+          {(["date", "list"] as const).map((t) => (
             <button key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-              {t === "board" ? "Board" : "List / filter"}
+              {t === "date" ? "By date" : "List / filter"}
             </button>
           ))}
         </div>
         <button className="btn primary" onClick={() => navigate("/orders/new")}>＋ New order</button>
       </PageHead>
 
-      {tab === "board" ? (
-        active.isLoading ? <Loading /> : (
-          <div className="board">
-            {COLUMNS.map((col) => {
-              const cards = activeOrders.filter((o) => o.status === col.key);
-              return (
-                <div key={col.key} className="board-col">
-                  <div className="board-col-title">{col.label} <span className="muted">{cards.length}</span></div>
-                  {cards.map((o) => <BoardCard key={o.id} o={o} onClick={() => navigate(`/orders/${o.id}`)} />)}
-                  {cards.length === 0 && <div className="muted" style={{ textAlign: "center" }}>—</div>}
-                </div>
-              );
-            })}
-          </div>
-        )
-      ) : (
-        <OrdersList />
-      )}
+      {tab === "date" ? <DateOrdersView /> : <OrdersList />}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 // all day, or shifting a calendar day due to timezone parsing. Mirrors
 // web/src/order/dates.ts.
 
-function asDate(iso: string): Date {
+export function asDate(iso: string): Date {
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     const [y, m, d] = iso.split("-").map(Number);
     return new Date(y, m - 1, d);

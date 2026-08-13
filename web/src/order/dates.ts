@@ -8,7 +8,7 @@
  * so build it from parts as *local* midnight instead. Full datetimes without a
  * zone are already parsed as local.
  */
-function asDate(iso: string): Date {
+export function asDate(iso: string): Date {
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     const [y, m, d] = iso.split("-").map(Number);
     return new Date(y, m - 1, d);
