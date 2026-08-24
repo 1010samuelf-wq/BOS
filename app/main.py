@@ -12,6 +12,7 @@ from app.core.errors import register_error_handlers
 from app.core.logging import RequestLogMiddleware, configure_logging
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.realtime import broadcaster
+from app.core.headers import SecurityHeadersMiddleware
 
 
 class ProxyFormPathNormalizer:
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(RequestLogMiddleware)
     app.add_middleware(RateLimitMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
     # CORS added last → outermost, so browser preflight (OPTIONS) is answered
     # before auth/rate-limit. Lets the web dashboard call the API cross-origin;
     # the React Native tablet isn't subject to CORS. (spec §1 — same API, both

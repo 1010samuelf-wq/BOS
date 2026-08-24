@@ -52,6 +52,17 @@ def test_request_id_header_present_and_honoured(client):
     assert r.headers.get("x-request-id") == "trace-abc-123"
 
 
+def test_api_security_headers_are_present(client):
+    r = client.get("/api/v1/health")
+    assert r.headers["strict-transport-security"] == (
+        "max-age=31536000; includeSubDomains"
+    )
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["x-frame-options"] == "DENY"
+    assert r.headers["referrer-policy"] == "no-referrer"
+    assert "camera=()" in r.headers["permissions-policy"]
+
+
 def _boom_app() -> FastAPI:
     app = FastAPI()
     app.add_middleware(RequestLogMiddleware)
