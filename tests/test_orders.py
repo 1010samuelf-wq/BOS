@@ -15,6 +15,22 @@ def test_create_order_computes_total_and_marks_paid(client, make_product):
     assert order["items"][0]["product_name"] == "Croissant"
 
 
+def test_order_response_exposes_updated_at(client, make_product):
+    """The tablet's offline edit flow needs `updated_at` in every order
+    response to detect "changed elsewhere while offline" (see
+    tests/test_sync.py's CAS tests) — confirm it's actually on the wire, not
+    just present on the ORM model."""
+    p = make_product()
+    created = client.post("/api/v1/orders", json=order_payload(p["id"], "key-updated-at")).json()
+    assert "updated_at" in created and created["updated_at"]
+
+    fetched = client.get(f"/api/v1/orders/{created['id']}").json()
+    assert fetched["updated_at"] == created["updated_at"]
+
+    edited = client.put(f"/api/v1/orders/{created['id']}", json={"client_name": "New Name"}).json()
+    assert edited["updated_at"] != created["updated_at"]  # bumped on write
+
+
 def test_idempotent_resubmit_returns_same_order(client, make_product):
     p = make_product()
     body = order_payload(p["id"], "key-idem")

@@ -11,6 +11,7 @@ import { unreadCount } from "../../src/api/endpoints";
 import { useAuth } from "../../src/auth/AuthContext";
 import { OfflineBanner, ToastStack } from "../../src/components/Chrome";
 import { colors, radius, spacing } from "../../src/components/theme";
+import { useConnectivity } from "../../src/offline/connectivity";
 
 const RAIL = [
   { href: "/(main)/orders", label: "Orders", icon: "🧾" },
@@ -27,6 +28,7 @@ const RAIL = [
 
 export default function MainLayout() {
   const { user, ready, logout } = useAuth();
+  const { manualOffline, setManualOffline } = useConnectivity();
   const pathname = usePathname();
   const unread = useQuery({
     queryKey: ["notifications", "unread-count"],
@@ -65,6 +67,14 @@ export default function MainLayout() {
             );
           })}
         </ScrollView>
+        <Pressable
+          style={[styles.offlineToggle, manualOffline && styles.offlineToggleActive]}
+          onPress={() => setManualOffline(!manualOffline)}
+        >
+          <Text style={[styles.offlineToggleText, manualOffline && styles.offlineToggleTextActive]}>
+            {manualOffline ? "Working offline" : "Work offline"}
+          </Text>
+        </Pressable>
         <Pressable style={styles.user} onPress={() => void logout()}>
           <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.userAction}>log out</Text>
@@ -121,6 +131,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  offlineToggle: {
+    marginHorizontal: spacing.s,
+    marginBottom: spacing.s,
+    paddingVertical: spacing.s,
+    borderRadius: radius.m,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  offlineToggleActive: { backgroundColor: colors.warn, borderColor: colors.warn },
+  offlineToggleText: { fontSize: 11, fontWeight: "600", color: colors.textMuted },
+  offlineToggleTextActive: { color: "#fff" },
   user: {
     alignItems: "center",
     padding: spacing.m,

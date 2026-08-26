@@ -104,6 +104,7 @@ export interface Order {
   status: OrderStatus;
   fulfillment_status: FulfillmentStatus;
   stock_reversed: boolean;
+  updated_at?: string;
   total: string;
   locked_by: number | null;
   items: OrderItemOut[];
@@ -349,3 +350,23 @@ export type RealtimeEvent =
         related_item_id: number | null;
       };
     };
+
+// POST /api/v1/sync/replay (offline write-queue flush).
+export interface SyncOpIn {
+  client_op_id: string;
+  type: string;
+  acting_user_id: number;
+  queued_at: string | null;
+  payload: unknown;
+  expected_updated_at: string | null;
+}
+export interface SyncOpResult {
+  client_op_id: string;
+  status: "applied" | "already_applied" | "conflict" | "rejected";
+  data: unknown | null;
+  current: unknown | null;
+  error: { code: string; message: string } | null;
+}
+export interface SyncReplayOut {
+  results: SyncOpResult[];
+}

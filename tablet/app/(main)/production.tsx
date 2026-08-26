@@ -8,11 +8,12 @@ import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getProduction } from "../../src/api/endpoints";
-import type { ProductionRow } from "../../src/api/types";
-import { RequiresConnection } from "../../src/components/Chrome";
+import type { ProductionReport, ProductionRow } from "../../src/api/types";
 import { Empty, Loading, ScreenHeader } from "../../src/components/ui";
 import { DateField } from "../../src/components/DateTimeField";
 import { colors, radius, spacing } from "../../src/components/theme";
+import { formatRelative } from "../../src/order/dates";
+import { useOfflineSnapshot } from "../../src/offline/useOfflineSnapshot";
 
 type Preset = "today" | "tomorrow" | "week" | "upcoming" | "custom";
 
@@ -47,9 +48,9 @@ export default function ProductionScreen() {
     queryFn: () => getProduction({ from: r.from, to: r.to }),
     enabled: preset !== "custom" || (!!customFrom && !!customTo && customFrom <= customTo),
   });
+  const snap = useOfflineSnapshot<ProductionReport>("bos.snapshot.production", prod.data);
 
   return (
-    <RequiresConnection>
       <View style={styles.screen}>
         <ScreenHeader
           title="Production"
@@ -75,8 +76,17 @@ export default function ProductionScreen() {
             <DateField value={customTo} onChange={setCustomTo} style={{ flex: 1 }} />
           </View>
         )}
-        {prod.isLoading ? (
+        {snap.usingSnapshot && snap.fetchedAt && (
+          <View style={styles.staleBanner}>
+            <Text style={styles.staleText}>
+              Offline — showing data as of {formatRelative(snap.fetchedAt)}, may not reflect this exact range.
+            </Text>
+          </View>
+        )}
+        {prod.isLoading && !snap.data ? (
           <Loading />
+        ) : !snap.data ? (
+          <Empty>No data cached yet — connect once to load the bake list.</Empty>
         ) : (
           <ScrollView contentContainerStyle={{ padding: spacing.l, gap: spacing.s }}>
             <View style={[styles.row, styles.headRow]}>
@@ -86,7 +96,7 @@ export default function ProductionScreen() {
               <Text style={[styles.h, styles.cNum]}>In stock</Text>
               <Text style={[styles.h, styles.cNum, styles.bakeH]}>To bake</Text>
             </View>
-            {(prod.data?.rows ?? []).map((row: ProductionRow) => (
+            {snap.data.rows.map((row: ProductionRow) => (
               <View key={row.product_id} style={styles.row}>
                 <Text style={styles.cName}>{row.product_name}</Text>
                 <Text style={styles.cNum}>{row.total_quantity}</Text>
@@ -95,25 +105,32 @@ export default function ProductionScreen() {
                 <Text style={[styles.cNum, styles.bake]}>{row.to_bake}</Text>
               </View>
             ))}
-            {prod.data && prod.data.rows.length > 0 && (
+            {snap.data.rows.length > 0 && (
               <View style={[styles.row, styles.totalRow]}>
                 <Text style={[styles.cName, styles.totalText]}>TOTAL</Text>
-                <Text style={[styles.cNum, styles.totalText]}>{prod.data.total_needed}</Text>
+                <Text style={[styles.cNum, styles.totalText]}>{snap.data.total_needed}</Text>
                 <Text style={styles.cNum} />
                 <Text style={styles.cNum} />
-                <Text style={[styles.cNum, styles.bake, styles.totalText]}>{prod.data.total_to_bake}</Text>
+                <Text style={[styles.cNum, styles.bake, styles.totalText]}>{snap.data.total_to_bake}</Text>
               </View>
             )}
-            {prod.isSuccess && (prod.data?.rows.length ?? 0) === 0 && <Empty>Nothing to bake for this range.</Empty>}
+            {snap.data.rows.length === 0 && <Empty>Nothing to bake for this range.</Empty>}
           </ScrollView>
         )}
       </View>
-    </RequiresConnection>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  staleBanner: {
+    marginHorizontal: spacing.l,
+    marginTop: spacing.m,
+    padding: spacing.s,
+    borderRadius: radius.m,
+    backgroundColor: colors.warn,
+  },
+  staleText: { color: "#fff", fontSize: 12, fontWeight: "600", textAlign: "center" },
   tabs: { flexDirection: "row", gap: spacing.xs },
   tab: { paddingHorizontal: spacing.m, paddingVertical: spacing.s, borderRadius: radius.m },
   tabActive: { backgroundColor: colors.bg },

@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
+    settings.validate_for_runtime()
 
     app = FastAPI(
         title="Bakery Operations System API",

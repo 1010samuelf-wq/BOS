@@ -4,7 +4,7 @@
 // method pills, Card notes modal) is specific to creating an order. All order
 // math lives in src/order/orderDraft.ts.
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -19,9 +19,8 @@ import {
 } from "react-native";
 
 import { ApiRequestError } from "../../../src/api/client";
-import { createOrder } from "../../../src/api/endpoints";
+import { useOfflineMutation } from "../../../src/offline/useOfflineMutation";
 import type { PaymentMethod } from "../../../src/api/types";
-import { RequiresConnection } from "../../../src/components/Chrome";
 import { colors, radius, spacing } from "../../../src/components/theme";
 import { OrderHeaderFields, OrderItemsEditor, styles as fieldStyles } from "../../../src/order/OrderFormFields";
 import {
@@ -45,8 +44,7 @@ export default function NewOrderScreen() {
   const [problems, setProblems] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
-  const submit = useMutation({
-    mutationFn: createOrder,
+  const submit = useOfflineMutation("orders.create", {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["orders"] });
       router.replace("/(main)/orders" as never);
@@ -76,7 +74,7 @@ export default function NewOrderScreen() {
   };
 
   return (
-    <RequiresConnection>
+    <>
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.l, gap: spacing.l }}>
         <Text style={styles.title}>New order</Text>
 
@@ -187,7 +185,7 @@ export default function NewOrderScreen() {
           </View>
         </View>
       </Modal>
-    </RequiresConnection>
+    </>
   );
 }
 

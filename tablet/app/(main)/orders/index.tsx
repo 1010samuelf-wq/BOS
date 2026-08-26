@@ -10,7 +10,6 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 
 import { listOrders } from "../../../src/api/endpoints";
 import type { Order, OrderStatus } from "../../../src/api/types";
-import { RequiresConnection } from "../../../src/components/Chrome";
 import { Button, Empty, ErrorText, Loading, ScreenHeader } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
 import { asDate, formatNeeded, neededDeadline } from "../../../src/order/dates";
@@ -372,7 +371,6 @@ export default function OrdersBoard() {
   });
 
   return (
-    <RequiresConnection>
       <View style={styles.screen}>
         <ScreenHeader
           title="Orders"
@@ -415,7 +413,6 @@ export default function OrdersBoard() {
           </ScrollView>
         )}
       </View>
-    </RequiresConnection>
   );
 }
 

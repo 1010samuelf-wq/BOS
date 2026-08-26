@@ -25,11 +25,27 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ### Required config (see `.env.example`)
+
+Set `BOS_ENV=production` (or `BOS_ENV=prod`) in the deployed environment. The API now fails fast unless production uses a unique JWT secret of at least 32 bytes, PostgreSQL, and non-local CORS origins.
 - **`BOS_DATABASE_URL`** — Postgres DSN.
 - **`BOS_JWT_SECRET`** — **must** be a strong, ≥32-byte value. The dev default is
   intentionally insecure.
 - `BOS_RATE_LIMIT_PER_MINUTE`, `BOS_JWT_EXPIRE_MINUTES`, `BOS_LOG_LEVEL` — tune as
   needed.
+- **`BOS_CORS_ORIGINS`** — comma-separated HTTPS dashboard origins in production.
+
+### Preflight checklist
+
+```bash
+alembic upgrade head
+.venv/Scripts/python.exe -m pytest
+cd tablet && npx tsc --noEmit && npm test -- --runInBand
+cd ../web && npm run typecheck && npm run build
+```
+
+Before release, verify `/api/v1/health` from the deployed URL, exercise login and
+one order create/edit/replay path, and confirm the tablet's offline queue and Sync
+Review screen on a real Android device.
 
 ### Hardening (spec §6)
 - **HTTPS only.** Terminate TLS at a reverse proxy (nginx/Caddy/ALB) in front of

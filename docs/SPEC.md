@@ -3,18 +3,18 @@
 > **Canonical in-repo copy.** Kept in sync with the build. Reconciled with the
 > as-built system on 2026-07-07 — see the change note in §7 (Web dashboard scope).
 
-**Purpose:** A bakery management platform running on two Android tablets and a central server, handling order taking, inventory tracking, bookkeeping, and reporting. Tablets are **always-online, thin clients** — no offline mode, no local write queue, no conflict resolution needed, since the server is the single source of truth at all times.
+**Purpose:** A bakery management platform running on two Android tablets and a central server, handling order taking, inventory tracking, bookkeeping, and reporting. Tablets are thin clients with an offline-aware write queue for floor-critical order and task actions. Reads use the persisted query cache; queued writes replay on reconnect, with explicit conflict review for stale order edits. The server remains the source of truth.
 
 ---
 
 ## 1. System Overview
 
-- **Two Android tablet apps** — React Native, always connected to the server over local network or internet. If connectivity drops, the app shows a clear "offline — reconnect to continue" state and blocks order/stock actions until connection is restored. No local queue, no background sync. **This is the full app** — every screen designed in §11 (orders, status board, stock, employee hours + clock-in/out, deliveries, production summary, tasks, notifications, admin/settings) lives here, since this is what staff use all day on the shop floor. It is not just an order-entry screen.
+- **Two Android tablet apps** — React Native, normally connected to the server over local network or internet. If connectivity drops, persisted reads remain available where cached and floor-critical writes are queued locally for replay. Order edits include optimistic version checks and conflicts remain available for review. **This is the full app** — every screen designed in §11 (orders, status board, stock, employee hours + clock-in/out, deliveries, production summary, tasks, notifications, admin/settings) lives here, since this is what staff use all day on the shop floor.
 - **Web dashboard** — a browser-based client (any laptop/phone/computer, not just the two shop tablets), hitting the same FastAPI backend and same PIN login as the tablets. It is a **full client at parity with the tablet**: every §11 screen, **including order-taking, clock-in/out, and first-login PIN setup**, so an employee can do their whole job from a browser. *(This reverses the original design, which kept order-taking and clock-in/out tablet-only and treated the web as an oversight-only companion. The trade-off — the POS is now reachable from any browser with a valid PIN, not just the physical shop devices — is accepted; role/section permissions are still enforced server-side. See §7.)*
 - **Backend server** — Python + FastAPI, Linux-hosted, exposes REST API, owns all business logic (stock deduction, cost calc, reporting). Same API serves the tablets and the web dashboard — no duplicated business logic between clients.
 - **Database** — PostgreSQL. Single source of truth for orders, products, ingredients, recipes, stock, expenses, reports, users.
 
-Removing offline mode eliminates the hardest problem in the original design (conflict resolution across two devices editing the same stock/order asynchronously). The server now simply serializes every write.
+Offline mode is intentionally limited to floor-critical writes; the server remains authoritative and serializes replayed writes. Stale order edits return a conflict with the current server order rather than silently overwriting another device's changes.
 
 Stock is treated as **informational, not a hard gate**: since stock entry won't always be kept perfectly up to date, an order can always be placed even if it would take an ingredient or product below zero. Stock levels simply go negative and low-stock alerts fire — they never block a sale.
 
@@ -81,10 +81,11 @@ Stock is treated as **informational, not a hard gate**: since stock entry won't 
 - PIN entry issues a short-lived JWT session token, standard for a shared shift device
 - **Admin can reset a forgotten PIN** — a reset clears the employee's PIN and puts their account back into "first login" state, so they set a new one themselves the same way as when first added. Without this, a forgotten PIN would permanently lock an employee out
 
-### F. Connectivity Handling (replaces old "Sync & Offline" module)
+### F. Connectivity Handling and Offline Sync
+
+Offline queue scope: order creation, order edits/actions, task completion, and clock in/out. The backend is authoritative; stale order edits return the current order for review.
 - Tablets poll or hold a WebSocket connection to the server for live order/stock updates across devices
-- On connection loss: app locks new order/stock actions, shows reconnect banner, auto-retries connection
-- No local persistence of unsynced writes — nothing to reconcile once reconnected, by design
+- On connection loss: the app shows an offline banner, serves persisted reads where available, and queues floor-critical writes for replay on reconnect. Order conflicts and rejected operations remain in Sync Review until resolved.
 
 ### G. Employee Management & Time Tracking (new)
 - **Admin can add/edit/remove employees**, assigning each a role and a login PIN
@@ -202,7 +203,7 @@ Order cancellations record whether stock was reversed (`orders.stock_reversed: b
 - Role-based permissions enforced server-side on every endpoint
 - HTTPS only
 - Daily encrypted DB backups
-- No local encrypted storage needed on tablets (no offline data to protect) — reduces attack surface
+- Offline queue and persisted query cache contain operational data and must use the platform's protected app storage; logout must not discard unsynced work.
 
 ---
 

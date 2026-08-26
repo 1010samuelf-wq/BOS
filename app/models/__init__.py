@@ -25,6 +25,7 @@ from app.models.catalog import Ingredient, Product, Recipe, RecipeItem
 from app.models.order import Order, OrderItem, OrderNote
 from app.models.settings import AppSettings
 from app.models.stock import StockAdjustment, StockLevel
+from app.models.sync import SyncedOperation
 from app.models.user import User
 from app.models.misc import (
     DailyReport,
@@ -60,6 +61,7 @@ __all__ = [
     "AppSettings",
     "StockAdjustment",
     "StockLevel",
+    "SyncedOperation",
     "User",
     "DailyReport",
     "Expense",

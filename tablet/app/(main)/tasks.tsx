@@ -8,14 +8,15 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { ApiRequestError } from "../../src/api/client";
-import { createTask, fetchRoster, listTasks, toggleTaskDone } from "../../src/api/endpoints";
+import { createTask, fetchRoster, listTasks } from "../../src/api/endpoints";
 import type { RosterEntry, Task } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
-import { RequiresConnection } from "../../src/components/Chrome";
 import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 import { formatDate } from "../../src/order/dates";
+import { useConnectivity } from "../../src/offline/connectivity";
+import { useOfflineMutation } from "../../src/offline/useOfflineMutation";
 
 function TaskRow({ task, name, onToggle }: { task: Task; name?: string; onToggle: () => void }) {
   return (
@@ -40,6 +41,7 @@ export default function TasksScreen() {
   const { user } = useAuth();
   const isManager = user?.role === "admin" || user?.role === "manager";
   const queryClient = useQueryClient();
+  const { isOffline } = useConnectivity();
   const [error, setError] = useState<string | null>(null);
 
   const mine = useQuery({ queryKey: ["tasks", "mine"], queryFn: () => listTasks({ employee_id: user?.id }) });
@@ -66,9 +68,8 @@ export default function TasksScreen() {
     return (id: number) => m.get(id) ?? `#${id}`;
   }, [roster.data]);
 
-  const toggle = useMutation({
-    mutationFn: (id: number) => toggleTaskDone(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+  const toggle = useOfflineMutation("tasks.setDone", {
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["tasks"] }),
     onError: (e) => setError(e instanceof ApiRequestError ? e.message : "Update failed."),
   });
 
@@ -98,7 +99,6 @@ export default function TasksScreen() {
   });
 
   return (
-    <RequiresConnection>
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.l, gap: spacing.l }}>
         <ScreenHeader title="Tasks" />
         {error && <ErrorText>{error}</ErrorText>}
@@ -111,7 +111,7 @@ export default function TasksScreen() {
             <Text style={styles.muted}>Nothing assigned to you.</Text>
           ) : (
             (mine.data ?? []).map((t: Task) => (
-              <TaskRow key={t.id} task={t} onToggle={() => toggle.mutate(t.id)} />
+              <TaskRow key={t.id} task={t} onToggle={() => toggle.mutate({ task_id: t.id, done: !t.done })} />
             ))
           )}
         </Card>
@@ -151,7 +151,7 @@ export default function TasksScreen() {
               <Button
                 label="Create task"
                 busy={create.isPending}
-                disabled={!title.trim() || assignee === null}
+                disabled={!title.trim() || assignee === null || isOffline}
                 onPress={() => create.mutate()}
               />
             </Card>
@@ -210,14 +210,13 @@ export default function TasksScreen() {
                 <Text style={styles.muted}>No matching tasks.</Text>
               ) : (
                 (all.data ?? []).map((t: Task) => (
-                  <TaskRow key={t.id} task={t} name={nameOf(t.assigned_to)} onToggle={() => toggle.mutate(t.id)} />
+                  <TaskRow key={t.id} task={t} name={nameOf(t.assigned_to)} onToggle={() => toggle.mutate({ task_id: t.id, done: !t.done })} />
                 ))
               )}
             </Card>
           </>
         )}
       </ScrollView>
-    </RequiresConnection>
   );
 }
 

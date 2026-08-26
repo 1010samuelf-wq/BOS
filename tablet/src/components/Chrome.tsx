@@ -1,30 +1,48 @@
-// App chrome shared across screens: the offline lock banner (§2F) and the
-// notification toast stack (§2H). Rendered once in the main layout.
+// App chrome shared across screens: the offline/sync-status banner and the
+// notification toast stack (§2F/§2H). Rendered once in the main layout.
 
+import { router } from "expo-router";
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useConnectivity } from "../offline/connectivity";
+import { useOutbox } from "../offline/OutboxProvider";
 import { useRealtime } from "../realtime/RealtimeProvider";
 import { colors, radius, spacing } from "./theme";
 
 export function OfflineBanner() {
-  const { online } = useRealtime();
-  if (online) return null;
+  const { isOffline } = useConnectivity();
+  const { pendingCount, problemCount } = useOutbox();
+
+  if (problemCount > 0) {
+    return (
+      <Pressable style={styles.problem} onPress={() => router.navigate("/(main)/sync-review" as never)}>
+        <Text style={styles.problemText}>
+          {problemCount} change{problemCount === 1 ? "" : "s"} couldn't sync automatically — tap to review
+        </Text>
+      </Pressable>
+    );
+  }
+  if (!isOffline) return null;
   return (
     <View style={styles.offline}>
       <Text style={styles.offlineText}>
-        Offline — reconnect to continue. Order and stock actions are locked.
+        Offline{pendingCount > 0 ? ` — ${pendingCount} action${pendingCount === 1 ? "" : "s"} queued, will sync when reconnected` : " — you can keep working"}
       </Text>
     </View>
   );
 }
 
-/** Blocks interaction with children while the socket is down (spec §1/§2F). */
+/** Blocks interaction with children while offline — reserved for screens that
+ * haven't been made offline-capable (admin/back-office: Settings, Employees,
+ * Bookkeeping, Notifications). Offline-capable screens (Orders, Production,
+ * Deliveries, Time, Tasks) don't use this anymore — they read cached data and
+ * queue writes instead. */
 export function RequiresConnection({ children }: { children: React.ReactNode }) {
-  const { online } = useRealtime();
+  const { isOffline } = useConnectivity();
   return (
-    <View style={{ flex: 1 }} pointerEvents={online ? "auto" : "none"}>
-      <View style={{ flex: 1, opacity: online ? 1 : 0.45 }}>{children}</View>
+    <View style={{ flex: 1 }} pointerEvents={isOffline ? "none" : "auto"}>
+      <View style={{ flex: 1, opacity: isOffline ? 0.45 : 1 }}>{children}</View>
     </View>
   );
 }
@@ -45,11 +63,17 @@ export function ToastStack() {
 
 const styles = StyleSheet.create({
   offline: {
-    backgroundColor: colors.danger,
+    backgroundColor: colors.warn,
     paddingVertical: spacing.s,
     paddingHorizontal: spacing.l,
   },
   offlineText: { color: "#fff", textAlign: "center", fontWeight: "600" },
+  problem: {
+    backgroundColor: colors.danger,
+    paddingVertical: spacing.s,
+    paddingHorizontal: spacing.l,
+  },
+  problemText: { color: "#fff", textAlign: "center", fontWeight: "700" },
   toastStack: {
     position: "absolute",
     top: spacing.l,

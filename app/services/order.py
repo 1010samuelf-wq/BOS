@@ -221,8 +221,35 @@ def release_lock(db: Session, order_id: int, user: User) -> Order:
 # ----------------------------------------------------------------------------
 # update
 # ----------------------------------------------------------------------------
-def update_order(db: Session, order_id: int, payload: OrderUpdate, user: User) -> Order:
+def update_order(
+    db: Session,
+    order_id: int,
+    payload: OrderUpdate,
+    user: User,
+    *,
+    expected_updated_at: datetime | None = None,
+) -> Order:
     order = _load(db, order_id, lock=True)
+
+    # Optimistic-concurrency check for offline-queued edits (spec: offline
+    # sync) — the tablet captured `updated_at` when it last saw this order;
+    # if the row moved since (edited elsewhere while this tablet was offline),
+    # replaying blind would silently clobber that change. Checked under the
+    # row lock just taken above, so there's no gap between compare and write.
+    # Live (online) edits never pass this — 409 only reachable via replay.
+    if expected_updated_at is not None:
+        server_ts = order.updated_at
+        if server_ts.tzinfo is None:  # SQLite drops tzinfo on round-trip
+            server_ts = server_ts.replace(tzinfo=timezone.utc)
+        expected = expected_updated_at
+        if expected.tzinfo is None:
+            expected = expected.replace(tzinfo=timezone.utc)
+        if server_ts != expected:
+            raise conflict(
+                "This order was changed elsewhere since you last saw it.",
+                code="stale_version",
+            )
+
     if order.status == OrderStatus.cancelled:
         raise bad_request("Cancelled orders cannot be edited.", code="order_cancelled")
 

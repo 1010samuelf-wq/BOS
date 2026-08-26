@@ -31,7 +31,8 @@ import {
   type Draft,
 } from "../../../src/order/orderDraft";
 import { useAuth } from "../../../src/auth/AuthContext";
-import { RequiresConnection } from "../../../src/components/Chrome";
+import { useConnectivity } from "../../../src/offline/connectivity";
+import { useOfflineMutation } from "../../../src/offline/useOfflineMutation";
 import { Button, Card, ErrorText, Loading } from "../../../src/components/ui";
 import { colors, radius, spacing } from "../../../src/components/theme";
 
@@ -52,6 +53,7 @@ export default function OrderDetail() {
   const orderId = Number(id);
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { isOffline } = useConnectivity();
   const [cancelOpen, setCancelOpen] = useState(false);
   const [reverseStock, setReverseStock] = useState(true);
   const [payOpen, setPayOpen] = useState(false);
@@ -71,42 +73,45 @@ export default function OrderDetail() {
     void queryClient.invalidateQueries({ queryKey: ["orders"] });
   };
   const onErr = (e: unknown) => setActionError(e instanceof ApiRequestError ? e.message : "Action failed.");
-  const run = <A extends unknown[]>(fn: (...a: A) => Promise<unknown>) =>
-    useMutation({
-      mutationFn: (args: A) => fn(...args),
-      onSuccess: invalidate,
-      onError: onErr,
-    });
-
-  const setStatus = run((s: string) => api.updateOrder(orderId, { status: s }));
-  const toggleNote = run((noteId: number) => api.toggleNoteDone(orderId, noteId));
-  const addNote = run((text: string) => api.addNote(orderId, text));
-  const markPaid = run((m?: string) => api.markPaid(orderId, m));
-  const fulfill = run(() => api.fulfillOrder(orderId));
-  const cancel = run((rev: boolean) => api.cancelOrder(orderId, rev));
+  const setStatus = useOfflineMutation("orders.update", { onSuccess: invalidate, onError: onErr });
+  const toggleNote = useOfflineMutation("orders.toggleNote", { onSuccess: invalidate, onError: onErr });
+  const addNote = useOfflineMutation("orders.addNote", { onSuccess: invalidate, onError: onErr });
+  const markPaid = useOfflineMutation("orders.markPaid", { onSuccess: invalidate, onError: onErr });
+  const fulfill = useOfflineMutation("orders.fulfill", { onSuccess: invalidate, onError: onErr });
+  const cancel = useOfflineMutation("orders.cancel", { onSuccess: invalidate, onError: onErr });
   const del = useMutation({
     mutationFn: () => api.deleteOrder(orderId),
     onSuccess: () => { invalidate(); router.back(); },
     onError: onErr,
   });
 
+  // The lock/release-lock dance is a live coordination mutex for two
+  // *currently online* editors — acquiring or releasing it minutes-to-hours
+  // later via replay would be meaningless (or could wrongly block the other
+  // tablet's live edit), so it's never queued. Offline, editing just skips
+  // it entirely and relies on the CAS check below (expectedUpdatedAt) as the
+  // real conflict guard.
   const startEdit = useMutation({
-    mutationFn: (o: Order) => api.lockOrder(orderId).then(() => o),
+    mutationFn: (o: Order) => (isOffline ? Promise.resolve(o) : api.lockOrder(orderId).then(() => o)),
     onSuccess: (o) => { setDraft(draftFromOrder(o)); setEditProblems([]); setEditing(true); },
     onError: onErr,
   });
-  const saveEdit = useMutation({
-    mutationFn: (d: Draft) => api.updateOrder(orderId, buildUpdatePayload(d)),
+  const saveEdit = useOfflineMutation("orders.update", {
     onSuccess: () => {
-      void api.releaseLock(orderId);
+      if (!isOffline) void api.releaseLock(orderId);
       setEditing(false);
       setDraft(null);
       invalidate();
     },
     onError: onErr,
   });
+  // Carries the order version this screen last saw, so a stale offline edit
+  // (the order changed elsewhere while this tablet was disconnected) comes
+  // back as a conflict to review instead of silently overwriting it.
+  const saveEditWithVersion = (d: Draft) =>
+    saveEdit.mutate({ order_id: orderId, patch: buildUpdatePayload(d), expectedUpdatedAt: o.updated_at ?? null });
   const cancelEdit = () => {
-    void api.releaseLock(orderId).catch(() => { /* best-effort */ });
+    if (!isOffline) void api.releaseLock(orderId).catch(() => { /* best-effort */ });
     setEditing(false);
     setDraft(null);
     setEditProblems([]);
@@ -115,16 +120,16 @@ export default function OrderDetail() {
     if (!draft) return;
     const problems = validateEditDraft(draft);
     setEditProblems(problems);
-    if (problems.length === 0) saveEdit.mutate(draft);
+    if (problems.length === 0) saveEditWithVersion(draft);
   };
 
   // If the screen closes or the app backgrounds mid-edit, release the lock
   // rather than leaving the order stuck read-only for everyone else.
   useEffect(() => {
     return () => {
-      if (editingRef.current) void api.releaseLock(orderId).catch(() => { /* best-effort */ });
+      if (editingRef.current && !isOffline) void api.releaseLock(orderId).catch(() => { /* best-effort */ });
     };
-  }, [orderId]);
+  }, [orderId, isOffline]);
 
   if (q.isLoading) return <Loading />;
   if (q.isError || !q.data) return <ErrorText>Couldn't load order #{orderId}.</ErrorText>;
@@ -136,7 +141,7 @@ export default function OrderDetail() {
   const canEdit = o.status !== "cancelled" && !lockedByOther;
 
   return (
-    <RequiresConnection>
+    <>
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.l, gap: spacing.l }}>
         <Pressable onPress={() => router.back()}>
           <Text style={styles.back}>← Orders</Text>
@@ -240,7 +245,7 @@ export default function OrderDetail() {
           <Text style={styles.section}>Notes</Text>
           {o.notes.length === 0 && <Text style={styles.muted}>No notes.</Text>}
           {o.notes.map((n) => (
-            <Pressable key={n.id} style={styles.note} onPress={() => toggleNote.mutate([n.id])}>
+            <Pressable key={n.id} style={styles.note} onPress={() => toggleNote.mutate({ order_id: orderId, note_id: n.id, done: !n.done })}>
               <View style={[styles.checkbox, n.done && styles.checkboxOn]}>
                 {n.done && <Text style={styles.check}>✓</Text>}
               </View>
@@ -262,7 +267,7 @@ export default function OrderDetail() {
               tone="neutral"
               disabled={!newNote.trim()}
               onPress={() => {
-                addNote.mutate([newNote.trim()]);
+                addNote.mutate({ order_id: orderId, text: newNote.trim() });
                 setNewNote("");
               }}
             />
@@ -278,7 +283,7 @@ export default function OrderDetail() {
                 <Pressable
                   key={s}
                   style={[styles.stage, o.status === s && styles.stageActive]}
-                  onPress={() => setStatus.mutate([s])}
+                  onPress={() => setStatus.mutate({ order_id: orderId, patch: { status: s }, expectedUpdatedAt: o.updated_at ?? null })}
                 >
                   <Text style={o.status === s ? styles.stageTextActive : styles.stageText}>
                     {s.replace("_", " ")}
@@ -292,7 +297,7 @@ export default function OrderDetail() {
                 <Button label="Mark as paid" tone="success" onPress={() => setPayOpen(true)} />
               )}
               {o.status === "ready" && (
-                <Button label={fulfilLabel} tone="primary" busy={fulfill.isPending} onPress={() => fulfill.mutate([] as [])} />
+                <Button label={fulfilLabel} tone="primary" busy={fulfill.isPending} onPress={() => fulfill.mutate({ order_id: orderId })} />
               )}
               <Button label="Cancel order" tone="danger" onPress={() => setCancelOpen(true)} />
             </View>
@@ -350,7 +355,7 @@ export default function OrderDetail() {
                 tone="danger"
                 busy={cancel.isPending}
                 onPress={() => {
-                  cancel.mutate([reverseStock]);
+                  cancel.mutate({ order_id: orderId, reverse_stock: reverseStock });
                   setCancelOpen(false);
                 }}
               />
@@ -371,7 +376,7 @@ export default function OrderDetail() {
                   label={m === "etransfer" ? "E-transfer" : m[0].toUpperCase() + m.slice(1)}
                   tone="neutral"
                   onPress={() => {
-                    markPaid.mutate([m]);
+                    markPaid.mutate({ order_id: orderId, payment_method: m });
                     setPayOpen(false);
                   }}
                 />
@@ -381,7 +386,7 @@ export default function OrderDetail() {
           </View>
         </View>
       </Modal>
-    </RequiresConnection>
+    </>
   );
 }
 

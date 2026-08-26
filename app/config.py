@@ -3,6 +3,9 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+INSECURE_JWT_SECRET = "dev-only-insecure-secret-change-me-in-production"
+
+
 class Settings(BaseSettings):
     """Runtime configuration, read from environment / .env (prefix ``BOS_``)."""
 
@@ -35,6 +38,15 @@ class Settings(BaseSettings):
     # tablet app is React Native and not subject to CORS. Set to the deployed
     # dashboard origin in production.
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
+
+    def validate_for_runtime(self) -> None:
+        if self.env.lower() in {"prod", "production"}:
+            if self.jwt_secret == INSECURE_JWT_SECRET or len(self.jwt_secret.encode()) < 32:
+                raise ValueError("BOS_JWT_SECRET must be a unique value of at least 32 bytes in production.")
+            if not self.database_url.startswith(("postgresql://", "postgresql+psycopg://")):
+                raise ValueError("BOS_DATABASE_URL must use PostgreSQL in production.")
+            if any(origin.startswith(("http://localhost", "http://127.0.0.1")) for origin in self.cors_origin_list):
+                raise ValueError("BOS_CORS_ORIGINS must not include local development origins in production.")
 
     @property
     def cors_origin_list(self) -> list[str]:

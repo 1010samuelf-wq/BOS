@@ -8,12 +8,12 @@ import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { getDeliveries } from "../../src/api/endpoints";
-import type { DeliveryRow } from "../../src/api/types";
-import { RequiresConnection } from "../../src/components/Chrome";
+import type { Deliveries, DeliveryRow } from "../../src/api/types";
 import { Empty, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { DateField } from "../../src/components/DateTimeField";
 import { colors, radius, spacing } from "../../src/components/theme";
-import { formatNeeded } from "../../src/order/dates";
+import { formatNeeded, formatRelative } from "../../src/order/dates";
+import { useOfflineSnapshot } from "../../src/offline/useOfflineSnapshot";
 
 type Preset = "today" | "tomorrow" | "week" | "upcoming" | "custom";
 
@@ -47,10 +47,10 @@ export default function DeliveriesScreen() {
     queryFn: () => getDeliveries(r),
     enabled: preset !== "custom" || (!!customFrom && !!customTo && customFrom <= customTo),
   });
-  const rows: DeliveryRow[] = deliveries.data?.rows ?? [];
+  const snap = useOfflineSnapshot<Deliveries>("bos.snapshot.deliveries", deliveries.data);
+  const rows: DeliveryRow[] = snap.data?.rows ?? [];
 
   return (
-    <RequiresConnection>
       <View style={styles.screen}>
         <ScreenHeader
           title="Deliveries"
@@ -76,11 +76,14 @@ export default function DeliveriesScreen() {
             <DateField value={customTo} onChange={setCustomTo} style={{ flex: 1 }} />
           </View>
         )}
-        {deliveries.isLoading ? (
-          <Loading />
-        ) : deliveries.isError ? (
-          <ErrorText>Couldn't load the manifest.</ErrorText>
-        ) : (
+        {snap.usingSnapshot && snap.fetchedAt && (
+          <View style={styles.staleBanner}>
+            <Text style={styles.staleText}>
+              Offline — showing data as of {formatRelative(snap.fetchedAt)}, may not reflect this exact range.
+            </Text>
+          </View>
+        )}
+        {snap.data ? (
           <ScrollView horizontal contentContainerStyle={{ padding: spacing.l }}>
             <ScrollView contentContainerStyle={{ gap: spacing.s }}>
               <View style={[styles.row, styles.headRow]}>
@@ -114,17 +117,30 @@ export default function DeliveriesScreen() {
                   </Text>
                 </View>
               ))}
-              {deliveries.isSuccess && rows.length === 0 && <Empty>No deliveries for this range.</Empty>}
+              {rows.length === 0 && <Empty>No deliveries for this range.</Empty>}
             </ScrollView>
           </ScrollView>
+        ) : deliveries.isLoading ? (
+          <Loading />
+        ) : deliveries.isError ? (
+          <ErrorText>Couldn't load the manifest.</ErrorText>
+        ) : (
+          <Empty>No data cached yet — connect once to load deliveries.</Empty>
         )}
       </View>
-    </RequiresConnection>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  staleBanner: {
+    marginHorizontal: spacing.l,
+    marginTop: spacing.m,
+    padding: spacing.s,
+    borderRadius: radius.m,
+    backgroundColor: colors.warn,
+  },
+  staleText: { color: "#fff", fontSize: 12, fontWeight: "600", textAlign: "center" },
   tabs: { flexDirection: "row", gap: spacing.xs },
   tab: { paddingHorizontal: spacing.m, paddingVertical: spacing.s, borderRadius: radius.m },
   tabActive: { backgroundColor: colors.bg },

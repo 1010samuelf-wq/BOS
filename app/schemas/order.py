@@ -167,6 +167,7 @@ class OrderOut(BaseModel):
     fulfilled_by: int | None
     cancelled_at: datetime | None
     stock_reversed: bool
+    updated_at: datetime
     total: Decimal
     locked_by: int | None
     locked_at: datetime | None

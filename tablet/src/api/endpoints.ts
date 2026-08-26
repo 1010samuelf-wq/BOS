@@ -23,6 +23,8 @@ import type {
   Recipe,
   RosterEntry,
   SalesReport,
+  SyncOpIn,
+  SyncReplayOut,
   Task,
   TimeEntry,
   TokenOut,
@@ -122,8 +124,15 @@ export const fulfillOrder = (id: number) =>
 export const addNote = (id: number, text: string, type: "general" | "payment" = "general") =>
   api<Order>(`/orders/${id}/notes`, { method: "POST", body: { text, type } });
 
-export const toggleNoteDone = (id: number, noteId: number) =>
-  api<Order>(`/orders/${id}/notes/${noteId}/done`, { method: "POST" });
+// `done` explicit avoids a blind-toggle race: if this device's view of the
+// note is stale, flipping "whatever the server currently has" can land on
+// the wrong final state. Omit it only for the rare caller that really wants
+// a toggle-current-state semantic.
+export const toggleNoteDone = (id: number, noteId: number, done?: boolean) =>
+  api<Order>(`/orders/${id}/notes/${noteId}/done`, {
+    method: "POST",
+    body: done === undefined ? undefined : { done },
+  });
 
 // ---- time ----
 export const clockIn = () => api<unknown>("/time/clock-in", { method: "POST" });
@@ -165,8 +174,14 @@ export const listTasks = (params: { employee_id?: number; date?: string; done?: 
   api<Task[]>("/tasks", { query: params });
 export const createTask = (body: { title: string; description?: string; assigned_to: number; due_date?: string | null }) =>
   api<Task>("/tasks", { method: "POST", body });
-export const toggleTaskDone = (id: number) =>
-  api<Task>(`/tasks/${id}/done`, { method: "POST" });
+// `done` explicit for the same reason as toggleNoteDone above — a task
+// replayed hours later (offline) must land on the state the user actually
+// chose, not whatever a blind toggle of current server state happens to be.
+export const toggleTaskDone = (id: number, done?: boolean) =>
+  api<Task>(`/tasks/${id}/done`, {
+    method: "POST",
+    body: done === undefined ? undefined : { done },
+  });
 
 // ---- employees ----
 export const listEmployees = (include_inactive = false) =>
@@ -198,6 +213,10 @@ export const addLedgerEntry = (
 ) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries`, { method: "POST", body });
 export const deleteLedgerEntry = (companyId: number, entryId: number) =>
   api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });
+
+// ---- offline sync ----
+export const syncReplay = (device_id: string, operations: SyncOpIn[]) =>
+  api<SyncReplayOut>("/sync/replay", { method: "POST", body: { device_id, operations } });
 
 // ---- notifications ----
 export const listNotifications = (params: { unread_only?: boolean; limit?: number }) =>

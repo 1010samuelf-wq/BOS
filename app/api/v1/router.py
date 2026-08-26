@@ -14,6 +14,7 @@ from app.api.v1 import (
     reports,
     settings,
     stock,
+    sync,
     tasks,
     time,
     ws,
@@ -34,6 +35,7 @@ api_router.include_router(notifications.router)
 api_router.include_router(tasks.router)
 api_router.include_router(settings.router)
 api_router.include_router(bookkeeping.router)
+api_router.include_router(sync.router)
 api_router.include_router(inquiries.public_router)
 api_router.include_router(inquiries.router)
 api_router.include_router(ws.router)

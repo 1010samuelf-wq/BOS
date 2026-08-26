@@ -13,8 +13,6 @@ import * as Print from "expo-print";
 
 import { ApiRequestError } from "../../src/api/client";
 import {
-  clockIn,
-  clockOut,
   createTimeEntry,
   deleteTimeEntry,
   fetchRoster,
@@ -26,11 +24,12 @@ import {
 } from "../../src/api/endpoints";
 import type { Employee, RosterEntry, TimeEntry } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
-import { RequiresConnection } from "../../src/components/Chrome";
 import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
 import { colors, radius, spacing } from "../../src/components/theme";
 import { formatDate, formatTime, formatWeekdayDate } from "../../src/order/dates";
+import { useConnectivity } from "../../src/offline/connectivity";
+import { useOfflineMutation } from "../../src/offline/useOfflineMutation";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -86,6 +85,7 @@ export default function TimeScreen() {
   const isAdmin = user?.role === "admin";
   const isManager = isAdmin || user?.role === "manager";
   const queryClient = useQueryClient();
+  const { isOffline } = useConnectivity();
   const [error, setError] = useState<string | null>(null);
   const onErr = (e: unknown) => setError(e instanceof ApiRequestError ? e.message : "Action failed.");
 
@@ -105,8 +105,12 @@ export default function TimeScreen() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [openEntry?.clock_in]);
-  const punch = useMutation({
-    mutationFn: () => (open ? clockOut() : clockIn()),
+  // Clock in/out is the one action on this screen that's offline-capable —
+  // it queues via the outbox instead of failing when offline (spec:
+  // bakery-floor offline mode). Everything else here (edit/add/delete a
+  // punch, mark paid) is a manager/admin correction, not a floor action, and
+  // stays online-only.
+  const punch = useOfflineMutation(open ? "time.clockOut" : "time.clockIn", {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["hours"] }),
     onError: onErr,
   });
@@ -187,7 +191,6 @@ export default function TimeScreen() {
   };
 
   return (
-    <RequiresConnection>
       <ScrollView style={styles.screen} contentContainerStyle={{ padding: spacing.l, gap: spacing.l }}>
         <ScreenHeader
           title="Time"
@@ -254,7 +257,7 @@ export default function TimeScreen() {
                     <Button
                       label="Save"
                       busy={save.isPending}
-                      disabled={!editInDate}
+                      disabled={!editInDate || isOffline}
                       onPress={() => {
                         const ci = fromParts(editInDate, editInTime);
                         const co = editOutDate ? fromParts(editOutDate, editOutTime) : null;
@@ -283,8 +286,8 @@ export default function TimeScreen() {
                   <Text style={[styles.entryCell, { width: 60 }]}>{hoursOf(e).toFixed(2)}</Text>
                   <View style={{ width: 70 }}>
                     {e.paid ? (
-                      <Pressable onPress={() => pay.mutate({ ids: [e.id], paid: false })}>
-                        <Text style={styles.paidBadge}>PAID · unpay</Text>
+                      <Pressable disabled={isOffline} onPress={() => pay.mutate({ ids: [e.id], paid: false })}>
+                        <Text style={[styles.paidBadge, isOffline && styles.disabledText]}>PAID · unpay</Text>
                       </Pressable>
                     ) : (
                       <Text style={styles.muted}>—</Text>
@@ -292,8 +295,8 @@ export default function TimeScreen() {
                   </View>
                   {isManager && (
                     <View style={{ flexDirection: "row", gap: spacing.xs, marginLeft: "auto" }}>
-                      <Button label="Edit" tone="neutral" onPress={() => startEdit(e)} />
-                      <Button label="Delete" tone="danger" onPress={() => confirmDelete(e.id)} />
+                      <Button label="Edit" tone="neutral" disabled={isOffline} onPress={() => startEdit(e)} />
+                      <Button label="Delete" tone="danger" disabled={isOffline} onPress={() => confirmDelete(e.id)} />
                     </View>
                   )}
                 </View>
@@ -310,7 +313,7 @@ export default function TimeScreen() {
               <Button
                 label="Add"
                 busy={add.isPending}
-                disabled={!addInDate}
+                disabled={!addInDate || isOffline}
                 onPress={() => {
                   const ci = fromParts(addInDate, addInTime);
                   const co = addOutDate ? fromParts(addOutDate, addOutTime) : null;
@@ -335,7 +338,7 @@ export default function TimeScreen() {
               </Text>
               <Button
                 label="Mark selected as paid"
-                disabled={selected.size === 0}
+                disabled={selected.size === 0 || isOffline}
                 busy={pay.isPending}
                 onPress={() => pay.mutate({ ids: [...selected], paid: true })}
               />
@@ -343,7 +346,6 @@ export default function TimeScreen() {
           </Card>
         )}
       </ScrollView>
-    </RequiresConnection>
   );
 }
 
@@ -369,6 +371,7 @@ const styles = StyleSheet.create({
   entryCell: { color: colors.text, fontSize: 13 },
   openText: { color: colors.warn },
   paidBadge: { color: colors.success, fontWeight: "700", fontSize: 12 },
+  disabledText: { opacity: 0.4 },
   checkbox: { width: 22, height: 22, borderRadius: radius.s, borderWidth: 2, borderColor: colors.textMuted, alignItems: "center", justifyContent: "center" },
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
   checkboxHidden: { opacity: 0.15 },
