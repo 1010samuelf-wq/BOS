@@ -3,12 +3,22 @@
 // all day, or shifting a calendar day due to timezone parsing. Mirrors
 // web/src/order/dates.ts.
 
+/**
+ * Parse a "needed for" value as **wall clock** — the date/time someone typed
+ * in the shop, not an instant on a global timeline. Components are read
+ * verbatim and rebuilt as a local Date, deliberately ignoring any trailing
+ * `Z`/offset, because the backend treats this field as a business day too
+ * (it buckets Production/Deliveries/filters by its UTC calendar day).
+ *
+ * Letting the Date ctor timezone-convert here is what broke it before:
+ * Postgres returns this column tz-aware (`...T00:00:00Z`) while the SQLite
+ * dev DB returns it naive, so a date-only order for Aug 14 rendered as
+ * "13 Aug, 8:00 PM" in production and sorted under the wrong day.
+ */
 export function asDate(iso: string): Date {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-    const [y, m, d] = iso.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  }
-  return new Date(iso);
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(iso);
+  if (!m) return new Date(iso); // unrecognised shape — let the ctor try
+  return new Date(+m[1], +m[2] - 1, +m[3], +(m[4] ?? 0), +(m[5] ?? 0), +(m[6] ?? 0));
 }
 
 export function isDateOnly(iso: string): boolean {
@@ -55,4 +65,15 @@ export function formatWeekdayDate(d: Date): string {
 export function formatNeeded(iso: string): string {
   const d = asDate(iso);
   return isDateOnly(iso) ? formatDate(d) : formatDateTime(d);
+}
+
+/** "3 min ago" / "2h ago" / "5d ago" — for "as of" staleness labels on
+ * offline-cached screens (spec: bakery-floor offline mode). */
+export function formatRelative(epochMs: number): string {
+  const diffMin = Math.round((Date.now() - epochMs) / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const hours = Math.round(diffMin / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
 }
