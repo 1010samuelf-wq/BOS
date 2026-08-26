@@ -13,3 +13,9 @@ mig_test.db
 # trusted in an intermediate Docker stage and never copied into the final
 # image (see Dockerfile).
 geder-filter-ca.crt.local
+
+# Leftover local run/log artifacts from a third-party dev-preview tool.
+.freebuff/
+
+# Machine-local agent notes (env quirks, not for the public repo)
+CLAUDE.local.md
