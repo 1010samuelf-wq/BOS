@@ -229,6 +229,21 @@ function OrdersList() {
   );
 }
 
+function NotFulfilledCount() {
+  // limit: 1 — only the total from the pagination envelope is needed, not
+  // the rows themselves, so this stays cheap regardless of backlog size.
+  const q = useQuery({
+    queryKey: ["orders", "not-fulfilled-count"],
+    queryFn: () => listOrders({ limit: 1, fulfillment_status: "pending", exclude_cancelled: true }),
+  });
+  if (q.isLoading || q.data === undefined) return null;
+  return (
+    <span className="pill status-pending" style={{ fontSize: 13 }}>
+      {q.data.total} orders
+    </span>
+  );
+}
+
 export default function Orders() {
   const [tab, setTab] = useState<"date" | "list">("date");
   const navigate = useNavigate();
@@ -236,6 +251,7 @@ export default function Orders() {
   return (
     <div className="page">
       <PageHead title="Orders">
+        <NotFulfilledCount />
         <div className="tabs">
           {(["date", "list"] as const).map((t) => (
             <button key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
