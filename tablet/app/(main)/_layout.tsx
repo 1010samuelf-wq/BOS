@@ -10,6 +10,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { unreadCount } from "../../src/api/endpoints";
 import { useAuth } from "../../src/auth/AuthContext";
 import { OfflineBanner, ToastStack } from "../../src/components/Chrome";
+import FeedbackButton from "../../src/components/FeedbackButton";
 import { colors, radius, spacing } from "../../src/components/theme";
 
 const RAIL = [
@@ -65,6 +66,7 @@ export default function MainLayout() {
             );
           })}
         </ScrollView>
+        <FeedbackButton />
         <Pressable style={styles.user} onPress={() => void logout()}>
           <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.userAction}>log out</Text>

@@ -239,6 +239,9 @@ function OrdersList() {
         limit: 200,
         product_name: f.productName.trim() || undefined,
         date_field: f.dateField,
+        // Soonest-needed first. The server does the sorting, so it holds over
+        // the whole result set rather than just the rows this page fetched.
+        sort: "needed_asc",
         from: f.from.trim() || undefined,
         to: f.to.trim() || undefined,
         status: f.status || undefined,

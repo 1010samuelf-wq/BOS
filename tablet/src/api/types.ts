@@ -349,3 +349,15 @@ export type RealtimeEvent =
         related_item_id: number | null;
       };
     };
+
+/** A staff note about the app itself, sent from any screen. */
+export interface Feedback {
+  id: number;
+  message: string;
+  source: string;
+  context: string | null;
+  user_id: number | null;
+  user_name: string | null;
+  created_at: string;
+  handled: boolean;
+}
