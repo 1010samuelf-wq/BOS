@@ -10,6 +10,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { unreadCount } from "../../src/api/endpoints";
 import { useAuth } from "../../src/auth/AuthContext";
 import { OfflineBanner, ToastStack } from "../../src/components/Chrome";
+import FeedbackButton from "../../src/components/FeedbackButton";
 import { colors, radius, spacing } from "../../src/components/theme";
 import { useConnectivity } from "../../src/offline/connectivity";
 
@@ -75,6 +76,7 @@ export default function MainLayout() {
             {manualOffline ? "Working offline" : "Work offline"}
           </Text>
         </Pressable>
+        <FeedbackButton />
         <Pressable style={styles.user} onPress={() => void logout()}>
           <Text style={styles.userName}>{user.name}</Text>
           <Text style={styles.userAction}>log out</Text>

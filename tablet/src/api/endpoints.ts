@@ -10,6 +10,7 @@ import type {
   Deliveries,
   Employee,
   ExpenseOut,
+  Feedback,
   HoursReport,
   Ingredient,
   LedgerEntryType,
@@ -94,6 +95,7 @@ export const listOrders = (params: {
   from?: string;
   to?: string;
   date_field?: string;
+  sort?: string;
   exclude_cancelled?: boolean;
 }) => api<Page<Order>>("/orders", { query: params });
 
@@ -227,3 +229,7 @@ export const markAllNotificationsRead = () =>
   api<{ unread: number }>("/notifications/read-all", { method: "POST" });
 export const unreadCount = () =>
   api<{ unread: number }>("/notifications/unread-count");
+
+// ---- feedback ----
+export const submitFeedback = (body: { message: string; source: string; context?: string }) =>
+  api<Feedback>("/feedback", { method: "POST", body });
