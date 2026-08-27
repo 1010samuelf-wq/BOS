@@ -330,3 +330,17 @@ export interface Company {
 export interface CompanyDetail extends Company {
   entries: LedgerEntry[];
 }
+
+// ---- feedback (staff notes about the software itself) ----
+export interface Feedback {
+  id: number;
+  message: string;
+  source: string;       // "web" | "tablet"
+  context: string | null; // route/screen the sender was on
+  user_id: number | null;
+  user_name: string | null;
+  created_at: string;
+  handled: boolean;
+  handled_by: number | null;
+  handled_at: string | null;
+}

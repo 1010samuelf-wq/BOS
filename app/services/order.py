@@ -12,7 +12,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, nullslast, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import bad_request, conflict, not_found
@@ -400,6 +400,21 @@ def get_order(db: Session, order_id: int) -> Order:
     return _load(db, order_id)
 
 
+# Sort orders for the list views. `needed_for_date` is nullable — an order with
+# no deadline has no place on a chronological list, so NULLs are pinned to the
+# end in *both* directions rather than being allowed to lead. That has to be
+# explicit: SQLite defaults NULLs first and PostgreSQL defaults them last for
+# ASC, so relying on the default would order the same data differently in dev
+# and production. `id` is the tiebreaker so paging is stable when many orders
+# share a date (a real case here — a day's orders often share one needed-for
+# date, and an unstable sort can repeat or drop rows across pages).
+def _sort_clause(sort: str):
+    col = Order.needed_for_date if sort.startswith("needed") else Order.order_date
+    if sort.endswith("_asc"):
+        return (nullslast(col.asc()), Order.id.asc())
+    return (nullslast(col.desc()), Order.id.desc())
+
+
 def list_orders(
     db: Session,
     *,
@@ -414,6 +429,7 @@ def list_orders(
     from_date: date | None = None,
     to_date: date | None = None,
     date_field: str = "order",  # "order" (order_date) or "needed" (needed_for_date)
+    sort: str = "order_desc",  # "<order|needed>_<asc|desc>"
     exclude_cancelled: bool = False,
 ) -> tuple[list[Order], int]:
     filters = []
@@ -452,7 +468,7 @@ def list_orders(
 
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
     rows = db.execute(
-        base.order_by(Order.order_date.desc())
+        base.order_by(*_sort_clause(sort))
         .limit(limit)
         .offset(offset)
         .options(selectinload(Order.items), selectinload(Order.notes))

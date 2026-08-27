@@ -144,13 +144,20 @@ function DateOrdersView() {
 const EMPTY = {
   product_name: "", date_field: "order", from: "", to: "",
   status: "", paid_status: "", fulfillment_type: "", fulfillment_status: "",
+  // Soonest-needed first by default: this list is read to find what's coming
+  // up, and the table's date column is "Needed for". Sorting happens on the
+  // server, so it holds across the whole result set and not just the page
+  // that got fetched.
+  sort: "needed_asc",
 };
 
 function OrdersList() {
   const navigate = useNavigate();
   const [f, setF] = useState(EMPTY);
   const set = (patch: Partial<typeof EMPTY>) => setF((cur) => ({ ...cur, ...patch }));
-  const active = Object.entries(f).some(([k, v]) => v && !(k === "date_field" && v === "order"));
+  // "Clear" lights up whenever anything differs from the defaults — comparing
+  // against EMPTY directly keeps this honest as fields are added.
+  const active = Object.entries(f).some(([k, v]) => v !== EMPTY[k as keyof typeof EMPTY]);
 
   const q = useQuery({
     queryKey: ["orders", "list", f],
@@ -158,6 +165,7 @@ function OrdersList() {
       limit: 200,
       product_name: f.product_name || undefined,
       date_field: f.date_field,
+      sort: f.sort,
       from: f.from || undefined,
       to: f.to || undefined,
       status: f.status || undefined,
@@ -199,6 +207,12 @@ function OrdersList() {
             <option value="">Active + done</option>
             <option value="pending">In progress</option>
             <option value="fulfilled">Fulfilled</option>
+          </select>
+          <select className="input" style={{ maxWidth: 190 }} value={f.sort} onChange={(e) => set({ sort: e.target.value })}>
+            <option value="needed_asc">Needed date ↑ (soonest)</option>
+            <option value="needed_desc">Needed date ↓ (latest)</option>
+            <option value="order_desc">Order date ↓ (newest)</option>
+            <option value="order_asc">Order date ↑ (oldest)</option>
           </select>
           <button className="btn neutral" disabled={!active} onClick={() => setF(EMPTY)}>Clear</button>
         </div>

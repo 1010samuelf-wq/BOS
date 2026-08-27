@@ -69,6 +69,10 @@ def list_orders(
     from_date: date | None = Query(default=None, alias="from"),
     to_date: date | None = Query(default=None, alias="to"),
     date_field: str = Query(default="order", pattern="^(order|needed)$"),
+    # Default stays order_date-descending (newest first) so existing callers —
+    # the reports drill-down, the unfulfilled count — keep their behaviour. The
+    # List/filter views ask for needed_asc explicitly.
+    sort: str = Query(default="order_desc", pattern="^(order|needed)_(asc|desc)$"),
     exclude_cancelled: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(current_user),
@@ -86,6 +90,7 @@ def list_orders(
         from_date=from_date,
         to_date=to_date,
         date_field=date_field,
+        sort=sort,
         exclude_cancelled=exclude_cancelled,
     )
     return Page[OrderOut](items=rows, total=total, limit=page.limit, offset=page.offset)

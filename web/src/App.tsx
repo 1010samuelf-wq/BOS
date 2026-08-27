@@ -19,7 +19,9 @@ import Tasks from "./pages/Tasks";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Bookkeeping from "./pages/Bookkeeping";
+import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
+import FeedbackWidget from "./components/FeedbackWidget";
 
 // Each nav item maps to a section; the sidebar and route guards show/allow only
 // the sections in the logged-in employee's effective set (per-employee override
@@ -36,10 +38,13 @@ const NAV = [
   { to: "/notifications", label: "Notifications", icon: "🔔", section: "notifications" },
   { to: "/bookkeeping", label: "Bookkeeping", icon: "📒", section: "bookkeeping" },
   { to: "/settings", label: "Admin / Settings", icon: "⚙️", section: "settings" },
+  // Reading feedback is admin-only rather than section-gated — see the note on
+  // GET /feedback. `adminOnly` is honoured by the sidebar and by RequireAdmin.
+  { to: "/feedback", label: "Feedback", icon: "💬", section: "settings", adminOnly: true },
 ];
 
 function firstAllowed(sections: string[]): string {
-  const item = NAV.find((n) => sections.includes(n.section));
+  const item = NAV.find((n) => sections.includes(n.section) && !n.adminOnly);
   return item ? item.to : "/no-access";
 }
 
@@ -97,6 +102,13 @@ function RequireSection({ section, children }: { section: string; children: Reac
   return <>{children}</>;
 }
 
+/** Admin-only pages. Non-admins are bounced to their first allowed section. */
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role !== "admin") return <Navigate to={firstAllowed(user?.sections ?? [])} replace />;
+  return <>{children}</>;
+}
+
 function Shell() {
   const { user, logout } = useAuth();
   const { online } = useRealtime();
@@ -108,7 +120,7 @@ function Shell() {
     <div className="app">
       <nav className="sidebar">
         <img src="/logo.png" alt="Just Cake" className="brand-logo" />
-        {NAV.filter((n) => sections.includes(n.section)).map((n) => (
+        {NAV.filter((n) => sections.includes(n.section) && (!n.adminOnly || user?.role === "admin")).map((n) => (
           <NavLink key={n.to} to={n.to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
             <span>{n.icon}</span>
             <span>{n.label}</span>
@@ -128,6 +140,7 @@ function Shell() {
         {!online && <div className="offline-banner">Offline — reconnecting to the server…</div>}
         <Outlet />
       </div>
+      <FeedbackWidget />
       <Toasts />
     </div>
   );
@@ -169,6 +182,7 @@ export default function App() {
         <Route path="/bookkeeping" element={<RequireSection section="bookkeeping"><Bookkeeping /></RequireSection>} />
         <Route path="/bookkeeping/:id" element={<RequireSection section="bookkeeping"><CompanyDetail /></RequireSection>} />
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />
+        <Route path="/feedback" element={<RequireAdmin><FeedbackPage /></RequireAdmin>} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>
     </Routes>

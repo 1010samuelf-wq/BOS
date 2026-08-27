@@ -11,6 +11,7 @@ import type {
   CompanyType,
   Deliveries,
   Employee,
+  Feedback,
   HoursReport,
   Ingredient,
   Inquiry,
@@ -55,6 +56,7 @@ export const listOrders = (params: {
   from?: string;
   to?: string;
   date_field?: string;
+  sort?: string;
   exclude_cancelled?: boolean;
 }) => api<Page<Order>>("/orders", { query: params });
 export const getOrder = (id: number) => api<Order>(`/orders/${id}`);
@@ -205,3 +207,11 @@ export const addLedgerEntry = (
 ) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries`, { method: "POST", body });
 export const deleteLedgerEntry = (companyId: number, entryId: number) =>
   api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });
+
+// ---- feedback ----
+export const submitFeedback = (body: { message: string; source: string; context?: string }) =>
+  api<Feedback>("/feedback", { method: "POST", body });
+export const listFeedback = (params: { handled?: boolean } = {}) =>
+  api<Feedback[]>("/feedback", { query: params });
+export const setFeedbackHandled = (id: number, handled: boolean) =>
+  api<Feedback>(`/feedback/${id}/handled`, { method: "POST", body: { handled } });

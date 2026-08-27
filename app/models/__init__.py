@@ -22,6 +22,7 @@ from app.models.enums import (
 )
 from app.models.bookkeeping import Company, LedgerEntry
 from app.models.catalog import Ingredient, Product, Recipe, RecipeItem
+from app.models.feedback import Feedback
 from app.models.order import Order, OrderItem, OrderNote
 from app.models.settings import AppSettings
 from app.models.stock import StockAdjustment, StockLevel
@@ -50,6 +51,7 @@ __all__ = [
     "PaymentTiming",
     "UserRole",
     "Company",
+    "Feedback",
     "LedgerEntry",
     "Ingredient",
     "Product",

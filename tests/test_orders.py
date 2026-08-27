@@ -246,3 +246,78 @@ def test_edit_reprices_on_item_change(client, make_product):
     assert r.status_code == 200
     assert r.json()["total"] == "6.00"  # 3 × 2.00
     assert r.json()["items"][0]["product_name"] == "Baguette"
+
+
+# ---------------------------------------------------------------------------
+# list sorting
+# ---------------------------------------------------------------------------
+def _make_dated_orders(client, product_id):
+    """Three orders whose needed-for dates deliberately run opposite to the
+    order they were created in, so a result that merely preserves insertion
+    order (or falls back to order_date) fails these tests."""
+    wanted = {"late": "2026-09-20", "early": "2026-09-02", "mid": "2026-09-11"}
+    ids = {}
+    for name, day in wanted.items():
+        r = client.post(
+            "/api/v1/orders",
+            json=order_payload(product_id, f"key-sort-{name}", needed_for_date=day),
+        )
+        assert r.status_code == 201, r.text
+        ids[name] = r.json()["id"]
+    # ...and one with no deadline at all, which must never lead a date sort.
+    r = client.post(
+        "/api/v1/orders", json=order_payload(product_id, "key-sort-none")
+    )
+    assert r.status_code == 201, r.text
+    ids["none"] = r.json()["id"]
+    return ids
+
+
+def test_list_sorts_by_needed_date_ascending(client, make_product):
+    ids = _make_dated_orders(client, make_product()["id"])
+
+    rows = client.get("/api/v1/orders?sort=needed_asc").json()["items"]
+    assert [o["id"] for o in rows] == [ids["early"], ids["mid"], ids["late"], ids["none"]]
+
+
+def test_undated_orders_sort_last_in_both_directions(client, make_product):
+    """`needed_for_date` is nullable and the two databases disagree on where
+    NULLs land by default (SQLite first, PostgreSQL last, for ASC). Pin them to
+    the end explicitly in both directions, or the dev box and production show
+    the list differently."""
+    ids = _make_dated_orders(client, make_product()["id"])
+
+    asc = client.get("/api/v1/orders?sort=needed_asc").json()["items"]
+    desc = client.get("/api/v1/orders?sort=needed_desc").json()["items"]
+    assert asc[-1]["id"] == ids["none"]
+    assert desc[-1]["id"] == ids["none"]
+    assert desc[0]["id"] == ids["late"]
+
+
+def test_default_sort_is_unchanged_newest_order_first(client, make_product):
+    """Callers that don't ask for a sort (reports drill-down, the unfulfilled
+    count) must keep getting order_date descending."""
+    ids = _make_dated_orders(client, make_product()["id"])
+
+    rows = client.get("/api/v1/orders").json()["items"]
+    # "none" was created last, so newest-first puts it at the top — the exact
+    # opposite of where needed_asc puts it.
+    assert rows[0]["id"] == ids["none"]
+
+
+def test_sort_is_applied_before_paging_not_after(client, make_product):
+    """The bug this replaces sorted only the rows already fetched. Ask for one
+    row at a time and confirm each page is a slice of the *global* order."""
+    ids = _make_dated_orders(client, make_product()["id"])
+
+    first = client.get("/api/v1/orders?sort=needed_asc&limit=1&offset=0").json()
+    second = client.get("/api/v1/orders?sort=needed_asc&limit=1&offset=1").json()
+    assert first["total"] == 4  # envelope counts everything, not just the page
+    assert [o["id"] for o in first["items"]] == [ids["early"]]
+    assert [o["id"] for o in second["items"]] == [ids["mid"]]
+
+
+def test_unknown_sort_is_rejected(client):
+    # This app flattens validation errors to 400 (app/core/errors.py), not
+    # FastAPI's default 422.
+    assert client.get("/api/v1/orders?sort=total_desc").status_code == 400
