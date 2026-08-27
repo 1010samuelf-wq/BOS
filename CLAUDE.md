@@ -65,6 +65,18 @@ Two deploy landmines, both of which have bitten:
    launch. Isolate the change first — see the git-stash recipe in
    `docs/OFFLINE_HANDOFF.md`.
 
+   The offline work is now **committed on `main`**, so stashing no longer
+   isolates it. Branch from the commit *before* it (`b9b3f68^`), do the work
+   there, OTA from that branch, then merge back — that is how the feedback
+   button shipped. Prove the bundle is clean before publishing:
+   ```bash
+   grep -rn "netinfo\|offline/\|OutboxProvider" tablet/src tablet/app   # must be empty
+   ```
+   and after `eas update`, grep the exported bytecode as a second check:
+   ```bash
+   grep -a RNCNetInfo tablet/dist/_expo/static/js/android/*.hbc          # must be empty
+   ```
+
 `.github/workflows/deploy.yml` does all of this on GitHub Actions (manual
 dispatch, gated on the backend suite) if you'd rather not deploy locally.
 
@@ -72,6 +84,17 @@ dispatch, gated on the backend suite) if you'd rather not deploy locally.
 
 These are all real bugs that were shipped or nearly shipped. Read before editing.
 
+- **Production refuses to boot on a bad config, and that check is newer than
+  the running release.** `Settings.validate_for_runtime()` raises on a dev/short
+  JWT secret, a non-Postgres URL, or *any* localhost entry in
+  `BOS_CORS_ORIGINS`. Deploying this took the live API down for ~1 minute: prod's
+  `BOS_CORS_ORIGINS` still had a `http://localhost:5173` entry from local
+  testing, so every machine crashed on import while `release_command` (which
+  doesn't build the app) had already passed. Before deploying the backend after
+  a gap, check the secret actually holds only https origins — the value is not
+  readable from `flyctl secrets list`, only its digest, so the cheap way to be
+  sure is to set it explicitly. The recovery is `flyctl secrets set
+  BOS_CORS_ORIGINS=...`, which restarts the machines with the new value.
 - **Migrations must be idempotent-guarded.** `0001_initial` builds the whole
   schema from the *current* models via `create_all`, so on a fresh DB it also
   creates columns added by later revisions. Every migration after `0001` must

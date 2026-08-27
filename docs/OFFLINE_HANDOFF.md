@@ -4,8 +4,10 @@ Feature branch-in-progress: let the tablets keep working with no connection —
 read cached data, queue writes locally, sync automatically on reconnect — plus a
 manual "Work offline" switch in the app.
 
-> **All of this is currently UNCOMMITTED** in the working tree. Commit it before
-> doing anything destructive (`git checkout`, `clean`, branch switches).
+> **Status: committed** on `main` as `b9b3f68` — still unshipped. Because it is
+> committed rather than sitting in the working tree, the git-stash recipe at the
+> bottom of this file no longer isolates it: branch from `b9b3f68^` instead when
+> you need to OTA something unrelated (see `CLAUDE.md` → Deploying).
 
 ## Scope (agreed with the owner)
 
