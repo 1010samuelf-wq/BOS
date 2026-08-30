@@ -399,3 +399,97 @@ textarea.input { resize: vertical; font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ==========================================================================
+   Phones and small tablets.
+
+   The desktop layout puts a fixed 210px nav beside the content. On a 375px
+   screen that left the content a 165px strip while an orders table wanted
+   520px — unusable. Below 768px the nav becomes a scrolling strip across the
+   top and the content takes the full width; wide tables scroll inside their
+   own card instead of being crushed.
+   ========================================================================== */
+@media (max-width: 768px) {
+  .app { flex-direction: column; height: auto; min-height: 100%; }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    padding: 0 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    /* Keeps the nav reachable while a long list scrolls underneath. */
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* The wordmark is a big block in a horizontal strip — the nav itself
+     already says where you are. */
+  .sidebar .brand-logo { display: none; }
+
+  .nav-item {
+    width: auto;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    font-size: 11px;
+    white-space: nowrap;
+    border-right: 0;
+    position: relative;
+  }
+  .nav-item.active {
+    border-right: 0;
+    border-bottom: 3px solid var(--primary);
+    background: none;
+  }
+  .nav-badge { position: absolute; top: 2px; right: 2px; margin-left: 0; }
+
+  .user-chip {
+    margin-top: 0;
+    margin-left: auto;
+    padding: 6px 10px;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .user-chip .name { font-size: 12px; }
+  .user-chip .muted { display: none; }
+  .clock-btn { width: auto; margin-top: 0; padding: 6px 10px; font-size: 12px; }
+  .clock-timer { margin-top: 0; font-size: 12px; }
+
+  .main { width: 100%; }
+  .page { padding: 12px; }
+  .page-head { flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .page-head h1 { font-size: 20px; }
+
+  .card { padding: 12px; }
+  /* A table keeps readable column widths and scrolls sideways in its card,
+     rather than squeezing every column to a few characters. Cells stay on one
+     line: wrapping turned "Smoke Test Order" into a three-line tower and made
+     rows impossible to scan. The items column is the one exception, since a
+     long order would otherwise push the row metres wide. */
+  .card { overflow-x: auto; }
+  .card table { min-width: 520px; }
+  .card th,
+  .card td { white-space: nowrap; }
+  .card td.wrap { white-space: normal; min-width: 160px; }
+
+  .metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .metric { padding: 14px; }
+  .metric .value { font-size: 20px; }
+
+  /* Filter bars: let controls wrap and stretch instead of overflowing. */
+  .row { flex-wrap: wrap; }
+  .row > .input { flex: 1 1 140px; max-width: none !important; }
+  .tabs { flex-wrap: wrap; }
+
+  /* Touch targets big enough to hit while holding a tray. */
+  .btn { padding: 10px 14px; }
+}

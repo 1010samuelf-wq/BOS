@@ -125,7 +125,7 @@ function DateOrdersView() {
                   <td>#{o.id}</td>
                   <td>{o.client_name}</td>
                   <td>{o.needed_for_date ? formatNeeded(o.needed_for_date) : "No date set"}</td>
-                  <td className="muted">{o.items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}</td>
+                  <td className="muted wrap">{o.items.map((i) => `${i.quantity}× ${i.product_name}`).join(", ")}</td>
                   <td style={{ textTransform: "capitalize" }}>{o.fulfillment_type}</td>
                   <td><span className={statusPillClass(o.status)}>{statusLabel(o.status)}</span></td>
                   <td><span className={`pill ${o.paid_status}`}>{o.paid_status}</span></td>
