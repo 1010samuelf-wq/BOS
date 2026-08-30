@@ -16,9 +16,10 @@ person can write.**
 
 from __future__ import annotations
 
-import json
 import logging
+import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -26,9 +27,16 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.core.errors import APIError
 from app.core.permissions import effective_sections
-from app.models import Order, User
+from app.core.realtime import broadcaster
+from app.models import Expense, Order, Product, Task, User
 from app.models.base import utc_today
-from app.models.enums import NoteType, OrderStatus, PaymentMethod
+from app.models.enums import (
+    FulfillmentType,
+    NoteType,
+    OrderStatus,
+    PaymentMethod,
+    PaymentTiming,
+)
 from app.schemas.task import TaskCreate
 from app.services import assistant_tools
 from app.services import order as order_service
@@ -179,7 +187,128 @@ def describe(db: Session, action: str, args: dict) -> str:
         due = args.get("due_date")
         when = f", due {due}" if due else ""
         return f'Assign "{title}" to {who.name}{when}.'
+    if action == "mark_task_done":
+        task = db.get(Task, args.get("task_id"))
+        if task is None:
+            raise APIError(404, "not_found", "That task was not found.")
+        verb = "Tick off" if args.get("done", True) else "Reopen"
+        return f'{verb} task #{task.id}: "{task.title}".'
+    if action == "create_order":
+        return _describe_new_order(db, args)
+    if action == "create_expense":
+        amount = _amount(args.get("amount"))
+        desc = str(args.get("description", "")).strip()
+        if not desc:
+            raise APIError(400, "bad_action", "The expense has no description.")
+        when = args.get("spent_on") or utc_today().isoformat()
+        cat = f", category {args['category']}" if args.get("category") else ""
+        return f'Record an expense of ${amount} on {when}: "{desc}"{cat}.'
+    if action == "delete_expense":
+        exp = db.get(Expense, args.get("expense_id"))
+        if exp is None:
+            raise APIError(404, "not_found", "That expense was not found.")
+        return (
+            f'Permanently delete the expense "{exp.description}" '
+            f"of ${exp.amount} on {exp.spent_on}. This cannot be undone."
+        )
+    if action == "delete_order":
+        o = _order_or_404(db, args.get("order_id"))
+        # The service refuses a non-cancelled order anyway; checking here means
+        # the person is never shown a proposal that was going to fail.
+        if o.status != OrderStatus.cancelled:
+            raise APIError(
+                400,
+                "not_cancelled",
+                f"Order #{o.id} is not cancelled, so it cannot be deleted. "
+                "Cancel it first if that is what you want.",
+            )
+        return (
+            f"Permanently delete cancelled order #{o.id} ({o.client_name}, "
+            f"${o.total}). This cannot be undone."
+        )
     raise APIError(400, "bad_action", "That is not an action the assistant can take.")
+
+
+def _amount(value: Any) -> Decimal:
+    try:
+        amount = Decimal(str(value)).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError):
+        raise APIError(400, "bad_action", "That amount isn't a valid number.")
+    if amount < 0:
+        raise APIError(400, "bad_action", "An amount cannot be negative.")
+    return amount
+
+
+def _order_lines(db: Session, args: dict) -> tuple[list[tuple[str, int, Decimal]], Decimal]:
+    """Resolve the proposed items to (name, qty, unit price) and a total.
+
+    Every line is priced from the catalog here, not from anything the model
+    said, so the total on the confirmation is the total that will be charged.
+    """
+    items = args.get("items") or []
+    if not isinstance(items, list) or not items:
+        raise APIError(400, "bad_action", "The order has no items.")
+
+    lines: list[tuple[str, int, Decimal]] = []
+    total = Decimal("0.00")
+    for raw in items:
+        if not isinstance(raw, dict):
+            raise APIError(400, "bad_action", "That order line isn't valid.")
+        try:
+            qty = int(raw.get("quantity"))
+        except (TypeError, ValueError):
+            raise APIError(400, "bad_action", "An order line has no quantity.")
+        if qty <= 0:
+            raise APIError(400, "bad_action", "An order line has a quantity of zero.")
+
+        if raw.get("product_id") is not None:
+            product = db.get(Product, raw["product_id"])
+            if product is None:
+                raise APIError(404, "not_found", "One of those products was not found.")
+            name, price = product.name, Decimal(str(product.price))
+        else:
+            name = str(raw.get("custom_name", "")).strip()
+            if not name:
+                raise APIError(400, "bad_action", "An order line has no product.")
+            price = _amount(raw.get("custom_price"))
+
+        lines.append((name, qty, price))
+        total += price * qty
+
+    total += _amount(args.get("delivery_price") or 0)
+    return lines, total.quantize(Decimal("0.01"))
+
+
+def _describe_new_order(db: Session, args: dict) -> str:
+    client = str(args.get("client_name", "")).strip()
+    if not client:
+        raise APIError(400, "bad_action", "The order has no customer name.")
+
+    fulfillment = str(args.get("fulfillment_type", "")).strip()
+    if fulfillment not in {"pickup", "delivery"}:
+        raise APIError(400, "bad_action", "The order must be a pickup or a delivery.")
+    address = str(args.get("delivery_address", "") or "").strip()
+    if fulfillment == "delivery" and not address:
+        raise APIError(400, "bad_action", "A delivery needs an address.")
+
+    timing = str(args.get("payment_timing", "")).strip()
+    if timing not in {"now", "later"}:
+        raise APIError(400, "bad_action", "The order needs a payment timing.")
+    method = args.get("payment_method")
+    if timing == "now" and not method:
+        raise APIError(400, "bad_action", "Paying now needs a payment method.")
+    if timing == "later" and method:
+        raise APIError(400, "bad_action", "A pay-later order must not have a payment method.")
+
+    lines, total = _order_lines(db, args)
+    body = "; ".join(f"{qty} x {name} at ${price}" for name, qty, price in lines)
+    needed = args.get("needed_for_date") or "no date given"
+    where = f"delivery to {address}" if fulfillment == "delivery" else "pickup"
+    pay = f"paying now by {method}" if timing == "now" else "paying later"
+    return (
+        f"Create an order for {client} — {body}. "
+        f"Total ${total}. Needed {needed}. {where.capitalize()}, {pay}."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -244,15 +373,77 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
             ),
             user,
         )
+    elif action == "mark_task_done":
+        task_service.set_done(db, int(args["task_id"]), user, bool(args.get("done", True)))
+    elif action == "create_order":
+        order_service.create_order(db, _build_order_payload(args), user)
+    elif action == "create_expense":
+        db.add(Expense(
+            description=str(args["description"]).strip(),
+            amount=_amount(args["amount"]),
+            category=args.get("category"),
+            spent_on=date.fromisoformat(args["spent_on"]) if args.get("spent_on") else utc_today(),
+            logged_by=user.id,
+        ))
+    elif action == "delete_expense":
+        expense = db.get(Expense, int(args["expense_id"]))
+        if expense is None:
+            raise APIError(404, "not_found", "That expense was not found.")
+        db.delete(expense)
+    elif action == "delete_order":
+        order_service.delete_order(db, int(args["order_id"]))
     else:  # pragma: no cover - guarded by the registry check above
         raise APIError(400, "bad_action", "That is not an action the assistant can take.")
 
     db.commit()
+
+    # Mirror what the REST routes broadcast, so other open screens and tablets
+    # refresh instead of quietly showing stale data.
+    if action in {"create_order", "delete_order", "cancel_order"}:
+        broadcaster.publish({"type": "orders_changed"})
+        broadcaster.publish({"type": "stock_changed"})
+    elif action in {"mark_order_paid", "fulfill_order", "set_order_status", "add_order_note"}:
+        broadcaster.publish({"type": "orders_changed"})
     logger.info(
         "assistant_action",
         extra={"assistant_action": action, "assistant_actor": user.name},
     )
     return summary
+
+
+def _build_order_payload(args: dict):
+    """Turn a confirmed proposal into a validated OrderCreate.
+
+    The idempotency key is minted here rather than taken from the model: it
+    exists to make a retried submit safe, and a value the model chose could
+    collide with a real order or be repeated across two different ones.
+    """
+    from app.schemas.order import OrderCreate, OrderItemIn
+
+    items = []
+    for raw in args["items"]:
+        items.append(OrderItemIn(
+            product_id=raw.get("product_id"),
+            custom_name=raw.get("custom_name"),
+            custom_price=_amount(raw["custom_price"]) if raw.get("custom_price") is not None else None,
+            quantity=int(raw["quantity"]),
+        ))
+
+    needed = args.get("needed_for_date")
+    method = args.get("payment_method")
+    return OrderCreate(
+        idempotency_key=f"assistant-{uuid.uuid4().hex}",
+        client_name=str(args["client_name"]).strip(),
+        client_phone=args.get("client_phone"),
+        needed_for_date=datetime.fromisoformat(needed) if needed else None,
+        fulfillment_type=FulfillmentType(args["fulfillment_type"]),
+        delivery_address=args.get("delivery_address"),
+        delivery_name=args.get("delivery_name"),
+        card_message=args.get("card_message"),
+        payment_timing=PaymentTiming(args["payment_timing"]),
+        payment_method=PaymentMethod(method) if method else None,
+        items=items,
+    )
 
 
 # ---------------------------------------------------------------------------

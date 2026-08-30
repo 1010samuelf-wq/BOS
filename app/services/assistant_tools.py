@@ -24,7 +24,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from app.models import Order, User, UserRole
+from app.models import Expense, Order, Product, User, UserRole
 from app.models.base import utc_today
 from app.services import order as order_service
 from app.services import reports as report_service
@@ -41,6 +41,7 @@ class Tool:
         *,
         writes: bool = False,
         manager_only: bool = False,
+        admin_only: bool = False,
         run: Callable[[Session, User, dict], str] | None = None,
     ):
         self.name = name
@@ -49,6 +50,7 @@ class Tool:
         self.section = section
         self.writes = writes
         self.manager_only = manager_only
+        self.admin_only = admin_only
         self.run = run
 
     def definition(self) -> dict:
@@ -324,6 +326,159 @@ _register(Tool(
 ))
 
 
+def _run_find_products(db: Session, user: User, args: dict) -> str:
+    q = str(args.get("query", "")).strip()
+    stmt = db.query(Product).filter(Product.active.is_(True))
+    if q:
+        stmt = stmt.filter(Product.name.ilike(f"%{q}%"))
+    rows = stmt.order_by(Product.name).limit(40).all()
+    if not rows:
+        return "No matching products in the catalog."
+    return "\n".join(
+        f"id {p.id}: {p.name} - {_money(p.price)}"
+        f"{f' ({p.category})' if p.category else ''}"
+        for p in rows
+    )
+
+
+_register(Tool(
+    "find_products",
+    "Search the product catalog and get product ids and prices. You MUST call "
+    "this before proposing an order, to turn the names someone says into real "
+    "product ids and confirm the price. Omit the query to list everything.",
+    _obj({"query": {"type": "string", "description": "Part of a product name."}}),
+    "orders",
+    run=_run_find_products,
+))
+
+
+def _run_list_expenses(db: Session, user: User, args: dict) -> str:
+    today = utc_today()
+    start = _parse_date(args.get("from"), today)
+    end = _parse_date(args.get("to"), today)
+    rows = (
+        db.query(Expense)
+        .filter(Expense.spent_on >= start, Expense.spent_on <= end)
+        .order_by(Expense.spent_on.desc(), Expense.id.desc())
+        .limit(50)
+        .all()
+    )
+    if not rows:
+        return f"No expenses recorded {start} to {end}."
+    lines = [f"Expenses {start} to {end}:"]
+    for e in rows:
+        lines.append(
+            f"  id {e.id}: {e.spent_on} - {e.description}; {_money(e.amount)}"
+            f"{f'; {e.category}' if e.category else ''}"
+        )
+    return "\n".join(lines)
+
+
+_register(Tool(
+    "list_expenses",
+    "Expenses recorded in a date range, with their ids. Call this before "
+    "proposing to delete one, and to answer 'what did we spend on X'. Defaults "
+    "to today.",
+    _obj({"from": _DATE, "to": _DATE}),
+    "reports",
+    run=_run_list_expenses,
+))
+
+
+# ---------------------------------------------------------------------------
+# write tools that create or destroy records
+# ---------------------------------------------------------------------------
+_register(Tool(
+    "create_order",
+    "Propose a new order. Call find_products first so every line uses a real "
+    "product id and price. Give each item either a product_id OR a "
+    "custom_name plus custom_price for something not in the catalog. A "
+    "delivery needs delivery_address. Paying now needs payment_method; paying "
+    "later must not have one. Ask for anything you are missing rather than "
+    "inventing it — especially the customer's name, what they want, and when "
+    "it is needed. Does not take effect until the person confirms it on screen.",
+    _obj({
+        "client_name": {"type": "string"},
+        "client_phone": {"type": "string"},
+        "needed_for_date": {
+            "type": "string",
+            "description": "When it is needed: YYYY-MM-DD, or YYYY-MM-DDTHH:MM for a time.",
+        },
+        "fulfillment_type": {"type": "string", "enum": ["pickup", "delivery"]},
+        "delivery_address": {"type": "string", "description": "Required for delivery."},
+        "delivery_name": {"type": "string", "description": "Who receives it, if not the client."},
+        "card_message": {"type": "string"},
+        "payment_timing": {"type": "string", "enum": ["now", "later"]},
+        "payment_method": {
+            "type": "string", "enum": ["cash", "card", "etransfer"],
+            "description": "Required when paying now; omit when paying later.",
+        },
+        "items": {
+            "type": "array",
+            "description": "At least one line.",
+            "items": _obj({
+                "product_id": {"type": "integer", "description": "From find_products."},
+                "custom_name": {"type": "string", "description": "For an item not in the catalog."},
+                "custom_price": {"type": "number", "description": "Unit price for a custom item."},
+                "quantity": {"type": "integer"},
+            }, ["quantity"]),
+        },
+    }, ["client_name", "fulfillment_type", "payment_timing", "items"]),
+    "orders",
+    writes=True,
+))
+
+_register(Tool(
+    "create_expense",
+    "Propose recording a business expense — a supplier bill, fuel, repairs. "
+    "Expenses reduce profit in the reports. Defaults to today when no date is "
+    "given. Does not take effect until the person confirms it on screen.",
+    _obj({
+        "description": {"type": "string", "description": "What it was for, e.g. 'Sysco - flour'."},
+        "amount": {"type": "number", "description": "Dollars, e.g. 284.60."},
+        "category": {"type": "string", "description": "Optional grouping, e.g. Ingredients."},
+        "spent_on": _DATE,
+    }, ["description", "amount"]),
+    "reports",
+    writes=True,
+))
+
+_register(Tool(
+    "delete_expense",
+    "Propose permanently deleting an expense — use for a duplicate or a "
+    "mistake. Call list_expenses first to get the right id. This cannot be "
+    "undone. Does not take effect until the person confirms it on screen.",
+    _obj({"expense_id": {"type": "integer"}}, ["expense_id"]),
+    "reports",
+    writes=True,
+))
+
+_register(Tool(
+    "delete_order",
+    "Propose permanently deleting an order. Admin only, and only possible for "
+    "an order that is ALREADY cancelled — this is for clearing out test or "
+    "mistaken entries, not for calling off a real order. To call off a real "
+    "order use cancel_order instead. This cannot be undone. Does not take "
+    "effect until the person confirms it on screen.",
+    _obj({"order_id": {"type": "integer"}}, ["order_id"]),
+    "orders",
+    writes=True,
+    admin_only=True,
+))
+
+_register(Tool(
+    "mark_task_done",
+    "Propose ticking a task off, or reopening it. Does not take effect until "
+    "the person confirms it on screen.",
+    _obj({
+        "task_id": {"type": "integer"},
+        "done": {"type": "boolean", "description": "True to complete, false to reopen. Default true."},
+    }, ["task_id"]),
+    "tasks",
+    writes=True,
+))
+
+
 # ---------------------------------------------------------------------------
 # write tools - declared so the model can *propose*; never executed here
 # ---------------------------------------------------------------------------
@@ -410,7 +565,10 @@ def tools_for(user: User, sections: set[str]) -> list[Tool]:
     something that would only fail afterwards.
     """
     is_manager = user.role in (UserRole.manager, UserRole.admin)
+    is_admin = user.role == UserRole.admin
     return [
         t for t in REGISTRY.values()
-        if t.section in sections and (is_manager or not t.manager_only)
+        if t.section in sections
+        and (is_manager or not t.manager_only)
+        and (is_admin or not t.admin_only)
     ]
