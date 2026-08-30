@@ -1,13 +1,19 @@
 # Offline tablet support — status & handoff
 
-Feature branch-in-progress: let the tablets keep working with no connection —
-read cached data, queue writes locally, sync automatically on reconnect — plus a
-manual "Work offline" switch in the app.
+Let the tablets keep working with no connection — read cached data, queue writes
+locally, sync automatically on reconnect — plus a manual "Work offline" switch
+in the app.
 
-> **Status: committed** on `main` as `b9b3f68` — still unshipped. Because it is
-> committed rather than sitting in the working tree, the git-stash recipe at the
-> bottom of this file no longer isolates it: branch from `b9b3f68^` instead when
-> you need to OTA something unrelated (see `CLAUDE.md` → Deploying).
+> **Status: SHIPPED.** Built as APK **v1.1.0 (versionCode 4)** on 2026-08-30 and
+> installed on a shop tablet; the owner confirmed the offline round trip works on
+> real hardware — go offline, work, come back, everything lands. This is no
+> longer in-progress. Two follow-ups remain, both listed below, neither blocking.
+>
+> Because the code is on `main` rather than in the working tree, the git-stash
+> recipe at the bottom of this file does not isolate it. That only matters now
+> for OTAs targeting the **old 1.0.0 runtime**; anything built from 1.1.0
+> onwards already contains the native module, so ordinary OTAs are back to
+> normal — see `CLAUDE.md` → Deploying.
 
 ## Scope (agreed with the owner)
 
@@ -64,6 +70,8 @@ plain-language messages and Retry / Discard. Nothing is silently dropped.
 
 ## Remaining
 
+Neither of these blocks use; the feature is live on the shop floor.
+
 1. **Auth expiry during a long offline stretch.** Any 401 currently calls
    `logout()`, which drops to the roster screen. The outbox survives structurally
    (different storage key), but the UX is bad: a tablet offline past its 12h JWT
@@ -74,11 +82,15 @@ plain-language messages and Retry / Discard. Nothing is silently dropped.
    `endpoints.ts` → `client.ts` → `expo-constants`. Fixing this properly means
    adding real jest/babel config for RN+Expo. The CAS wiring there is currently
    protected by types and by the backend tests, not by a tablet unit test.
-3. **Never run on a real device.** Needs: go offline, take an order / clock out /
-   tick a task, come back online, confirm everything landed. Then the two-tablet
-   conflict case (both edit one order offline) to exercise Sync Review.
-4. **Requires a full `eas build`, not an OTA** — `@react-native-community/netinfo`
-   is a native module the installed binary doesn't have.
+3. **The two-tablet conflict case is still untested.** The single-tablet round
+   trip is confirmed working on real hardware. What has *not* been exercised is
+   two tablets editing the same order while both offline, which is what the
+   Sync Review screen and the optimistic-concurrency check exist for. Worth
+   trying deliberately once both tablets are on 1.1.0.
+
+### Done
+- ~~Requires a full `eas build`, not an OTA~~ — shipped as v1.1.0 / versionCode 4.
+- ~~Never run on a real device~~ — confirmed working by the owner, 2026-08-30.
 
 ## Shipping only part of this tree
 

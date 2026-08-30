@@ -65,10 +65,12 @@ Two deploy landmines, both of which have bitten:
    launch. Isolate the change first — see the git-stash recipe in
    `docs/OFFLINE_HANDOFF.md`.
 
-   The offline work is now **committed on `main`**, so stashing no longer
-   isolates it. Branch from the commit *before* it (`b9b3f68^`), do the work
-   there, OTA from that branch, then merge back — that is how the feedback
-   button shipped. Prove the bundle is clean before publishing:
+   **This constraint is now historical.** The offline work shipped in the
+   v1.1.0 binary (versionCode 4, 2026-08-30), so any tablet on 1.1.0 already has
+   netinfo and an ordinary OTA from `main` is safe again. The recipe below only
+   applies if you ever need to publish to the **old 1.0.0 runtime**: branch from
+   the commit before the offline work (`b9b3f68^`), OTA from there, then merge
+   back. Prove the bundle is clean before publishing:
    ```bash
    grep -rn "netinfo\|offline/\|OutboxProvider" tablet/src tablet/app   # must be empty
    ```
