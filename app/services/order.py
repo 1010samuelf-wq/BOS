@@ -159,11 +159,21 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
         payload.payment_timing == PaymentTiming.now
         and payload.payment_method != PaymentMethod.card
     )
+    # Resolve (or create) the person behind this order. client_name/client_phone
+    # below stay as the snapshot of what was typed; this is the link, matched on
+    # phone then name so a different spelling doesn't mint a second record.
+    from app.services import customer as customer_service
+
+    customer = customer_service.resolve_for_order(
+        db, payload.client_name, payload.client_phone, payload.delivery_address
+    )
+
     order = Order(
         idempotency_key=payload.idempotency_key,
         request_fingerprint=fingerprint,
         client_name=payload.client_name,
         client_phone=payload.client_phone,
+        customer_id=customer.id,
         order_date=now,
         needed_for_date=payload.needed_for_date,
         fulfillment_type=payload.fulfillment_type,

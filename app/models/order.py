@@ -44,8 +44,15 @@ class Order(Base, TimestampMixin):
     # a 409 conflict (spec §4).
     request_fingerprint: Mapped[str | None] = mapped_column(String(64))
 
+    # client_name / client_phone stay as the snapshot of what was typed on this
+    # order; customer_id is the link to the person. Renaming a customer must not
+    # rewrite what past orders said, the same way an order item keeps the
+    # product name and price it was sold at.
     client_name: Mapped[str] = mapped_column(String(200), nullable=False)
     client_phone: Mapped[str | None] = mapped_column(String(40))
+    customer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("customers.id"), index=True
+    )
 
     # order_date is server-set at creation; needed_for is the pickup/delivery
     # date and is what drives the overdue flag.

@@ -5,6 +5,7 @@ from app.api.v1 import (
     auth,
     bookkeeping,
     catalog,
+    customers,
     deliveries,
     employees,
     expenses,
@@ -39,6 +40,7 @@ api_router.include_router(settings.router)
 api_router.include_router(bookkeeping.router)
 api_router.include_router(feedback.router)
 api_router.include_router(assistant.router)
+api_router.include_router(customers.router)
 api_router.include_router(sync.router)
 api_router.include_router(inquiries.public_router)
 api_router.include_router(inquiries.router)
