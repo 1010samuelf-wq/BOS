@@ -11,7 +11,8 @@ function ProductCard({
   onChange: (qty: number) => void;
 }) {
   return (
-    <div className="card">
+    // Highlighted once picked, so the grid itself shows the selection.
+    <div className={`card${qty > 0 ? " card-selected" : ""}`}>
       {p.photo_url
         ? <img src={p.photo_url} alt={p.name} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
         : <div className="photo-empty">🍰</div>}
@@ -175,11 +176,11 @@ export default function App() {
       )}
 
       {loadError ? (
-        <p style={{ textAlign: "center", color: "var(--danger)" }}>Couldn't load the menu — please try again shortly.</p>
+        <p className="state-msg error">Couldn't load the menu — please try again shortly.</p>
       ) : !products ? (
-        <p style={{ textAlign: "center", color: "var(--text-muted)" }}>Loading menu…</p>
+        <p className="state-msg">Loading menu…</p>
       ) : visibleProducts.length === 0 ? (
-        <p style={{ textAlign: "center", color: "var(--text-muted)" }}>No items in this category right now.</p>
+        <p className="state-msg">No items in this category right now.</p>
       ) : (
         <div className="grid">
           {visibleProducts.map((p) => (
@@ -201,6 +202,17 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <div className="site-footer">
+        {contact?.business_phone && (
+          <a className="call" href={`tel:${contact.business_phone.replace(/[^0-9+]/g, "")}`}>
+            📞 {contact.business_phone}
+          </a>
+        )}
+        <p style={{ margin: 0 }}>
+          Choose what you'd like above, then call to finalize — we'll take it from there.
+        </p>
+      </div>
 
       {checkoutOpen && products && (
         <CheckoutModal
