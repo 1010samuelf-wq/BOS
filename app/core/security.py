@@ -62,12 +62,14 @@ def verify_pin(pin: str, stored: str | None) -> bool:
 
 
 # ---- JWT --------------------------------------------------------------------
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str, token_version: int = 0) -> str:
     settings = get_settings()
     now = utcnow()
     payload = {
         "sub": str(user_id),
         "role": role,
+        # Stamped so the server can retire this token early — see current_user.
+        "tv": token_version,
         "iat": now,
         "exp": now + timedelta(minutes=settings.jwt_expire_minutes),
     }

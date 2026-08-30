@@ -95,7 +95,7 @@ Set these from the shipped logs/metrics:
 ## 5. Testing before go-live (spec §10)
 
 - **Unit + integration**: the full suite passes — run `pytest` to see the
-  current count. It runs on stdlib SQLite by default; set `BOS_DATABASE_URL` to a
+  current count (230 at the time of writing). It runs on stdlib SQLite by default; set `BOS_DATABASE_URL` to a
   Postgres test DB to run the **same suite as true integration** (FOR UPDATE
   locking, real transactions):
   ```bash
@@ -109,52 +109,48 @@ Set these from the shipped logs/metrics:
 
 ## 6. Building the client apps (tablet & web)
 
-Both clients install with `npm install`. The **web** dashboard installs cleanly
-and is verified end-to-end. The **tablet** (Expo) app has **not yet been
-compiled or run** — its install is blocked in the current environment (see
-below). Treat the tablet code as unverified until a clean install + `tsc` +
-`npm test` + a real device/emulator run have all passed.
+Both clients install with `npm install`. Both are verified end to end: `tsc`,
+the Jest/unit suites, and — for the tablet — a real EAS build.
 
-### ⚠️ Known blocker: content filter breaks `npm install` for the tablet
-On the current build machine a **Geder content filter** intermittently returns
-an HTML block page (instead of JSON) for individual npm registry requests. The
-web tree (~76 packages) happens to clear, but the tablet's larger Expo
-dependency tree reliably trips it on a transitive package:
+> **This section used to say the tablet could not be installed or compiled**,
+> describing a content-filter blocker on `registry.npmjs.org`. That blocker is
+> long gone; the claim survived far longer than the problem and misled at least
+> one review into concluding the tablet was unbuildable. It isn't.
 
-```
-npm error code FETCH_ERROR
-npm error invalid json response body at
-  https://registry.npmjs.org/@0no-co%2fgraphql.web
-  reason: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+### Web dashboard
+
+```bash
+cd web
+npm install
+npx tsc --noEmit
+VITE_API_URL=https://just-cake-bakery.fly.dev npm run build   # see §1 landmine
 ```
 
-Diagnosis: a direct browser-style HTTPS GET of that exact package URL returns
-valid JSON (HTTP 200), while npm gets the block page — i.e. the filter is keyed
-on npm's request signature (User-Agent), not a registry outage or an unpublished
-package. **Do not spoof npm's User-Agent to get around it** — that's
-circumventing a network security control and is out of bounds. Fix the
-environment instead:
+### Tablet
 
-1. **Whitelist `registry.npmjs.org` (whole domain) in Geder** — the real fix;
-   lets the entire tablet app install/typecheck/run. Geder contact on file:
-   **718-384-3337**.
-2. Or run `cd tablet && npm install` **once on a network without the filter**
-   (or a phone hotspot), commit the resulting `package-lock.json`, and restore
-   `node_modules` from that trusted install.
-
-Until one of those is done, the tablet cannot be built or verified here, and any
-tablet-side feature work (e.g. bringing it to parity with the web client's
-Orders filter bar, Reports drill-down, product photos, ingredient deactivate,
-and Tasks filters) is deliberately **on hold** rather than written blind.
-
-### Once install succeeds
 ```bash
 cd tablet
-npm install              # must complete without FETCH_ERROR
-npx tsc --noEmit         # typecheck
-npm test                 # Jest order-flow smoke test
-npx expo start --android # run on the two shop tablets
+npm install
+npx tsc --noEmit
+npx jest
 ```
+
+**Shipping a tablet change — pick the right one:**
+
+| Change | How | Why |
+|---|---|---|
+| JS/TS only | `npx eas-cli update --branch production --platform android -m "..."` | Over-the-air; devices pick it up on next launch |
+| Adds or upgrades a native module | `npx eas-cli build --platform android --profile production` | An OTA **cannot** add native code — the app would crash on launch |
+
+Read the OTA landmine in `CLAUDE.md` before publishing an update: `eas update`
+bundles the whole working directory, so unfinished work importing a native
+module the installed binary lacks will crash the tablets.
+
+A build produces a signed APK to sideload onto the shop tablets. Bump both
+`version` and `android.versionCode` in `tablet/app.json` first — `versionCode`
+so Android treats it as an upgrade, and `version` because `runtimeVersion` is
+`appVersion`, which keeps an older OTA channel from serving stale JS to the new
+install.
 
 ## 7. Scaling note
 

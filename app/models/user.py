@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy import JSON
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import Numeric, String
+from sqlalchemy import Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -50,6 +50,13 @@ class User(Base, TimestampMixin):
     # Brute-force lockout: consecutive failed logins and, once tripped, the time
     # until which login is refused. server_default so a fresh create_all builds a
     # DB default — 0001's raw system-user seed omits this column.
+    # Bumped whenever every existing session for this employee must stop
+    # working — a PIN reset, a new PIN, or an explicit sign-out-everywhere.
+    # Tokens carry the value they were minted with; a mismatch is rejected.
+    # server_default is required: 0001 seeds the system admin with raw SQL.
+    token_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     failed_login_count: Mapped[int] = mapped_column(
         default=0, server_default="0", nullable=False
     )

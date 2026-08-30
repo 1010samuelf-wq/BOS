@@ -71,6 +71,8 @@ def set_pin(db: Session, payload: SetPinIn) -> User:
     user.setup_code_expires_at = None
     user.failed_login_count = 0
     user.locked_until = None
+    # A new PIN retires every session that was opened under the old one.
+    user.token_version += 1
     return user
 
 
@@ -84,6 +86,9 @@ def reset_pin(db: Session, user_id: int) -> tuple[User, str]:
     user.pin_set = False
     user.failed_login_count = 0
     user.locked_until = None
+    # The point of a reset is usually that a device went missing, so cut every
+    # session this employee currently has rather than waiting for expiry.
+    user.token_version += 1
     code = issue_setup_code(user)
     return user, code
 
@@ -125,7 +130,7 @@ def login(db: Session, payload: LoginIn) -> TokenOut:
         user.locked_until = None
         db.commit()
 
-    token = create_access_token(user.id, user.role.value)
+    token = create_access_token(user.id, user.role.value, user.token_version)
     return TokenOut(
         access_token=token,
         expires_in=settings.jwt_expire_minutes * 60,

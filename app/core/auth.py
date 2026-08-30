@@ -41,6 +41,15 @@ def current_user(
     user = db.get(User, user_id)
     if user is None or not user.active:
         raise APIError(401, "unauthorized", "User no longer exists or is inactive.")
+
+    # Sessions are otherwise valid until the token expires, which on a shared
+    # shop device is up to 12 hours after someone walks off with it. Resetting
+    # a PIN (or signing out everywhere) bumps the stored version, and every
+    # token minted before that stops working immediately.
+    # Tokens issued before this field existed carry no "tv"; treating that as 0
+    # matches the column default, so deploying this does not sign everyone out.
+    if int(payload.get("tv", 0)) != user.token_version:
+        raise APIError(401, "token_revoked", "This session has been signed out.")
     return user
 
 

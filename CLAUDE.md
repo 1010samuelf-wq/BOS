@@ -95,6 +95,12 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   readable from `flyctl secrets list`, only its digest, so the cheap way to be
   sure is to set it explicitly. The recovery is `flyctl secrets set
   BOS_CORS_ORIGINS=...`, which restarts the machines with the new value.
+- **A JWT stays valid until it expires, unless the version says otherwise.**
+  `users.token_version` is stamped into every token as `tv` and checked on each
+  request; bumping it retires every session that employee has. It is bumped
+  automatically on a PIN reset and on setting a new PIN, and on demand via
+  `POST /auth/sign-out-everywhere`. A token with no `tv` claim is treated as
+  version 0 so deploying the check didn't sign the whole shop out.
 - **Migrations must be idempotent-guarded.** `0001_initial` builds the whole
   schema from the *current* models via `create_all`, so on a fresh DB it also
   creates columns added by later revisions. Every migration after `0001` must
