@@ -1,6 +1,12 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolved from this file rather than the process CWD: the dev server and the
+# test runner are launched from different directories, and a CWD-relative
+# ".env" is silently ignored from the wrong one.
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 INSECURE_JWT_SECRET = "dev-only-insecure-secret-change-me-in-production"
@@ -10,7 +16,7 @@ class Settings(BaseSettings):
     """Runtime configuration, read from environment / .env (prefix ``BOS_``)."""
 
     model_config = SettingsConfigDict(
-        env_prefix="BOS_", env_file=".env", extra="ignore"
+        env_prefix="BOS_", env_file=ENV_FILE, extra="ignore"
     )
 
     database_url: str = "postgresql+psycopg://bos:bos@localhost:5432/bos"
@@ -38,6 +44,14 @@ class Settings(BaseSettings):
     # tablet app is React Native and not subject to CORS. Set to the deployed
     # dashboard origin in production.
     cors_origins: str = "http://localhost:5173,http://localhost:4173"
+
+    # --- assistant ---
+    # Empty key disables the assistant entirely (every endpoint 503s) so the
+    # feature is opt-in and the rest of the API is unaffected when it is unset.
+    anthropic_api_key: str = ""
+    assistant_model: str = "claude-opus-5"
+    assistant_effort: str = "medium"   # low | medium | high | xhigh | max
+    assistant_max_tokens: int = 16000
 
     def validate_for_runtime(self) -> None:
         if self.env.lower() in {"prod", "production"}:

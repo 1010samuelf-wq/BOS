@@ -10,6 +10,8 @@ import type {
   CompanyDetail,
   CompanyType,
   Deliveries,
+  AssistantReply,
+  ChatTurn,
   Employee,
   Feedback,
   HoursReport,
@@ -215,3 +217,10 @@ export const listFeedback = (params: { handled?: boolean } = {}) =>
   api<Feedback[]>("/feedback", { query: params });
 export const setFeedbackHandled = (id: number, handled: boolean) =>
   api<Feedback>(`/feedback/${id}/handled`, { method: "POST", body: { handled } });
+
+// ---- assistant ----
+export const assistantStatus = () => api<{ enabled: boolean }>("/assistant/status");
+export const assistantChat = (messages: ChatTurn[]) =>
+  api<AssistantReply>("/assistant/chat", { method: "POST", body: { messages } });
+export const assistantAct = (action: string, args: Record<string, unknown>) =>
+  api<{ result: string }>("/assistant/act", { method: "POST", body: { action, args } });

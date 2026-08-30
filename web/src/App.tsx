@@ -22,6 +22,7 @@ import Bookkeeping from "./pages/Bookkeeping";
 import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
 import FeedbackWidget from "./components/FeedbackWidget";
+import AssistantPanel from "./components/AssistantPanel";
 
 // Each nav item maps to a section; the sidebar and route guards show/allow only
 // the sections in the logged-in employee's effective set (per-employee override
@@ -140,6 +141,7 @@ function Shell() {
         {!online && <div className="offline-banner">Offline — reconnecting to the server…</div>}
         <Outlet />
       </div>
+      <AssistantPanel />
       <FeedbackWidget />
       <Toasts />
     </div>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    assistant,
     auth,
     bookkeeping,
     catalog,
@@ -37,6 +38,7 @@ api_router.include_router(tasks.router)
 api_router.include_router(settings.router)
 api_router.include_router(bookkeeping.router)
 api_router.include_router(feedback.router)
+api_router.include_router(assistant.router)
 api_router.include_router(sync.router)
 api_router.include_router(inquiries.public_router)
 api_router.include_router(inquiries.router)

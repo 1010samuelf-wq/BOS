@@ -12,6 +12,10 @@ import os
 # Must be set before any app module imports settings.
 os.environ.setdefault("BOS_DATABASE_URL", "sqlite://")
 os.environ.setdefault("BOS_RATE_LIMIT_PER_MINUTE", "0")
+# Force-clear rather than setdefault: a developer's .env is now read by absolute
+# path (app/config.py), so without this the suite would pick up a real assistant
+# key and the "assistant is off" tests would pass or fail by accident.
+os.environ["BOS_ANTHROPIC_API_KEY"] = ""
 
 import pytest
 from fastapi.testclient import TestClient

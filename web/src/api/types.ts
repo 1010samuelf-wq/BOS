@@ -344,3 +344,18 @@ export interface Feedback {
   handled_by: number | null;
   handled_at: string | null;
 }
+
+// ---- assistant ----
+export interface ChatTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+export interface AssistantProposal {
+  action: string;
+  args: Record<string, unknown>;
+  summary: string; // built server-side from validated args, never by the model
+}
+export interface AssistantReply {
+  reply: string;
+  proposal: AssistantProposal | null;
+}

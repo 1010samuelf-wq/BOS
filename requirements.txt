@@ -19,6 +19,9 @@ fpdf2>=2.8
 # Product-photo uploads to Tigris (S3-compatible) object storage.
 boto3>=1.34
 python-multipart>=0.0.18
+# In-app assistant (app/services/assistant.py). Inert without
+# BOS_ANTHROPIC_API_KEY - the endpoints 503 and nothing else is affected.
+anthropic>=1.2
 
 # --- test / dev ---
 pytest>=8.3
