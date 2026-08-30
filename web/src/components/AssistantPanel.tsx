@@ -8,9 +8,42 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { assistantAct, assistantChat, assistantStatus } from "../api/endpoints";
 import type { AssistantProposal, ChatTurn } from "../api/types";
+
+/** Renders the assistant's markdown: tables, bold, lists, code.
+ *
+ * Raw HTML is deliberately NOT enabled (no rehype-raw). Everything here is
+ * model output, and letting it inject markup would be an XSS hole; react-markdown
+ * escapes HTML by default, so the worst a bad reply can do is look odd.
+ *
+ * The panel is narrow, so a wide table scrolls sideways inside its own box
+ * rather than stretching the whole conversation.
+ */
+function Markdown({ text }: { text: string }) {
+  return (
+    <div className="assistant-md">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          table: ({ children }) => (
+            <div className="assistant-md-table">
+              <table>{children}</table>
+            </div>
+          ),
+          a: ({ children, href }) => (
+            <a href={href} target="_blank" rel="noreferrer noopener">{children}</a>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
 
 /** A turn as shown on screen. `done` lines are local receipts, not model output. */
 interface Line extends ChatTurn {
@@ -107,7 +140,15 @@ export default function AssistantPanel() {
             key={i}
             className={`assistant-msg ${l.done ? "receipt" : l.role}`}
           >
-            {l.done ? `✓ ${l.text.replace(/^Done: /, "")}` : l.text}
+            {l.done ? (
+              `✓ ${l.text.replace(/^Done: /, "")}`
+            ) : l.role === "assistant" ? (
+              // Only the assistant's side is markdown. What the person typed is
+              // shown verbatim — their asterisks are asterisks.
+              <Markdown text={l.text} />
+            ) : (
+              l.text
+            )}
           </div>
         ))}
 
