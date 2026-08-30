@@ -3,7 +3,7 @@
     "name": "Just Cake",
     "slug": "bos-tablet",
     "owner": "1010samuel",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "default",
     "scheme": "bos",
     "userInterfaceStyle": "light",
@@ -13,7 +13,7 @@
     ],
     "android": {
       "package": "com.bos.tablet",
-      "versionCode": 3,
+      "versionCode": 4,
       "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
