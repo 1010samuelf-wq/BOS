@@ -52,9 +52,10 @@ Review screen on a real Android device.
   uvicorn. Tablets connect over the internet, so a public/VPN-reachable address
   with a valid cert is required (§7).
 - Lock the security group to the proxy; don't expose Postgres publicly.
-- **Daily encrypted DB backups.** e.g. a cron running
-  `pg_dump ... | gpg --encrypt ...` to object storage, or the managed DB's
-  automated encrypted snapshots. Test a restore.
+- **Daily encrypted DB backups.** In place: automatic daily volume snapshots on
+  `just-cake-bakery-db`, 30-day retention, encrypted volume. The restore drill,
+  the recovery procedure and the log of when it was last actually tested live
+  in **`docs/BACKUPS.md`** — an untested backup is a belief, not a backup.
 - Set `X-Request-ID` pass-through on the proxy so client-facing request ids match
   the app logs.
 

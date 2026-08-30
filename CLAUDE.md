@@ -17,7 +17,7 @@ tests/        pytest suite (SQLite in-memory by default)
 web/          admin dashboard (React + Vite + TanStack Query)  -> just-cake-dashboard.fly.dev
 tablet/       tablet POS (Expo / React Native, expo-router)     -> EAS OTA channel "production"
 menu/         public ordering site (React + Vite)               -> justcakeskosher.com
-docs/         spec, deployment, permissions, in-flight handoffs
+docs/         spec, deployment, backups, permissions, in-flight handoffs
 ```
 
 ## Commands
