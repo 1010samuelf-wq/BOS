@@ -94,7 +94,7 @@ def test_read_tool_runs_and_its_output_reaches_the_model(client, make_product, f
     )
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "what orders are open?"}]})
+                    json={"message": "what orders are open?"})
     assert r.status_code == 200, r.text
     assert r.json()["reply"] == "You have one order, for Rivka Cohen."
     assert r.json()["proposal"] is None
@@ -116,7 +116,7 @@ def test_a_failing_tool_is_reported_not_crashed(client, fake_model):
     )
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "show order 9999"}]})
+                    json={"message": "show order 9999"})
     assert r.status_code == 200
     tool_result = model.calls[1]["messages"][-1]["content"][0]
     assert tool_result["is_error"] is True
@@ -127,7 +127,7 @@ def test_refusal_is_handled_before_reading_content(client, fake_model):
     fake_model(_Response("refusal", []))
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "..."}]})
+                    json={"message": "..."})
     assert r.status_code == 200
     assert "can't help" in r.json()["reply"]
 
@@ -141,7 +141,7 @@ def test_runaway_tool_loop_is_bounded(client, make_product, fake_model):
     ])
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "loop"}]})
+                    json={"message": "loop"})
     assert r.status_code == 200
     assert r.json()["proposal"] is None
     assert "different way" in r.json()["reply"]
@@ -159,7 +159,7 @@ def test_write_tool_only_proposes_and_changes_nothing(client, make_product, fake
     ]))
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": f"order {order['id']} paid cash"}]})
+                    json={"message": f"order {order['id']} paid cash"})
     assert r.status_code == 200
     proposal = r.json()["proposal"]
     assert proposal["action"] == "mark_order_paid"
@@ -182,7 +182,7 @@ def test_proposal_summary_is_built_from_the_database_not_the_model(client, make_
     ]))
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "mark it paid"}]})
+                    json={"message": "mark it paid"})
     summary = r.json()["proposal"]["summary"]
     assert f"#{order['id']}" in summary
     assert "Weiss Catering" in summary
@@ -193,7 +193,7 @@ def test_proposal_for_a_missing_order_is_rejected(client, fake_model):
     fake_model(_Response("tool_use", [_ToolUse("mark_order_paid", {"order_id": 4242})]))
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "mark 4242 paid"}]})
+                    json={"message": "mark 4242 paid"})
     assert r.status_code == 404
 
 
@@ -263,7 +263,7 @@ def test_cashier_is_not_offered_tools_they_cannot_use(make_user, fake_model):
     model = fake_model(_Response("end_turn", [_Text("hi")]))
 
     cashier.post("/api/v1/assistant/chat",
-                 json={"messages": [{"role": "user", "text": "hello"}]})
+                 json={"message": "hello"})
 
     offered = model.tool_names
     assert "list_orders" in offered          # cashiers do take orders
@@ -274,7 +274,7 @@ def test_cashier_is_not_offered_tools_they_cannot_use(make_user, fake_model):
 def test_admin_is_offered_the_full_surface(client, fake_model):
     model = fake_model(_Response("end_turn", [_Text("hi")]))
     client.post("/api/v1/assistant/chat",
-                json={"messages": [{"role": "user", "text": "hello"}]})
+                json={"message": "hello"})
 
     assert {"sales_report", "create_task", "deliveries", "staff_hours"} <= model.tool_names
 
@@ -282,17 +282,15 @@ def test_admin_is_offered_the_full_surface(client, fake_model):
 # ---------------------------------------------------------------------------
 # wiring
 # ---------------------------------------------------------------------------
-def test_chat_requires_the_last_message_to_be_from_the_user(client, fake_model):
+def test_an_empty_message_is_rejected(client, fake_model):
     fake_model(_Response("end_turn", [_Text("hi")]))
-    r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "assistant", "text": "hello"}]})
-    assert r.status_code == 400
+    assert client.post("/api/v1/assistant/chat", json={"message": ""}).status_code == 400
 
 
 def test_assistant_is_disabled_without_a_key(client):
     """No key configured — the default in tests — must 503 rather than crash."""
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "hi"}]})
+                    json={"message": "hi"})
     assert r.status_code == 503
     assert client.get("/api/v1/assistant/status").json()["enabled"] is False
 
@@ -304,7 +302,7 @@ def test_the_model_is_never_sent_a_write_tool_result(client, make_product, fake_
     model = fake_model(_Response("tool_use", [_ToolUse("fulfill_order", {"order_id": order["id"]})]))
 
     client.post("/api/v1/assistant/chat",
-                json={"messages": [{"role": "user", "text": "fulfil it"}]})
+                json={"message": "fulfil it"})
 
     assert len(model.calls) == 1  # never went round again
     assert client.get(f"/api/v1/orders/{order['id']}").json()["fulfillment_status"] == "pending"
@@ -332,7 +330,7 @@ def test_a_bad_api_key_gives_a_usable_error_not_a_500(client, monkeypatch):
     monkeypatch.setattr(assistant_service, "_client", Failing)
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "hi"}]})
+                    json={"message": "hi"})
     assert r.status_code == 503
     assert r.json()["error"]["code"] == "assistant_unavailable"
 
@@ -349,5 +347,5 @@ def test_an_unreachable_model_provider_is_a_502(client, monkeypatch):
     monkeypatch.setattr(assistant_service, "_client", Failing)
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "hi"}]})
+                    json={"message": "hi"})
     assert r.status_code == 502

@@ -34,7 +34,7 @@ def test_create_order_proposal_prices_from_the_catalog_not_the_model(client, mak
     ]))
 
     r = client.post("/api/v1/assistant/chat",
-                    json={"messages": [{"role": "user", "text": "order 2 cheesecakes for Rivka"}]})
+                    json={"message": "order 2 cheesecakes for Rivka"})
     assert r.status_code == 200, r.text
     summary = r.json()["proposal"]["summary"]
     assert "Rivka Cohen" in summary
@@ -153,7 +153,7 @@ def test_expenses_are_hidden_from_someone_without_reports(make_user, fake_model)
     offered the tools."""
     _, _, cashier = make_user("No Reports Nate", "cashier")
     model = fake_model(_Response("end_turn", [_Text("hi")]))
-    cashier.post("/api/v1/assistant/chat", json={"messages": [{"role": "user", "text": "hello"}]})
+    cashier.post("/api/v1/assistant/chat", json={"message": "hello"})
 
     assert "create_expense" not in model.tool_names
     assert "delete_expense" not in model.tool_names
@@ -185,7 +185,7 @@ def test_a_cancelled_order_can_be_deleted(client, make_product):
 def test_a_manager_is_not_offered_order_deletion(make_user, fake_model):
     _, _, manager = make_user("Manager Mo", "manager")
     model = fake_model(_Response("end_turn", [_Text("hi")]))
-    manager.post("/api/v1/assistant/chat", json={"messages": [{"role": "user", "text": "hello"}]})
+    manager.post("/api/v1/assistant/chat", json={"message": "hello"})
 
     assert "cancel_order" in model.tool_names       # managers may cancel
     assert "delete_order" not in model.tool_names   # ...but not destroy

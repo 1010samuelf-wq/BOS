@@ -11,7 +11,8 @@ import type {
   CompanyType,
   Deliveries,
   AssistantReply,
-  ChatTurn,
+  Conversation,
+  ConversationSummary,
   Employee,
   Feedback,
   HoursReport,
@@ -220,7 +221,16 @@ export const setFeedbackHandled = (id: number, handled: boolean) =>
 
 // ---- assistant ----
 export const assistantStatus = () => api<{ enabled: boolean }>("/assistant/status");
-export const assistantChat = (messages: ChatTurn[]) =>
-  api<AssistantReply>("/assistant/chat", { method: "POST", body: { messages } });
+export const assistantChat = (message: string, conversationId: number | null) =>
+  api<AssistantReply>("/assistant/chat", {
+    method: "POST",
+    body: { message, conversation_id: conversationId ?? undefined },
+  });
+export const assistantConversations = () =>
+  api<ConversationSummary[]>("/assistant/conversations");
+export const assistantConversation = (id: number) =>
+  api<Conversation>(`/assistant/conversations/${id}`);
+export const deleteAssistantConversation = (id: number) =>
+  api<void>(`/assistant/conversations/${id}`, { method: "DELETE" });
 export const assistantAct = (action: string, args: Record<string, unknown>) =>
   api<{ result: string }>("/assistant/act", { method: "POST", body: { action, args } });

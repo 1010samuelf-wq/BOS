@@ -356,6 +356,18 @@ export interface AssistantProposal {
   summary: string; // built server-side from validated args, never by the model
 }
 export interface AssistantReply {
+  conversation_id: number;
+  title: string;
   reply: string;
   proposal: AssistantProposal | null;
+}
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  updated_at: string;
+}
+export interface Conversation {
+  id: number;
+  title: string;
+  messages: ChatTurn[];
 }

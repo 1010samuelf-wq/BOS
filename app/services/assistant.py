@@ -28,8 +28,16 @@ from app.config import get_settings
 from app.core.errors import APIError
 from app.core.permissions import effective_sections
 from app.core.realtime import broadcaster
-from app.models import Expense, Order, Product, Task, User
-from app.models.base import utc_today
+from app.models import (
+    AssistantConversation,
+    AssistantMessage,
+    Expense,
+    Order,
+    Product,
+    Task,
+    User,
+)
+from app.models.base import utc_today, utcnow
 from app.models.enums import (
     FulfillmentType,
     NoteType,
@@ -447,6 +455,49 @@ def _build_order_payload(args: dict):
 
 
 # ---------------------------------------------------------------------------
+# stored conversations
+# ---------------------------------------------------------------------------
+MAX_HISTORY_TURNS = 40
+
+
+def _title_from(message: str) -> str:
+    """A scannable label for the history list.
+
+    Taken from the opening question rather than asked of the model, which would
+    cost an extra call per conversation for something nobody reads closely.
+    """
+    text = " ".join(message.split())
+    return (text[:77] + "...") if len(text) > 80 else text or "New chat"
+
+
+def own_conversation(db: Session, user: User, conversation_id: int) -> AssistantConversation:
+    """Load a conversation, refusing anyone else's.
+
+    A missing row and someone else's row are both reported as not-found: an
+    employee has no business learning that a colleague's conversation exists.
+    """
+    convo = db.get(AssistantConversation, conversation_id)
+    if convo is None or convo.user_id != user.id:
+        raise APIError(404, "not_found", "That conversation was not found.")
+    return convo
+
+
+def list_conversations(db: Session, user: User, limit: int = 50):
+    return (
+        db.query(AssistantConversation)
+        .filter(AssistantConversation.user_id == user.id)
+        .order_by(AssistantConversation.updated_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def delete_conversation(db: Session, user: User, conversation_id: int) -> None:
+    db.delete(own_conversation(db, user, conversation_id))
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
 # the conversation loop
 # ---------------------------------------------------------------------------
 def _text_of(response) -> str:
@@ -480,31 +531,76 @@ def _upstream_error(exc: Exception) -> APIError:
 def chat(
     db: Session,
     user: User,
-    history: list[dict],
+    message: str,
+    conversation_id: int | None = None,
     *,
     client=None,
 ) -> dict:
-    """Run one turn.
+    """Run one turn against a stored conversation.
 
-    `history` is plain {role, text} pairs. Tool calls are re-run from scratch
-    each turn rather than replayed from the client, which keeps the browser
-    from being able to forge tool results and means every answer is computed
-    against current data.
+    History is read from the database, not from the request, so the browser
+    cannot rewrite what was said earlier. Tool calls are re-run from scratch
+    each turn rather than replayed, which means every answer is computed
+    against current data and a stale lookup can never be smuggled back in.
 
-    Returns {"reply": str, "proposal": {...} | None}.
+    Returns {"conversation_id", "title", "reply", "proposal"}.
     """
     settings = get_settings()
     client = client or _client()
+
+    text = message.strip()
+    if not text:
+        raise APIError(400, "empty", "There is no message to answer.")
+
+    if conversation_id is None:
+        convo = AssistantConversation(
+            user_id=user.id,
+            title=_title_from(text),
+            created_at=utcnow(),
+            updated_at=utcnow(),
+        )
+        db.add(convo)
+        db.flush()
+    else:
+        convo = own_conversation(db, user, conversation_id)
+
+    # Record the question before calling out, so it is not lost if the model
+    # call fails partway.
+    db.add(AssistantMessage(
+        conversation_id=convo.id, role="user", text=text, created_at=utcnow()
+    ))
+    convo.updated_at = utcnow()
+    db.commit()
 
     sections = effective_sections(user)
     tools = assistant_tools.tools_for(user, sections)
     by_name = {t.name: t for t in tools}
 
+    stored = (
+        db.query(AssistantMessage)
+        .filter(AssistantMessage.conversation_id == convo.id)
+        .order_by(AssistantMessage.id.desc())
+        .limit(MAX_HISTORY_TURNS)
+        .all()
+    )
     messages: list[dict] = [
-        {"role": m["role"], "content": m["text"]} for m in history if m.get("text")
+        {"role": m.role, "content": m.text} for m in reversed(stored)
     ]
-    if not messages:
-        raise APIError(400, "empty", "There is no message to answer.")
+
+    def _finish(reply: str, proposal: dict | None) -> dict:
+        if reply:
+            db.add(AssistantMessage(
+                conversation_id=convo.id, role="assistant", text=reply,
+                created_at=utcnow(),
+            ))
+            convo.updated_at = utcnow()
+            db.commit()
+        return {
+            "conversation_id": convo.id,
+            "title": convo.title,
+            "reply": reply,
+            "proposal": proposal,
+        }
 
     for _ in range(MAX_STEPS):
         try:
@@ -526,14 +622,14 @@ def chat(
         # Always check the stop reason before reading content: on a refusal the
         # content list is empty or partial.
         if response.stop_reason == "refusal":
-            return {
-                "reply": "I can't help with that one. Try rephrasing, or ask "
-                         "someone to look it up directly.",
-                "proposal": None,
-            }
+            return _finish(
+                "I can't help with that one. Try rephrasing, or ask someone to "
+                "look it up directly.",
+                None,
+            )
 
         if response.stop_reason != "tool_use":
-            return {"reply": _text_of(response) or "(no answer)", "proposal": None}
+            return _finish(_text_of(response) or "(no answer)", None)
 
         calls = [b for b in response.content if b.type == "tool_use"]
 
@@ -542,14 +638,11 @@ def chat(
             tool = by_name.get(call.name)
             if tool is not None and tool.writes:
                 args = dict(call.input or {})
-                return {
-                    "reply": _text_of(response),
-                    "proposal": {
-                        "action": call.name,
-                        "args": args,
-                        "summary": describe(db, call.name, args),
-                    },
-                }
+                return _finish(_text_of(response), {
+                    "action": call.name,
+                    "args": args,
+                    "summary": describe(db, call.name, args),
+                })
 
         # Otherwise run the reads and hand the results back.
         messages.append({"role": "assistant", "content": response.content})
@@ -581,7 +674,4 @@ def chat(
             })
         messages.append({"role": "user", "content": results})
 
-    return {
-        "reply": "I couldn't work that out — try asking it a different way.",
-        "proposal": None,
-    }
+    return _finish("I couldn't work that out — try asking it a different way.", None)

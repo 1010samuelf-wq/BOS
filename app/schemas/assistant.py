@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -11,14 +12,15 @@ class ChatTurn(BaseModel):
 
 
 class ChatIn(BaseModel):
-    """The whole visible conversation, resent each turn.
+    """One new message, against a stored conversation.
 
-    The browser holds plain text only — no tool calls or tool results — so it
-    cannot feed the model a fabricated lookup. Tools are re-run server-side
-    every turn against current data.
+    History lives on the server and is loaded by id, so the browser cannot
+    rewrite what was said earlier. Tool calls are never stored or replayed —
+    every turn re-runs them against current data.
     """
 
-    messages: list[ChatTurn] = Field(min_length=1, max_length=40)
+    conversation_id: int | None = None  # omit to start a new conversation
+    message: str = Field(min_length=1, max_length=4000)
 
 
 class Proposal(BaseModel):
@@ -28,8 +30,22 @@ class Proposal(BaseModel):
 
 
 class ChatOut(BaseModel):
+    conversation_id: int
+    title: str
     reply: str
     proposal: Proposal | None = None
+
+
+class ConversationSummary(BaseModel):
+    id: int
+    title: str
+    updated_at: datetime
+
+
+class ConversationOut(BaseModel):
+    id: int
+    title: str
+    messages: list[ChatTurn]
 
 
 class ActIn(BaseModel):

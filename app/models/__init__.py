@@ -20,6 +20,7 @@ from app.models.enums import (
     PaymentTiming,
     UserRole,
 )
+from app.models.assistant import AssistantConversation, AssistantMessage
 from app.models.bookkeeping import Company, LedgerEntry
 from app.models.catalog import Ingredient, Product, Recipe, RecipeItem
 from app.models.feedback import Feedback
@@ -50,6 +51,8 @@ __all__ = [
     "PaymentMethod",
     "PaymentTiming",
     "UserRole",
+    "AssistantConversation",
+    "AssistantMessage",
     "Company",
     "Feedback",
     "LedgerEntry",

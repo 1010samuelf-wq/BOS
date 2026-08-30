@@ -374,3 +374,28 @@ textarea.input { resize: vertical; font-family: inherit; }
   white-space: nowrap;
 }
 .assistant-md-table th { background: var(--surface); font-weight: 600; }
+
+/* ---- assistant: saved-chat list ---- */
+.assistant-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assistant-history-open {
+  flex: 1;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: pointer;
+  min-width: 0;
+}
+.assistant-history-open:hover { background: var(--surface); }
+.assistant-history-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

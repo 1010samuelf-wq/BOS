@@ -4,15 +4,26 @@
 // change is wanted the server sends back a *proposal* and this panel shows the
 // exact sentence describing it with Confirm / Cancel. Nothing is written until
 // that button is pressed — the model never gets to act by itself.
+//
+// Conversations live on the server, keyed to the signed-in employee, so a
+// reload no longer loses the thread and past chats can be reopened. Only the
+// new message is sent; the server holds the history.
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import { assistantAct, assistantChat, assistantStatus } from "../api/endpoints";
+import {
+  assistantAct,
+  assistantChat,
+  assistantConversation,
+  assistantConversations,
+  assistantStatus,
+  deleteAssistantConversation,
+} from "../api/endpoints";
 import type { AssistantProposal, ChatTurn } from "../api/types";
+import { formatDateTime } from "../order/dates";
 
 /** Renders the assistant's markdown: tables, bold, lists, code.
  *
@@ -52,11 +63,13 @@ interface Line extends ChatTurn {
 
 const GREETING =
   "Ask me about orders, sales, the bake list, deliveries or hours. " +
-  "I can also mark an order paid or fulfilled — I'll show you exactly what " +
-  "I'm about to do and wait for your OK.";
+  "I can also take an order, log an expense or tick off a task — I'll show you " +
+  "exactly what I'm about to do and wait for your OK.";
 
 export default function AssistantPanel() {
   const [open, setOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [draft, setDraft] = useState("");
   const [proposal, setProposal] = useState<AssistantProposal | null>(null);
@@ -67,12 +80,38 @@ export default function AssistantPanel() {
   // Hidden entirely when the server has no API key configured.
   const status = useQuery({ queryKey: ["assistant", "status"], queryFn: assistantStatus });
 
+  const history = useQuery({
+    queryKey: ["assistant", "conversations"],
+    queryFn: assistantConversations,
+    enabled: open && showHistory,
+  });
+
   const ask = useMutation({
-    mutationFn: (history: Line[]) =>
-      assistantChat(history.map(({ role, text }) => ({ role, text }))),
+    mutationFn: (text: string) => assistantChat(text, conversationId),
     onSuccess: (out) => {
+      setConversationId(out.conversation_id);
       if (out.reply) setLines((cur) => [...cur, { role: "assistant", text: out.reply }]);
       setProposal(out.proposal);
+      queryClient.invalidateQueries({ queryKey: ["assistant", "conversations"] });
+    },
+  });
+
+  const openPast = useMutation({
+    mutationFn: (id: number) => assistantConversation(id),
+    onSuccess: (convo) => {
+      setConversationId(convo.id);
+      setLines(convo.messages);
+      setProposal(null);
+      setShowHistory(false);
+      ask.reset();
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: number) => deleteAssistantConversation(id),
+    onSuccess: (_out, id) => {
+      if (id === conversationId) newChat();
+      queryClient.invalidateQueries({ queryKey: ["assistant", "conversations"] });
     },
   });
 
@@ -80,30 +119,36 @@ export default function AssistantPanel() {
     mutationFn: (p: AssistantProposal) => assistantAct(p.action, p.args),
     onSuccess: (out) => {
       setProposal(null);
-      // Recorded as a user turn so the assistant knows on the next question
-      // that the change went through, and rendered as a receipt.
-      setLines((cur) => [...cur, { role: "user", text: `Done: ${out.result}`, done: true }]);
+      setLines((cur) => [...cur, { role: "user", text: out.result, done: true }]);
       // The change touched real data — let every open screen refetch.
       queryClient.invalidateQueries();
     },
   });
 
   useEffect(() => {
-    if (open) boxRef.current?.focus();
-  }, [open]);
+    if (open && !showHistory) boxRef.current?.focus();
+  }, [open, showHistory]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [lines, proposal, ask.isPending]);
 
+  function newChat() {
+    setConversationId(null);
+    setLines([]);
+    setProposal(null);
+    setDraft("");
+    setShowHistory(false);
+    ask.reset();
+  }
+
   function send() {
     const text = draft.trim();
     if (!text || ask.isPending) return;
-    const next: Line[] = [...lines, { role: "user", text }];
-    setLines(next);
+    setLines((cur) => [...cur, { role: "user", text }]);
     setDraft("");
     setProposal(null);
-    ask.mutate(next);
+    ask.mutate(text);
   }
 
   if (!status.data?.enabled) return null;
@@ -119,98 +164,123 @@ export default function AssistantPanel() {
   return (
     <div className="assistant-panel">
       <div className="assistant-head">
-        <strong>Assistant</strong>
+        <strong>{showHistory ? "Past chats" : "Assistant"}</strong>
         <div className="row" style={{ gap: 6 }}>
-          <button
-            className="btn neutral sm"
-            onClick={() => { setLines([]); setProposal(null); ask.reset(); }}
-            disabled={lines.length === 0}
-          >
-            Clear
+          <button className="btn neutral sm" onClick={() => setShowHistory((v) => !v)}>
+            {showHistory ? "Back" : "History"}
+          </button>
+          <button className="btn neutral sm" onClick={newChat} disabled={lines.length === 0}>
+            New chat
           </button>
           <button className="btn neutral sm" onClick={() => setOpen(false)}>Close</button>
         </div>
       </div>
 
-      <div className="assistant-log" ref={scrollRef}>
-        {lines.length === 0 && <p className="muted" style={{ fontSize: 13 }}>{GREETING}</p>}
-
-        {lines.map((l, i) => (
-          <div
-            key={i}
-            className={`assistant-msg ${l.done ? "receipt" : l.role}`}
-          >
-            {l.done ? (
-              `✓ ${l.text.replace(/^Done: /, "")}`
-            ) : l.role === "assistant" ? (
-              // Only the assistant's side is markdown. What the person typed is
-              // shown verbatim — their asterisks are asterisks.
-              <Markdown text={l.text} />
-            ) : (
-              l.text
-            )}
-          </div>
-        ))}
-
-        {ask.isPending && <div className="assistant-msg assistant muted">Thinking…</div>}
-
-        {ask.isError && (
-          <div className="assistant-msg assistant tone-low">
-            Couldn't reach the assistant. Check the connection and try again.
-          </div>
-        )}
-
-        {proposal && (
-          <div className="assistant-proposal">
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Confirm this change</div>
-            <div style={{ marginBottom: 10 }}>{proposal.summary}</div>
-            {confirm.isError && (
-              <p className="tone-low" style={{ fontSize: 13 }}>
-                That didn't go through. Nothing was changed.
-              </p>
-            )}
-            <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+      {showHistory ? (
+        <div className="assistant-log">
+          {history.isLoading && <p className="muted">Loading…</p>}
+          {history.data?.length === 0 && (
+            <p className="muted" style={{ fontSize: 13 }}>No saved chats yet.</p>
+          )}
+          {history.data?.map((c) => (
+            <div key={c.id} className="assistant-history-row">
+              <button className="assistant-history-open" onClick={() => openPast.mutate(c.id)}>
+                <div className="assistant-history-title">{c.title}</div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {formatDateTime(new Date(c.updated_at))}
+                </div>
+              </button>
               <button
                 className="btn neutral sm"
-                disabled={confirm.isPending}
-                onClick={() => setProposal(null)}
+                title="Delete this chat"
+                disabled={remove.isPending}
+                onClick={() => remove.mutate(c.id)}
               >
-                Cancel
-              </button>
-              <button
-                className="btn primary sm"
-                disabled={confirm.isPending}
-                onClick={() => confirm.mutate(proposal)}
-              >
-                {confirm.isPending ? "Doing it…" : "Confirm"}
+                ✕
               </button>
             </div>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <>
+          <div className="assistant-log" ref={scrollRef}>
+            {lines.length === 0 && <p className="muted" style={{ fontSize: 13 }}>{GREETING}</p>}
 
-      <div className="assistant-compose">
-        <textarea
-          ref={boxRef}
-          className="input"
-          rows={2}
-          maxLength={4000}
-          placeholder="Ask about orders, sales, deliveries…"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setOpen(false);
-            // Enter sends; Shift+Enter makes a new line.
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-        />
-        <button className="btn primary" disabled={!draft.trim() || ask.isPending} onClick={send}>
-          Send
-        </button>
-      </div>
+            {lines.map((l, i) => (
+              <div key={i} className={`assistant-msg ${l.done ? "receipt" : l.role}`}>
+                {l.done ? (
+                  `✓ ${l.text}`
+                ) : l.role === "assistant" ? (
+                  // Only the assistant's side is markdown. What the person typed
+                  // is shown verbatim — their asterisks are asterisks.
+                  <Markdown text={l.text} />
+                ) : (
+                  l.text
+                )}
+              </div>
+            ))}
+
+            {ask.isPending && <div className="assistant-msg assistant muted">Thinking…</div>}
+
+            {ask.isError && (
+              <div className="assistant-msg assistant tone-low">
+                Couldn't reach the assistant. Your question was saved — try again.
+              </div>
+            )}
+
+            {proposal && (
+              <div className="assistant-proposal">
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>Confirm this change</div>
+                <div style={{ marginBottom: 10 }}>{proposal.summary}</div>
+                {confirm.isError && (
+                  <p className="tone-low" style={{ fontSize: 13 }}>
+                    That didn't go through. Nothing was changed.
+                  </p>
+                )}
+                <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+                  <button
+                    className="btn neutral sm"
+                    disabled={confirm.isPending}
+                    onClick={() => setProposal(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn primary sm"
+                    disabled={confirm.isPending}
+                    onClick={() => confirm.mutate(proposal)}
+                  >
+                    {confirm.isPending ? "Doing it…" : "Confirm"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="assistant-compose">
+            <textarea
+              ref={boxRef}
+              className="input"
+              rows={2}
+              maxLength={4000}
+              placeholder="Ask about orders, sales, deliveries…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setOpen(false);
+                // Enter sends; Shift+Enter makes a new line.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+            />
+            <button className="btn primary" disabled={!draft.trim() || ask.isPending} onClick={send}>
+              Send
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
