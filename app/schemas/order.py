@@ -60,6 +60,8 @@ class OrderCreate(BaseModel):
     delivery_address: str | None = None
     delivery_name: str | None = None
     card_message: str | None = None
+    # Who the order is for when the customer is ordering on someone's behalf.
+    for_whom: str | None = Field(default=None, max_length=200)
 
     payment_timing: PaymentTiming
     payment_method: PaymentMethod | None = None
@@ -93,6 +95,7 @@ class OrderUpdate(BaseModel):
     delivery_address: str | None = None
     delivery_name: str | None = None
     card_message: str | None = None
+    for_whom: str | None = Field(default=None, max_length=200)
     status: OrderStatus | None = None
     items: list[OrderItemIn] | None = None
 
@@ -156,6 +159,7 @@ class OrderOut(BaseModel):
     delivery_address: str | None
     delivery_name: str | None
     card_message: str | None
+    for_whom: str | None
     payment_timing: PaymentTiming
     payment_method: PaymentMethod | None
     paid_status: PaidStatus

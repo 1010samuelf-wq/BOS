@@ -68,6 +68,11 @@ class Order(Base, TimestampMixin):
     delivery_address: Mapped[str | None] = mapped_column(Text)
     delivery_name: Mapped[str | None] = mapped_column(Text)  # recipient for delivery
     card_message: Mapped[str | None] = mapped_column(Text)
+    # Who the order is ultimately for, when the customer is ordering on someone
+    # else's behalf — a party planner booking for a family, say. Staff were
+    # encoding this in the customer name ("Herman - Srugo"), which split one
+    # real customer across many records and lost their history.
+    for_whom: Mapped[str | None] = mapped_column(String(200))
 
     payment_timing: Mapped[PaymentTiming] = mapped_column(
         SAEnum(PaymentTiming, name="payment_timing"), nullable=False

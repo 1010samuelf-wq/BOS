@@ -43,6 +43,7 @@ class CustomerOrderOut(BaseModel):
     total: Decimal
     status: str
     paid_status: str
+    for_whom: str | None  # who it was for, when ordered on someone's behalf
     items: str  # flattened "2x Babka, 1x Challah" for display
 
 
@@ -56,3 +57,9 @@ class MergeIn(BaseModel):
     """Fold `source_id` into this customer; the source record is removed."""
 
     source_id: int
+
+
+class ReassignIn(BaseModel):
+    """Move this order onto the customer in the path."""
+
+    order_id: int

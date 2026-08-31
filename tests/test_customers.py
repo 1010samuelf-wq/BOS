@@ -177,3 +177,78 @@ def test_a_cashier_can_look_customers_up_but_not_edit_them(make_user, client, ma
 
 def test_customers_require_authentication(anon_client):
     assert anon_client.get("/api/v1/customers").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# ordering on someone else's behalf (the party-planner case)
+# ---------------------------------------------------------------------------
+def test_a_planner_is_one_customer_with_who_each_order_was_for(client, make_product):
+    """The real case this exists for: one planner, one customer record, and the
+    end client recorded per order instead of being smuggled into the name."""
+    p = make_product()["id"]
+    _order(client, p, "key-cust-21", "Herman", "4383705825", for_whom="Srugo")
+    _order(client, p, "key-cust-22", "Herman", "4383705825", for_whom="Frankl")
+
+    matches = [c for c in _customers(client) if c["name"] == "Herman"]
+    assert len(matches) == 1              # one customer, not one per party
+
+    detail = client.get(f"/api/v1/customers/{matches[0]['id']}").json()
+    assert sorted(o["for_whom"] for o in detail["orders"]) == ["Frankl", "Srugo"]
+
+
+def test_for_whom_survives_a_round_trip_on_the_order(client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-cust-23", "Herman", "4383705825", for_whom="Weiss bar mitzvah")
+    assert client.get(f"/api/v1/orders/{order['id']}").json()["for_whom"] == "Weiss bar mitzvah"
+
+
+# ---------------------------------------------------------------------------
+# splitting people the matching folded together
+# ---------------------------------------------------------------------------
+def test_an_order_can_be_moved_to_another_customer(client, make_product):
+    """The undo for a wrong automatic match: two people sharing a household
+    phone get folded together, and merge can only combine — this separates."""
+    p = make_product()["id"]
+    _order(client, p, "key-cust-24", "Household One", "5140005555")
+    second = _order(client, p, "key-cust-25", "Household Two", "5140005555")
+
+    # Both landed on one customer, because they share the number.
+    folded = [c for c in _customers(client) if c["phone"] == "5140005555"]
+    assert len(folded) == 1
+    assert len(client.get(f"/api/v1/customers/{folded[0]['id']}").json()["orders"]) == 2
+
+    # Split them: make a record for the second person and move their order.
+    other = client.post("/api/v1/customers",
+                        json={"name": "Household Two", "phone": "514 000 5556"}).json()
+    moved = client.post(f"/api/v1/customers/{other['id']}/orders",
+                        json={"order_id": second["id"]})
+    assert moved.status_code == 200
+    assert [o["id"] for o in moved.json()["orders"]] == [second["id"]]
+    assert len(client.get(f"/api/v1/customers/{folded[0]['id']}").json()["orders"]) == 1
+
+
+def test_reassigning_leaves_the_orders_own_snapshot_alone(client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-cust-26", "Typed This Way", "5140004444")
+    other = client.post("/api/v1/customers", json={"name": "Correct Name"}).json()
+
+    client.post(f"/api/v1/customers/{other['id']}/orders", json={"order_id": order["id"]})
+
+    assert client.get(f"/api/v1/orders/{order['id']}").json()["client_name"] == "Typed This Way"
+
+
+def test_reassigning_to_a_missing_customer_is_404(client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-cust-27", "Someone", "5140003333")
+    assert client.post("/api/v1/customers/9999/orders",
+                       json={"order_id": order["id"]}).status_code == 404
+
+
+def test_a_cashier_cannot_reassign_orders(make_user, client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-cust-28", "Someone Else", "5140002222")
+    target = _customers(client, "Someone Else")[0]
+    _, _, cashier = make_user("Cashier Cal", "cashier")
+
+    assert cashier.post(f"/api/v1/customers/{target['id']}/orders",
+                        json={"order_id": order["id"]}).status_code == 403

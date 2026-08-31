@@ -211,3 +211,24 @@ def merge(db: Session, source_id: int, target_id: int) -> Customer:
     db.delete(source)
     db.flush()
     return target
+
+
+def reassign_order(db: Session, order_id: int, customer_id: int) -> Order:
+    """Move one order to a different customer.
+
+    The undo for a wrong automatic match. Matching folds two orders together
+    when they share a phone, which is right for a party planner ordering under
+    different names but wrong for two people sharing a household line — and
+    `merge` only combines records, it cannot separate them again. This can.
+
+    The order's own client_name / client_phone are left untouched: they are the
+    snapshot of what was typed at the time, and correcting who an order belongs
+    to is not a licence to rewrite what it said.
+    """
+    order = db.get(Order, order_id)
+    if order is None:
+        raise not_found(f"Order {order_id} not found")
+    get(db, customer_id)  # 404s if the destination doesn't exist
+    order.customer_id = customer_id
+    db.flush()
+    return order

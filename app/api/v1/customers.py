@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models import User
 from app.schemas.customer import (
     CustomerCreate,
+    ReassignIn,
     CustomerDetailOut,
     CustomerOrderOut,
     CustomerOut,
@@ -40,6 +41,7 @@ def _detail(db: Session, customer) -> CustomerDetailOut:
             total=o.total,
             status=o.status.value,
             paid_status=o.paid_status.value,
+            for_whom=o.for_whom,
             items=", ".join(f"{i.quantity}x {i.product_name}" for i in o.items) or "—",
         ))
     return CustomerDetailOut(
@@ -110,3 +112,17 @@ def merge_customers(
     db.commit()
     db.refresh(target)
     return _detail(db, target)
+
+
+@router.post("/{customer_id}/orders", response_model=CustomerDetailOut)
+def reassign_order_to_customer(
+    customer_id: int,
+    payload: ReassignIn,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_manager),
+):
+    """Move an order onto this customer — the way to split two people the
+    automatic matching folded together."""
+    customer_service.reassign_order(db, payload.order_id, customer_id)
+    db.commit()
+    return _detail(db, customer_service.get(db, customer_id))
