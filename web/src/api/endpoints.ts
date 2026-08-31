@@ -13,6 +13,8 @@ import type {
   AssistantReply,
   Conversation,
   ConversationSummary,
+  Customer,
+  CustomerDetail,
   Employee,
   Feedback,
   HoursReport,
@@ -234,3 +236,19 @@ export const deleteAssistantConversation = (id: number) =>
   api<void>(`/assistant/conversations/${id}`, { method: "DELETE" });
 export const assistantAct = (action: string, args: Record<string, unknown>) =>
   api<{ result: string }>("/assistant/act", { method: "POST", body: { action, args } });
+
+// ---- customers ----
+export const searchCustomers = (q: string) =>
+  api<Customer[]>("/customers", { query: { q, limit: 8 } });
+export const listCustomers = (q?: string) =>
+  api<Customer[]>("/customers", { query: { q: q || undefined, limit: 50 } });
+export const getCustomer = (id: number) => api<CustomerDetail>(`/customers/${id}`);
+export const updateCustomer = (
+  id: number,
+  body: Partial<{ name: string; phone: string; address: string; notes: string }>,
+) => api<Customer>(`/customers/${id}`, { method: "PUT", body });
+export const mergeCustomers = (keepId: number, sourceId: number) =>
+  api<CustomerDetail>(`/customers/${keepId}/merge`, {
+    method: "POST",
+    body: { source_id: sourceId },
+  });

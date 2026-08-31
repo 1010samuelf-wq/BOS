@@ -2,6 +2,7 @@
 // by both New Order (create) and Order Detail's edit mode (update) so the two
 // flows can't quietly drift apart from each other.
 
+import CustomerPicker from "../components/CustomerPicker";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type Dispatch, type SetStateAction } from "react";
 
@@ -23,8 +24,20 @@ export function OrderHeaderFields({ draft, set }: { draft: Draft; set: (patch: P
   return (
     <div className="card">
       <div className="row" style={{ flexWrap: "wrap" }}>
-        <input className="input" style={{ flex: 2, minWidth: 200 }} placeholder="Client name *"
-          value={draft.clientName} onChange={(e) => set({ clientName: e.target.value })} />
+        <div style={{ flex: 2, minWidth: 200 }}>
+          <CustomerPicker
+            name={draft.clientName}
+            onNameChange={(v) => set({ clientName: v })}
+            onPick={(c) => set({
+              clientName: c.name,
+              // Only fill blanks — never overwrite something already typed for
+              // this order, which may be deliberately different from the
+              // customer's usual details.
+              clientPhone: draft.clientPhone || c.phone || "",
+              deliveryAddress: draft.deliveryAddress || c.address || "",
+            })}
+          />
+        </div>
         <input className="input" style={{ maxWidth: 160 }} placeholder="Phone"
           value={draft.clientPhone} onChange={(e) => set({ clientPhone: e.target.value })} />
         <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -58,8 +71,15 @@ export function OrderHeaderFields({ draft, set }: { draft: Draft; set: (patch: P
           </>
         )}
       </div>
-      <input className="input" style={{ marginTop: 12 }} placeholder="Card message"
-        value={draft.cardMessage} onChange={(e) => set({ cardMessage: e.target.value })} />
+      <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
+        <input className="input" style={{ flex: 1, minWidth: 180 }} placeholder="Card message"
+          value={draft.cardMessage} onChange={(e) => set({ cardMessage: e.target.value })} />
+        {/* For a planner or anyone ordering on someone else's behalf. Keeping
+            it here rather than in the name is what lets them stay one customer
+            with a readable history. */}
+        <input className="input" style={{ flex: 1, minWidth: 180 }} placeholder="Ordering for (optional)"
+          value={draft.forWhom} onChange={(e) => set({ forWhom: e.target.value })} />
+      </div>
     </div>
   );
 }

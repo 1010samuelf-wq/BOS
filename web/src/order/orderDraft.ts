@@ -35,6 +35,8 @@ export interface DraftLine {
 }
 export interface Draft {
   clientName: string;
+  /** Who the order is for when someone orders on another's behalf. */
+  forWhom: string;
   clientPhone: string;
   neededFor: string | null;
   fulfillment: FulfillmentType;
@@ -60,6 +62,7 @@ export function newIdempotencyKey(): string {
 export function emptyDraft(): Draft {
   return {
     clientName: "",
+    forWhom: "",
     clientPhone: "",
     neededFor: null,
     fulfillment: "pickup",
@@ -143,6 +146,7 @@ export function validateEditDraft(d: Draft): string[] {
 export function draftFromOrder(o: Order): Draft {
   return {
     clientName: o.client_name,
+    forWhom: o.for_whom ?? "",
     clientPhone: o.client_phone ?? "",
     neededFor: o.needed_for_date,
     fulfillment: o.fulfillment_type,
@@ -169,6 +173,7 @@ export function buildUpdatePayload(d: Draft): OrderUpdatePayload {
   const isDelivery = d.fulfillment === "delivery";
   return {
     client_name: d.clientName.trim(),
+    for_whom: d.forWhom.trim() || null,
     client_phone: d.clientPhone.trim() || null,
     needed_for_date: d.neededFor,
     fulfillment_type: d.fulfillment,
@@ -203,6 +208,7 @@ export function buildPayload(d: Draft): OrderCreatePayload {
   return {
     idempotency_key: d.idempotencyKey,
     client_name: d.clientName.trim(),
+    for_whom: d.forWhom.trim() || null,
     client_phone: d.clientPhone.trim() || null,
     needed_for_date: d.neededFor,
     fulfillment_type: d.fulfillment,

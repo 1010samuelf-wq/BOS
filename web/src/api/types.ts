@@ -96,6 +96,7 @@ export interface Order {
   delivery_address: string | null;
   delivery_name: string | null;
   card_message: string | null;
+  for_whom: string | null;
   payment_timing: PaymentTiming;
   payment_method: PaymentMethod | null;
   paid_status: PaidStatus;
@@ -118,6 +119,7 @@ export interface OrderCreatePayload {
   delivery_address?: string | null;
   delivery_name?: string | null;
   card_message?: string | null;
+  for_whom?: string | null;
   payment_timing: PaymentTiming;
   payment_method?: PaymentMethod | null;
   items: (
@@ -139,6 +141,7 @@ export interface OrderUpdatePayload {
   delivery_address?: string | null;
   delivery_name?: string | null;
   card_message?: string | null;
+  for_whom?: string | null;
   items?: OrderCreatePayload["items"];
 }
 
@@ -370,4 +373,29 @@ export interface Conversation {
   id: number;
   title: string;
   messages: ChatTurn[];
+}
+
+// ---- customers ----
+export interface Customer {
+  id: number;
+  name: string;
+  phone: string | null;
+  address: string | null;
+  notes: string | null;
+  active: boolean;
+}
+export interface CustomerOrderRow {
+  id: number;
+  order_date: string;
+  needed_for_date: string | null;
+  total: string;
+  status: string;
+  paid_status: string;
+  for_whom: string | null;
+  items: string;
+}
+export interface CustomerDetail extends Customer {
+  order_count: number;      // paid, non-cancelled — cash basis
+  lifetime_value: string;
+  orders: CustomerOrderRow[];
 }

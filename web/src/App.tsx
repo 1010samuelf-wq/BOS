@@ -19,6 +19,7 @@ import Tasks from "./pages/Tasks";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import Bookkeeping from "./pages/Bookkeeping";
+import Customers from "./pages/Customers";
 import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
 import FeedbackWidget from "./components/FeedbackWidget";
@@ -30,6 +31,7 @@ import AssistantPanel from "./components/AssistantPanel";
 const NAV = [
   { to: "/orders", label: "Orders", icon: "🧾", section: "orders" },
   { to: "/inquiries", label: "Inquiries", icon: "📥", section: "orders" },
+  { to: "/customers", label: "Customers", icon: "🧑‍🍳", section: "orders" },
   { to: "/production", label: "Production", icon: "🥐", section: "production" },
   { to: "/deliveries", label: "Deliveries", icon: "🚚", section: "deliveries" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
@@ -173,6 +175,7 @@ export default function App() {
         <Route path="/orders" element={<RequireSection section="orders"><Orders /></RequireSection>} />
         <Route path="/orders/new" element={<RequireSection section="orders"><NewOrder /></RequireSection>} />
         <Route path="/orders/:id" element={<RequireSection section="orders"><OrderDetail /></RequireSection>} />
+        <Route path="/customers" element={<RequireSection section="orders"><Customers /></RequireSection>} />
         <Route path="/production" element={<RequireSection section="production"><Production /></RequireSection>} />
         <Route path="/inquiries" element={<RequireSection section="orders"><Inquiries /></RequireSection>} />
         <Route path="/deliveries" element={<RequireSection section="deliveries"><Deliveries /></RequireSection>} />

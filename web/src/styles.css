@@ -493,3 +493,37 @@ textarea.input { resize: vertical; font-family: inherit; }
   /* Touch targets big enough to hit while holding a tray. */
   .btn { padding: 10px 14px; }
 }
+
+/* ---- customer autocomplete on the order form ---- */
+.customer-picker { position: relative; }
+.customer-suggest {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.customer-suggest-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: 0;
+  background: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+.customer-suggest-row:hover { background: var(--bg); }
+.customer-suggest-name { font-weight: 600; }
+.customer-suggest-hint {
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+}
