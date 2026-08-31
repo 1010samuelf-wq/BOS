@@ -72,7 +72,11 @@ export default function AssistantPanel() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [draft, setDraft] = useState("");
-  const [proposal, setProposal] = useState<AssistantProposal | null>(null);
+  const [proposals, setProposals] = useState<AssistantProposal[]>([]);
+  // Which item of a batch is running, so progress is visible rather than
+  // the whole panel freezing on "Doing it…".
+  const [runningIdx, setRunningIdx] = useState<number | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -91,7 +95,7 @@ export default function AssistantPanel() {
     onSuccess: (out) => {
       setConversationId(out.conversation_id);
       if (out.reply) setLines((cur) => [...cur, { role: "assistant", text: out.reply }]);
-      setProposal(out.proposal);
+      setProposals(out.proposals);
       queryClient.invalidateQueries({ queryKey: ["assistant", "conversations"] });
     },
   });
@@ -101,7 +105,7 @@ export default function AssistantPanel() {
     onSuccess: (convo) => {
       setConversationId(convo.id);
       setLines(convo.messages);
-      setProposal(null);
+      setProposals([]);
       setShowHistory(false);
       ask.reset();
     },
@@ -115,15 +119,46 @@ export default function AssistantPanel() {
     },
   });
 
-  const confirm = useMutation({
-    mutationFn: (p: AssistantProposal) => assistantAct(p.action, p.args),
-    onSuccess: (out) => {
-      setProposal(null);
-      setLines((cur) => [...cur, { role: "user", text: out.result, done: true }]);
-      // The change touched real data — let every open screen refetch.
-      queryClient.invalidateQueries();
-    },
-  });
+  /** Run an approved batch one item at a time.
+   *
+   * Sequential rather than parallel, and it stops at the first failure: each
+   * item is a real change to shop data, and carrying on after one fails would
+   * leave a half-applied batch nobody can reason about. Whatever already ran is
+   * reported as done, because it did.
+   */
+  async function confirmAll() {
+    setBatchError(null);
+    const done: string[] = [];
+    for (let i = 0; i < proposals.length; i++) {
+      setRunningIdx(i);
+      try {
+        const out = await assistantAct(proposals[i].action, proposals[i].args);
+        done.push(out.result);
+      } catch {
+        setRunningIdx(null);
+        setLines((cur) => [
+          ...cur,
+          ...done.map((text) => ({ role: "user" as const, text, done: true })),
+        ]);
+        setProposals([]);
+        setBatchError(
+          done.length
+            ? `${done.length} of ${proposals.length} changes went through; the rest didn't.`
+            : "That didn't go through. Nothing was changed.",
+        );
+        queryClient.invalidateQueries();
+        return;
+      }
+    }
+    setRunningIdx(null);
+    setProposals([]);
+    setLines((cur) => [
+      ...cur,
+      ...done.map((text) => ({ role: "user" as const, text, done: true })),
+    ]);
+    // Real data changed — let every open screen refetch.
+    queryClient.invalidateQueries();
+  }
 
   useEffect(() => {
     if (open && !showHistory) boxRef.current?.focus();
@@ -131,12 +166,13 @@ export default function AssistantPanel() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [lines, proposal, ask.isPending]);
+  }, [lines, proposals, ask.isPending]);
 
   function newChat() {
     setConversationId(null);
     setLines([]);
-    setProposal(null);
+    setProposals([]);
+    setBatchError(null);
     setDraft("");
     setShowHistory(false);
     ask.reset();
@@ -147,7 +183,8 @@ export default function AssistantPanel() {
     if (!text || ask.isPending) return;
     setLines((cur) => [...cur, { role: "user", text }]);
     setDraft("");
-    setProposal(null);
+    setProposals([]);
+    setBatchError(null);
     ask.mutate(text);
   }
 
@@ -228,29 +265,43 @@ export default function AssistantPanel() {
               </div>
             )}
 
-            {proposal && (
+            {batchError && (
+              <div className="assistant-msg assistant tone-low">{batchError}</div>
+            )}
+
+            {proposals.length > 0 && (
               <div className="assistant-proposal">
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>Confirm this change</div>
-                <div style={{ marginBottom: 10 }}>{proposal.summary}</div>
-                {confirm.isError && (
-                  <p className="tone-low" style={{ fontSize: 13 }}>
-                    That didn't go through. Nothing was changed.
-                  </p>
-                )}
+                <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                  {proposals.length === 1
+                    ? "Confirm this change"
+                    : `Confirm these ${proposals.length} changes`}
+                </div>
+                {/* Every item spelled out: approving a batch should never mean
+                    approving something you haven't read. */}
+                <ol className="assistant-proposal-list">
+                  {proposals.map((p, i) => (
+                    <li key={i} className={runningIdx === i ? "running" : undefined}>
+                      {p.summary}
+                      {runningIdx === i && <span className="muted"> — doing this…</span>}
+                    </li>
+                  ))}
+                </ol>
                 <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
                   <button
                     className="btn neutral sm"
-                    disabled={confirm.isPending}
-                    onClick={() => setProposal(null)}
+                    disabled={runningIdx !== null}
+                    onClick={() => setProposals([])}
                   >
                     Cancel
                   </button>
                   <button
                     className="btn primary sm"
-                    disabled={confirm.isPending}
-                    onClick={() => confirm.mutate(proposal)}
+                    disabled={runningIdx !== null}
+                    onClick={() => void confirmAll()}
                   >
-                    {confirm.isPending ? "Doing it…" : "Confirm"}
+                    {runningIdx !== null
+                      ? `Doing ${runningIdx + 1} of ${proposals.length}…`
+                      : proposals.length === 1 ? "Confirm" : `Confirm all ${proposals.length}`}
                   </button>
                 </div>
               </div>

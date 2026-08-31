@@ -36,7 +36,7 @@ def test_create_order_proposal_prices_from_the_catalog_not_the_model(client, mak
     r = client.post("/api/v1/assistant/chat",
                     json={"message": "order 2 cheesecakes for Rivka"})
     assert r.status_code == 200, r.text
-    summary = r.json()["proposal"]["summary"]
+    summary = r.json()["proposals"][0]["summary"]
     assert "Rivka Cohen" in summary
     assert "2 x Cheesecake" in summary
     assert "$300.00" in summary   # 2 x 150, priced server-side

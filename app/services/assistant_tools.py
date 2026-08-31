@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.models import Expense, Order, Product, User, UserRole
 from app.models.base import utc_today
 from app.services import order as order_service
+from app.services import customer as customer_service
 from app.services import reports as report_service
 from app.services import tasks as task_service
 
@@ -385,9 +386,104 @@ _register(Tool(
 ))
 
 
+def _run_find_customers(db: Session, user: User, args: dict) -> str:
+    rows = customer_service.search(db, args.get("query"), limit=25)
+    if not rows:
+        return "No customers matched."
+    out = []
+    for c in rows:
+        count, value = customer_service.totals(db, c.id)
+        out.append(
+            f"id {c.id}: {c.name}; phone {c.phone or '-'}; "
+            f"{count} paid order(s), lifetime {_money(value)}"
+        )
+    return "\n".join(out)
+
+
+_register(Tool(
+    "find_customers",
+    "Search customers by name or phone and get their ids. Call this before "
+    "proposing to merge or rename anyone, and to answer questions about who "
+    "orders what. Omit the query to list everyone.",
+    _obj({"query": {"type": "string", "description": "Part of a name or phone."}}),
+    "orders",
+    run=_run_find_customers,
+))
+
+
+def _run_customer_orders(db: Session, user: User, args: dict) -> str:
+    customer = customer_service.get(db, int(args["customer_id"]))
+    rows = customer_service.history(db, customer.id)
+    if not rows:
+        return f"{customer.name} has no orders."
+    lines = [f"Orders for {customer.name} (id {customer.id}):"]
+    for o in rows:
+        items = ", ".join(f"{i.quantity}x {i.product_name}" for i in o.items) or "no items"
+        lines.append(
+            f"  Order #{o.id}: {o.order_date.date()}; for {o.for_whom or '-'}; "
+            f"{items}; {_money(o.total)}; {o.paid_status.value}"
+        )
+    return "\n".join(lines)
+
+
+_register(Tool(
+    "customer_orders",
+    "Every order for one customer, including who each was for. Call this when "
+    "asked what someone has ordered, or before proposing changes to their "
+    "orders.",
+    _obj({"customer_id": {"type": "integer"}}, ["customer_id"]),
+    "orders",
+    run=_run_customer_orders,
+))
+
+
 # ---------------------------------------------------------------------------
 # write tools that create or destroy records
 # ---------------------------------------------------------------------------
+_register(Tool(
+    "merge_customers",
+    "Propose folding a duplicate customer into another. The duplicate's orders "
+    "move across and the duplicate record disappears. Call find_customers "
+    "first for both ids. This cannot be undone, so only propose it when the "
+    "person clearly asked to merge those two. Does not take effect until they "
+    "confirm it on screen.",
+    _obj({
+        "keep_id": {"type": "integer", "description": "The customer that survives."},
+        "duplicate_id": {"type": "integer", "description": "The record to fold in and remove."},
+    }, ["keep_id", "duplicate_id"]),
+    "orders",
+    writes=True,
+    manager_only=True,
+))
+
+_register(Tool(
+    "rename_customer",
+    "Propose renaming a customer. Past orders keep the name that was typed on "
+    "them at the time; only the customer record changes. Does not take effect "
+    "until the person confirms it on screen.",
+    _obj({
+        "customer_id": {"type": "integer"},
+        "name": {"type": "string"},
+    }, ["customer_id", "name"]),
+    "orders",
+    writes=True,
+    manager_only=True,
+))
+
+_register(Tool(
+    "set_order_for_whom",
+    "Propose recording who an order was for — used when a customer orders on "
+    "someone else's behalf, like a party planner booking for a family. Does "
+    "not take effect until the person confirms it on screen.",
+    _obj({
+        "order_id": {"type": "integer"},
+        "for_whom": {"type": "string", "description": "Empty string clears it."},
+    }, ["order_id", "for_whom"]),
+    "orders",
+    writes=True,
+))
+
+
 _register(Tool(
     "create_order",
     "Propose a new order. Call find_products first so every line uses a real "

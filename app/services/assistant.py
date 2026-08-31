@@ -5,10 +5,14 @@ person can write.**
 
 - Read tools run here, immediately, through the same service functions the REST
   API uses, scoped to the signed-in employee's permissions.
-- Write tools are never executed by the model loop. The first one it calls ends
-  the turn and comes back as a *proposal*. The confirmation sentence shown to
-  the person is built by `describe()` from the validated arguments — not by the
-  model — so what they approve is what actually runs.
+- Write tools are never executed by the model loop. They end the turn and come
+  back as *proposals* — plural, because a real request is often several changes
+  ("merge these three duplicates"), and forcing one round trip each made the
+  assistant useless for exactly the tidying it is best at. Batching does not
+  weaken the guarantee: nothing runs until a person approves, and each item is
+  spelled out separately so approving a batch is not approving a black box.
+- The confirmation sentence for every item is built by `describe()` from the
+  validated arguments — not by the model — so what is approved is what runs.
 - `execute()` runs a confirmed proposal through the ordinary service layer with
   the caller's own permissions re-checked, so the assistant can never do
   anything the person could not already do by clicking through the UI.
@@ -31,6 +35,7 @@ from app.core.realtime import broadcaster
 from app.models import (
     AssistantConversation,
     AssistantMessage,
+    Customer,
     Expense,
     Order,
     Product,
@@ -47,6 +52,7 @@ from app.models.enums import (
 )
 from app.schemas.task import TaskCreate
 from app.services import assistant_tools
+from app.services import customer as customer_service
 from app.services import order as order_service
 from app.services import tasks as task_service
 
@@ -234,7 +240,42 @@ def describe(db: Session, action: str, args: dict) -> str:
             f"Permanently delete cancelled order #{o.id} ({o.client_name}, "
             f"${o.total}). This cannot be undone."
         )
+    if action == "merge_customers":
+        keep = _customer_or_404(db, args.get("keep_id"))
+        dupe = _customer_or_404(db, args.get("duplicate_id"))
+        if keep.id == dupe.id:
+            raise APIError(400, "bad_action", "Those are the same customer.")
+        moved, _value = customer_service.totals(db, dupe.id)
+        orders = len(customer_service.history(db, dupe.id))
+        return (
+            f'Merge "{dupe.name}" into "{keep.name}". '
+            f"{orders} order(s) move across and \"{dupe.name}\" is removed. "
+            "This cannot be undone."
+        )
+    if action == "rename_customer":
+        customer = _customer_or_404(db, args.get("customer_id"))
+        name = " ".join(str(args.get("name", "")).split())
+        if not name:
+            raise APIError(400, "bad_action", "The new name is empty.")
+        return f'Rename customer "{customer.name}" to "{name}". Past orders keep the name typed on them.'
+    if action == "set_order_for_whom":
+        o = _order_or_404(db, args.get("order_id"))
+        text = " ".join(str(args.get("for_whom", "")).split())
+        if not text:
+            return f"Clear who order #{o.id} ({o.client_name}) was for."
+        return f'Record order #{o.id} ({o.client_name}) as being for "{text}".'
     raise APIError(400, "bad_action", "That is not an action the assistant can take.")
+
+
+def _customer_or_404(db: Session, customer_id: Any) -> Customer:
+    try:
+        cid = int(customer_id)
+    except (TypeError, ValueError):
+        raise APIError(400, "bad_action", "That customer number isn't valid.")
+    customer = db.get(Customer, cid)
+    if customer is None:
+        raise APIError(404, "not_found", f"Customer {cid} was not found.")
+    return customer
 
 
 def _amount(value: Any) -> Decimal:
@@ -400,6 +441,21 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
         db.delete(expense)
     elif action == "delete_order":
         order_service.delete_order(db, int(args["order_id"]))
+    elif action == "merge_customers":
+        customer_service.merge(db, int(args["duplicate_id"]), int(args["keep_id"]))
+    elif action == "rename_customer":
+        customer_service.update(
+            db, int(args["customer_id"]), {"name": " ".join(str(args["name"]).split())}
+        )
+    elif action == "set_order_for_whom":
+        from app.schemas.order import OrderUpdate
+
+        order_service.update_order(
+            db,
+            int(args["order_id"]),
+            OrderUpdate(for_whom=" ".join(str(args.get("for_whom", "")).split()) or None),
+            user,
+        )
     else:  # pragma: no cover - guarded by the registry check above
         raise APIError(400, "bad_action", "That is not an action the assistant can take.")
 
@@ -543,7 +599,7 @@ def chat(
     each turn rather than replayed, which means every answer is computed
     against current data and a stale lookup can never be smuggled back in.
 
-    Returns {"conversation_id", "title", "reply", "proposal"}.
+    Returns {"conversation_id", "title", "reply", "proposals"}.
     """
     settings = get_settings()
     client = client or _client()
@@ -587,7 +643,7 @@ def chat(
         {"role": m.role, "content": m.text} for m in reversed(stored)
     ]
 
-    def _finish(reply: str, proposal: dict | None) -> dict:
+    def _finish(reply: str, proposals: list[dict] | None) -> dict:
         if reply:
             db.add(AssistantMessage(
                 conversation_id=convo.id, role="assistant", text=reply,
@@ -599,7 +655,7 @@ def chat(
             "conversation_id": convo.id,
             "title": convo.title,
             "reply": reply,
-            "proposal": proposal,
+            "proposals": proposals or [],
         }
 
     for _ in range(MAX_STEPS):
@@ -633,16 +689,20 @@ def chat(
 
         calls = [b for b in response.content if b.type == "tool_use"]
 
-        # A write tool ends the turn: it is a proposal, not an action.
-        for call in calls:
-            tool = by_name.get(call.name)
-            if tool is not None and tool.writes:
+        # Write tools end the turn: they are proposals, not actions. Every one
+        # in this response is collected so a multi-part request comes back as a
+        # single batch to approve rather than a queue of confirmations.
+        writes = [c for c in calls if (by_name.get(c.name) is not None and by_name[c.name].writes)]
+        if writes:
+            proposals = []
+            for call in writes:
                 args = dict(call.input or {})
-                return _finish(_text_of(response), {
+                proposals.append({
                     "action": call.name,
                     "args": args,
                     "summary": describe(db, call.name, args),
                 })
+            return _finish(_text_of(response), proposals)
 
         # Otherwise run the reads and hand the results back.
         messages.append({"role": "assistant", "content": response.content})

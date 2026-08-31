@@ -33,7 +33,9 @@ class ChatOut(BaseModel):
     conversation_id: int
     title: str
     reply: str
-    proposal: Proposal | None = None
+    # A list because one instruction often means several changes; each is
+    # described separately so approving the batch is not approving a black box.
+    proposals: list[Proposal] = Field(default_factory=list)
 
 
 class ConversationSummary(BaseModel):

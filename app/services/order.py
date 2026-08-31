@@ -288,9 +288,14 @@ def update_order(
         db.flush()
         stock_service.deduct_for_order(db, order, user_id=user.id)
 
+    # Allowlist, so a client cannot set arbitrary columns. Anything editable on
+    # an order has to be named here — a field missing from this tuple is
+    # accepted by the schema and then silently dropped, which is exactly how
+    # for_whom failed to save when it was first added.
     for field in (
         "client_name", "client_phone", "needed_for_date",
-        "fulfillment_type", "delivery_address", "delivery_name", "card_message", "status",
+        "fulfillment_type", "delivery_address", "delivery_name", "card_message",
+        "for_whom", "status",
     ):
         if field in data:
             setattr(order, field, data[field])

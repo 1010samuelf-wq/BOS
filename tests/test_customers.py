@@ -252,3 +252,33 @@ def test_a_cashier_cannot_reassign_orders(make_user, client, make_product):
 
     assert cashier.post(f"/api/v1/customers/{target['id']}/orders",
                         json={"order_id": order["id"]}).status_code == 403
+
+
+def test_editing_an_order_can_set_and_clear_who_it_was_for(client, make_product):
+    """update_order applies an allowlist of fields; anything missing from it is
+    accepted by the schema and then silently dropped. for_whom shipped that way
+    once — this is the guard."""
+    p = make_product()["id"]
+    order = _order(client, p, "key-cust-29", "Herman", "4383705825")
+
+    edited = client.put(f"/api/v1/orders/{order['id']}", json={"for_whom": "Srugo"})
+    assert edited.status_code == 200
+    assert edited.json()["for_whom"] == "Srugo"
+    assert client.get(f"/api/v1/orders/{order['id']}").json()["for_whom"] == "Srugo"
+
+    cleared = client.put(f"/api/v1/orders/{order['id']}", json={"for_whom": None})
+    assert cleared.json()["for_whom"] is None
+
+
+def test_editing_one_field_does_not_blank_the_others(client, make_product):
+    """The partial-update rule: sending only for_whom must leave the rest of
+    the order alone."""
+    p = make_product()["id"]
+    order = _order(client, p, "key-cust-30", "Herman", "4383705825")
+
+    client.put(f"/api/v1/orders/{order['id']}", json={"for_whom": "Frankl"})
+
+    after = client.get(f"/api/v1/orders/{order['id']}").json()
+    assert after["client_name"] == "Herman"
+    assert after["client_phone"] == "4383705825"
+    assert after["total"] == order["total"]

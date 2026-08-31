@@ -362,7 +362,8 @@ export interface AssistantReply {
   conversation_id: number;
   title: string;
   reply: string;
-  proposal: AssistantProposal | null;
+  /** One instruction can mean several changes; each is confirmed on its own. */
+  proposals: AssistantProposal[];
 }
 export interface ConversationSummary {
   id: number;

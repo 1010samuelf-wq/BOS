@@ -97,7 +97,7 @@ def test_read_tool_runs_and_its_output_reaches_the_model(client, make_product, f
                     json={"message": "what orders are open?"})
     assert r.status_code == 200, r.text
     assert r.json()["reply"] == "You have one order, for Rivka Cohen."
-    assert r.json()["proposal"] is None
+    assert r.json()["proposals"] == []
 
     # The second call carries the tool result — proving the tool really ran
     # against the database rather than the model inventing an answer.
@@ -143,7 +143,7 @@ def test_runaway_tool_loop_is_bounded(client, make_product, fake_model):
     r = client.post("/api/v1/assistant/chat",
                     json={"message": "loop"})
     assert r.status_code == 200
-    assert r.json()["proposal"] is None
+    assert r.json()["proposals"] == []
     assert "different way" in r.json()["reply"]
 
 
@@ -161,7 +161,7 @@ def test_write_tool_only_proposes_and_changes_nothing(client, make_product, fake
     r = client.post("/api/v1/assistant/chat",
                     json={"message": f"order {order['id']} paid cash"})
     assert r.status_code == 200
-    proposal = r.json()["proposal"]
+    proposal = r.json()["proposals"][0]
     assert proposal["action"] == "mark_order_paid"
     assert proposal["args"]["order_id"] == order["id"]
 
@@ -183,7 +183,7 @@ def test_proposal_summary_is_built_from_the_database_not_the_model(client, make_
 
     r = client.post("/api/v1/assistant/chat",
                     json={"message": "mark it paid"})
-    summary = r.json()["proposal"]["summary"]
+    summary = r.json()["proposals"][0]["summary"]
     assert f"#{order['id']}" in summary
     assert "Weiss Catering" in summary
     assert "999" not in summary

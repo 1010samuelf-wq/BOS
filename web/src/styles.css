@@ -527,3 +527,8 @@ textarea.input { resize: vertical; font-family: inherit; }
   font-size: 11px;
   border-top: 1px solid var(--border);
 }
+
+/* ---- a batch of proposed changes ---- */
+.assistant-proposal-list { margin: 0 0 10px; padding-left: 20px; }
+.assistant-proposal-list li { margin: 4px 0; }
+.assistant-proposal-list li.running { font-weight: 600; }
