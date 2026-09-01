@@ -1,9 +1,19 @@
-// Orders (§2A/§11): a "By date" view — all outstanding orders sorted by
-// needed-for date, with Today/Tomorrow/This week/Custom preset filters — and a
-// filterable List — product-name search, date range (order or needed-for), and
-// status / paid / fulfillment dropdowns with Clear. Overdue rows red; click →
-// detail. Orders with no needed-for date always show (nothing to bucket them
-// into) rather than silently disappearing under a preset.
+// Orders (§2A/§11). Two views, and the difference between them is the whole
+// point of the labelling here:
+//
+//   "Coming up"  — only orders still to be made or handed over, bucketed by the
+//                  day they're needed (Today / Tomorrow / This week / a custom
+//                  range / All).
+//   "All orders" — every order ever, finished and cancelled included, with
+//                  product search, a date range and the status dropdowns.
+//
+// They used to be called "By date" and "List / filter", which described the
+// controls rather than the contents; staff couldn't tell what set of orders
+// each one was showing, and asked outright how a custom range differed from the
+// filter tab and where to see everything. Both views now say what they hold.
+//
+// Overdue rows red; click → detail. Orders with no needed-for date always show
+// (nothing to bucket them into) rather than silently disappearing under a preset.
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -11,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 
 import { listOrders } from "../api/endpoints";
 import type { Order, OrderStatus } from "../api/types";
-import { Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs } from "../components/ui";
 import { asDate, formatNeeded, neededDeadline } from "../order/dates";
 
 function isOverdue(o: Order): boolean {
@@ -40,7 +50,7 @@ function statusPillClass(s: OrderStatus): string {
   return "pill status-pending";
 }
 
-type DatePreset = "today" | "tomorrow" | "week" | "custom";
+type DatePreset = "today" | "tomorrow" | "week" | "custom" | "all";
 
 function localDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -66,7 +76,12 @@ function DateOrdersView() {
   const today = localDay(new Date());
   const [customFrom, setCustomFrom] = useState(today);
   const [customTo, setCustomTo] = useState(today);
-  const range = preset === "custom" ? { from: customFrom, to: customTo } : presetRange(preset);
+  // "All" means no date filtering at all, which is a different thing from a
+  // very wide range — hence null rather than sentinel dates.
+  const range =
+    preset === "all" ? null
+    : preset === "custom" ? { from: customFrom, to: customTo }
+    : presetRange(preset);
 
   const q = useQuery({
     queryKey: ["orders", "outstanding"],
@@ -75,6 +90,7 @@ function DateOrdersView() {
 
   const rows = (q.data?.items ?? [])
     .filter((o) => {
+      if (range === null) return true;     // "All" — every outstanding order
       if (!o.needed_for_date) return true; // no date to bucket — always show
       const day = localDay(asDate(o.needed_for_date));
       return day >= range.from && day <= range.to;
@@ -98,6 +114,7 @@ function DateOrdersView() {
               { key: "tomorrow", label: "Tomorrow" },
               { key: "week", label: "This week" },
               { key: "custom", label: "Custom range" },
+              { key: "all", label: "All" },
             ]}
           />
           {preset === "custom" && (
@@ -107,10 +124,16 @@ function DateOrdersView() {
             </>
           )}
         </div>
+        <p className="view-note">
+          Orders still to make or hand over, by the day they're needed.
+          Finished and cancelled orders are under <strong>All orders</strong>.
+        </p>
       </div>
 
       {q.isLoading ? (
         <Loading />
+      ) : q.isError ? (
+        <LoadFailed what="orders" onRetry={() => void q.refetch()} />
       ) : (
         <div className="card">
           <table>
@@ -132,7 +155,19 @@ function DateOrdersView() {
                   <td className="num">${o.total}</td>
                 </tr>
               ))}
-              {q.isSuccess && rows.length === 0 && <tr><td colSpan={8} className="muted">No orders in this range.</td></tr>}
+              {q.isSuccess && rows.length === 0 && (
+                <tr><td colSpan={8} className="muted">
+                  {preset === "all" ? "Nothing outstanding — everything is fulfilled." : "No orders in this range."}
+                </td></tr>
+              )}
+              {/* Saying "All" and then quietly stopping at the fetch limit would
+                  reintroduce the very complaint this preset answers. */}
+              {q.isSuccess && q.data.total > q.data.items.length && (
+                <tr><td colSpan={8} className="muted">
+                  Showing the first {q.data.items.length} of {q.data.total} outstanding orders —
+                  narrow the range to see the rest.
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -216,9 +251,15 @@ function OrdersList() {
           </select>
           <button className="btn neutral" disabled={!active} onClick={() => setF(EMPTY)}>Clear</button>
         </div>
+        <p className="view-note">
+          Every order, finished and cancelled included. With nothing filled in
+          it shows the lot, newest-needed first.
+        </p>
       </div>
 
-      {q.isLoading ? <Loading /> : (
+      {q.isLoading ? <Loading /> : q.isError ? (
+        <LoadFailed what="orders" onRetry={() => void q.refetch()} />
+      ) : (
         <div className="card">
           <table>
             <thead><tr><th>Order</th><th>Client</th><th>Needed for</th><th>Type</th><th>Status</th><th>Paid</th><th className="num">Total</th></tr></thead>
@@ -235,6 +276,12 @@ function OrdersList() {
                 </tr>
               ))}
               {q.isSuccess && q.data.items.length === 0 && <tr><td colSpan={7} className="muted">No matching orders.</td></tr>}
+              {q.isSuccess && q.data.total > q.data.items.length && (
+                <tr><td colSpan={7} className="muted">
+                  Showing the first {q.data.items.length} of {q.data.total} matching orders —
+                  add a filter to narrow it down.
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -269,7 +316,7 @@ export default function Orders() {
         <div className="tabs">
           {(["date", "list"] as const).map((t) => (
             <button key={t} className={`tab${tab === t ? " active" : ""}`} onClick={() => setTab(t)}>
-              {t === "date" ? "By date" : "List / filter"}
+              {t === "date" ? "Coming up" : "All orders"}
             </button>
           ))}
         </div>

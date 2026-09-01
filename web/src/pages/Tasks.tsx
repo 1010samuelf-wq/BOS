@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 
 import { ApiRequestError } from "../api/client";
 import { createTask, fetchRoster, listTasks, toggleTaskDone } from "../api/endpoints";
-import { Loading, PageHead } from "../components/ui";
+import { LoadFailed, Loading, PageHead } from "../components/ui";
 import { formatDate } from "../order/dates";
 
 export default function Tasks() {
@@ -91,6 +91,8 @@ export default function Tasks() {
         </div>
         {tasks.isLoading ? (
           <Loading />
+        ) : tasks.isError ? (
+          <LoadFailed what="tasks" onRetry={() => void tasks.refetch()} />
         ) : (
           <table>
             <thead><tr><th></th><th>Task</th><th>Assigned to</th><th>Due</th></tr></thead>

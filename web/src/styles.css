@@ -102,6 +102,25 @@ tr.row-ready td { background: #eaf3e9; color: var(--success); }
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
 
+/* A page whose data failed to load. Deliberately looks like a card rather than
+   a bare line, so it reads as "this screen is broken" and not as an empty list. */
+.load-failed {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+}
+.load-failed p { margin: 0 0 6px; }
+.load-failed button { margin-top: 8px; }
+
+/* One line under a view's controls saying what that view actually contains.
+   Two tabs that both filter by date are indistinguishable without it. */
+.view-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 /* order detail: phone + needed-for, big and unmissable — staff read these
    at a glance to call the customer or know when it's due */
 .order-info-line {

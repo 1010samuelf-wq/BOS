@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # Browser origins allowed to call the API (the web dashboard). CSV. The
     # tablet app is React Native and not subject to CORS. Set to the deployed
     # dashboard origin in production.
-    cors_origins: str = "http://localhost:5173,http://localhost:4173"
+    cors_origins: str = "http://localhost:5173,http://localhost:4173,http://127.0.0.1:5173"
 
     # --- assistant ---
     # Empty key disables the assistant entirely (every endpoint 503s) so the

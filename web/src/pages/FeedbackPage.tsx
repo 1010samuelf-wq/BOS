@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { listFeedback, setFeedbackHandled } from "../api/endpoints";
 import type { Feedback } from "../api/types";
-import { Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs } from "../components/ui";
 import { formatDateTime } from "../order/dates";
 
 function FeedbackCard({ f, onToggle, busy }: { f: Feedback; onToggle: () => void; busy: boolean }) {
@@ -59,6 +59,8 @@ export default function FeedbackPage() {
 
       {q.isLoading ? (
         <Loading />
+      ) : q.isError ? (
+        <LoadFailed what="feedback" onRetry={() => void q.refetch()} />
       ) : q.data && q.data.length > 0 ? (
         q.data.map((f) => (
           <FeedbackCard

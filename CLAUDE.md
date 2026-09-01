@@ -103,6 +103,21 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   automatically on a PIN reset and on setting a new PIN, and on demand via
   `POST /auth/sign-out-everywhere`. A token with no `tv` claim is treated as
   version 0 so deploying the check didn't sign the whole shop out.
+- **React Query must not be allowed to pause.** The dashboard sets
+  `networkMode: "always"` in `web/src/main.tsx`; don't remove it. By default
+  React Query pauses every query when its `onlineManager` thinks the browser is
+  offline, and a dropped wifi or a slept laptop can latch that state without the
+  matching "online" event ever arriving. A paused query is `status: "pending"`
+  with `fetchStatus: "paused"`, so **`isLoading` is false and `data` is
+  undefined** — a page that only branches on `isLoading` then renders its empty
+  shell with no spinner and no error, forever, until a reload. This shipped and
+  was reported by the shop as "the notifications dosent load at all" while the
+  API was serving 200s.
+- **A page that only handles `isLoading` is broken on failure.** Same root
+  shape as above: on error, `isLoading` is false and `data` is undefined, so the
+  page draws an empty list and the person can't tell "nothing to show" from
+  "this is broken". Every page-level query needs an `isError` branch —
+  `<LoadFailed what="…" onRetry={…} />` in `components/ui.tsx` is the shared one.
 - **Migrations must be idempotent-guarded.** `0001_initial` builds the whole
   schema from the *current* models via `create_all`, so on a fresh DB it also
   creates columns added by later revisions. Every migration after `0001` must

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { exportProductionCsv, getProduction } from "../api/endpoints";
-import { Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs } from "../components/ui";
 
 type Preset = "today" | "tomorrow" | "week" | "upcoming" | "custom";
 
@@ -67,6 +67,8 @@ export default function Production() {
 
       {q.isLoading ? (
         <Loading />
+      ) : q.isError ? (
+        <LoadFailed what="the bake list" onRetry={() => void q.refetch()} />
       ) : (
         <div className="card">
           <table>

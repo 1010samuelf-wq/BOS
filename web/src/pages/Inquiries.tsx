@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 
 import { listInquiries, toggleInquiryHandled } from "../api/endpoints";
 import type { Inquiry } from "../api/types";
-import { Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs } from "../components/ui";
 import { formatDateTime } from "../order/dates";
 
 function InquiryCard({
@@ -88,6 +88,8 @@ export default function Inquiries() {
 
       {list.isLoading ? (
         <Loading />
+      ) : list.isError ? (
+        <LoadFailed what="inquiries" onRetry={() => void list.refetch()} />
       ) : (list.data ?? []).length === 0 ? (
         <p className="muted">{tab === "open" ? "Nothing waiting — all caught up." : "No inquiries here."}</p>
       ) : (
