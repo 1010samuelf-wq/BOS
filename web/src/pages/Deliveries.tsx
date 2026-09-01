@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { deliveriesPdf, exportDeliveriesCsv, getDeliveries } from "../api/endpoints";
-import { LoadFailed, Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs, isStalled } from "../components/ui";
 import { formatNeeded } from "../order/dates";
 
 type Preset = "today" | "tomorrow" | "week" | "upcoming" | "custom";
@@ -67,7 +67,7 @@ export default function Deliveries() {
 
       {q.isLoading ? (
         <Loading />
-      ) : q.isError ? (
+      ) : isStalled(q) ? (
         <LoadFailed what="deliveries" onRetry={() => void q.refetch()} />
       ) : (
         <div className="card">

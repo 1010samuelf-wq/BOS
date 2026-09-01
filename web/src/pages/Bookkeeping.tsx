@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { ApiRequestError } from "../api/client";
 import { createCompany, listCompanies } from "../api/endpoints";
 import type { Company, CompanyType } from "../api/types";
-import { LoadFailed, Loading, PageHead } from "../components/ui";
+import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 
 export default function Bookkeeping() {
   const navigate = useNavigate();
@@ -58,7 +58,7 @@ export default function Bookkeeping() {
 
       {companies.isLoading ? (
         <Loading />
-      ) : companies.isError ? (
+      ) : isStalled(companies) ? (
         <LoadFailed what="the ledger" onRetry={() => void companies.refetch()} />
       ) : (
         <>

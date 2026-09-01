@@ -21,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 
 import { listOrders } from "../api/endpoints";
 import type { Order, OrderStatus } from "../api/types";
-import { LoadFailed, Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs, isStalled } from "../components/ui";
 import { asDate, formatNeeded, neededDeadline } from "../order/dates";
 
 function isOverdue(o: Order): boolean {
@@ -132,7 +132,7 @@ function DateOrdersView() {
 
       {q.isLoading ? (
         <Loading />
-      ) : q.isError ? (
+      ) : isStalled(q) ? (
         <LoadFailed what="orders" onRetry={() => void q.refetch()} />
       ) : (
         <div className="card">
@@ -257,7 +257,7 @@ function OrdersList() {
         </p>
       </div>
 
-      {q.isLoading ? <Loading /> : q.isError ? (
+      {q.isLoading ? <Loading /> : isStalled(q) ? (
         <LoadFailed what="orders" onRetry={() => void q.refetch()} />
       ) : (
         <div className="card">

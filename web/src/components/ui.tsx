@@ -18,6 +18,33 @@ export function ErrorMsg({ children }: { children: ReactNode }) {
   return <p className="error">{children}</p>;
 }
 
+/** A query with nothing to show that isn't doing anything about it.
+ *
+ * `isError` is not enough on its own. React Query pauses a retry whenever the
+ * document is unfocused *or* its onlineManager thinks we're offline — in
+ * retryer.ts the condition is
+ *
+ *   focusManager.isFocused() && (networkMode === "always" || onlineManager.isOnline())
+ *
+ * so `networkMode: "always"` only removes one of the two triggers. A paused
+ * query reports status "pending" with fetchStatus "paused", which means
+ * isLoading is false, isError is false, and data is undefined all at once. A
+ * page branching on isLoading alone then draws an empty list, and an empty list
+ * is indistinguishable from "you have nothing" — which is how this reached us,
+ * as "the notifications dosent load at all".
+ *
+ * Only "paused" is treated as stalled, not any idle-with-no-data state: a query
+ * can be idle for a frame before its first fetch starts, and flashing an error
+ * there would be its own bug.
+ */
+export function isStalled(q: {
+  isError: boolean;
+  fetchStatus: "fetching" | "paused" | "idle";
+  data: unknown;
+}): boolean {
+  return q.isError || (q.data === undefined && q.fetchStatus === "paused");
+}
+
 /** What a page shows when its data couldn't be fetched.
  *
  * Worth a shared component because the alternative is worse than it looks:

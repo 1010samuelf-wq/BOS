@@ -19,7 +19,7 @@ import {
 } from "../api/endpoints";
 import type { TimeEntry } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
-import { LoadFailed, Loading, PageHead } from "../components/ui";
+import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 import { formatDate, formatTime, formatWeekdayDate } from "../order/dates";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -151,7 +151,7 @@ export default function Time() {
           <h2>{whoName} · {rangeLabel}</h2>
           <strong>Total: {weekTotal.toFixed(2)} h{targetRate != null ? ` · $${(weekTotal * targetRate).toFixed(2)}` : ""}</strong>
         </div>
-        {entriesQ.isLoading ? <Loading /> : entriesQ.isError ? (
+        {entriesQ.isLoading ? <Loading /> : isStalled(entriesQ) ? (
           <LoadFailed what="these hours" onRetry={() => void entriesQ.refetch()} />
         ) : (
           <table>

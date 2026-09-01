@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { listNotifications, markAllNotificationsRead, markNotificationRead } from "../api/endpoints";
-import { LoadFailed, Loading, PageHead } from "../components/ui";
+import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 import { formatDateTime } from "../order/dates";
 
 const ICON: Record<string, string> = { low_stock: "📦", overdue_order: "⏰", overdue_task: "✅" };
@@ -25,7 +25,7 @@ export default function Notifications() {
 
       {feed.isLoading ? (
         <Loading />
-      ) : feed.isError ? (
+      ) : isStalled(feed) ? (
         <LoadFailed what="notifications" onRetry={() => void feed.refetch()} />
       ) : (
         <div className="card">
