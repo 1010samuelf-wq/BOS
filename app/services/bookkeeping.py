@@ -11,7 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import not_found
-from app.models import Company, LedgerEntry
+from app.models import Company, LedgerEntry, User
+from app.services import trash
 from app.schemas.bookkeeping import (
     CompanyCreate,
     CompanyUpdate,
@@ -109,11 +110,29 @@ def update_entry(
     return company
 
 
-def delete_entry(db: Session, company_id: int, entry_id: int) -> Company:
+def delete_entry(
+    db: Session, company_id: int, entry_id: int, user: User | None = None
+) -> Company:
     company = _get_company(db, company_id)
     entry = next((e for e in company.entries if e.id == entry_id), None)
     if entry is None:
         raise not_found(f"Entry {entry_id} not found on company {company_id}")
+
+    # Snapshot first, while the row is still here to read.
+    trash.record(
+        db,
+        kind="ledger_entry",
+        label=(
+            f"{company.name}: {entry.type.value} ${entry.amount} "
+            f"on {entry.entry_date.isoformat()}"
+            + (f" — {entry.note}" if entry.note else "")
+        ),
+        payload=trash.snapshot(
+            entry, ["company_id", "entry_date", "type", "amount", "note", "logged_by"]
+        ),
+        user=user,
+    )
+
     db.delete(entry)
     db.flush()
     db.refresh(company)

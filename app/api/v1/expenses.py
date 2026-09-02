@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import Expense, User
 from app.models.base import utc_today
 from app.schemas.expense import ExpenseCreate, ExpenseOut, ExpenseUpdate
+from app.services import trash as trash_service
 
 router = APIRouter(
     prefix="/expenses", tags=["expenses"],
@@ -75,10 +76,19 @@ def update_expense(
 def delete_expense(
     expense_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(current_user),
+    user: User = Depends(current_user),
 ):
     expense = db.get(Expense, expense_id)
     if expense is None:
         raise not_found(f"Expense {expense_id} not found")
+    trash_service.record(
+        db,
+        kind="expense",
+        label=f"{expense.description} — ${expense.amount} on {expense.spent_on.isoformat()}",
+        payload=trash_service.snapshot(
+            expense, ["description", "amount", "category", "spent_on", "logged_by"]
+        ),
+        user=user,
+    )
     db.delete(expense)
     db.commit()

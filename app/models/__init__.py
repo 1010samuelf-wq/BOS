@@ -29,6 +29,7 @@ from app.models.order import Order, OrderItem, OrderNote
 from app.models.settings import AppSettings
 from app.models.stock import StockAdjustment, StockLevel
 from app.models.sync import SyncedOperation
+from app.models.trash import TrashItem
 from app.models.user import User
 from app.models.misc import (
     DailyReport,
@@ -69,6 +70,7 @@ __all__ = [
     "StockAdjustment",
     "StockLevel",
     "SyncedOperation",
+    "TrashItem",
     "User",
     "DailyReport",
     "Expense",

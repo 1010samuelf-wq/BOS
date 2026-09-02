@@ -208,6 +208,19 @@ def merge(db: Session, source_id: int, target_id: int) -> Customer:
         target.notes = f"{target.notes}\n{source.notes}".strip() if target.notes else source.notes
     target.updated_at = utcnow()
 
+    # Kept for the record, not restorable: the orders have already been moved
+    # onto the surviving customer, so putting this row back would create a
+    # second empty record rather than undoing anything.
+    from app.services import trash
+
+    trash.record(
+        db,
+        kind="customer",
+        label=f'Merged "{source.name}" into "{target.name}"',
+        payload=trash.snapshot(source, ["name", "phone", "address", "notes"])
+        | {"merged_into": target.id},
+    )
+
     db.delete(source)
     db.flush()
     return target

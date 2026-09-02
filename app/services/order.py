@@ -330,7 +330,7 @@ def cancel_order(db: Session, order_id: int, reverse_stock: bool, user: User) ->
     return order
 
 
-def delete_order(db: Session, order_id: int) -> None:
+def delete_order(db: Session, order_id: int, user=None) -> None:
     """Permanently remove an order (admin-only, cancel first — spec: clean up
     test/mistake data, distinct from Cancel which keeps the record as an
     audit trail). Items/notes cascade; the stock-adjustment audit log and any
@@ -341,6 +341,33 @@ def delete_order(db: Session, order_id: int) -> None:
         raise bad_request(
             "Cancel the order before permanently deleting it.", code="order_not_cancelled"
         )
+    # Kept, but not restorable: putting an order back would have to replay its
+    # stock movements and payment state, and a half-right order is worse than
+    # retyping one. The snapshot carries the lines so it *can* be retyped.
+    from app.services import trash
+
+    trash.record(
+        db,
+        kind="order",
+        label=(
+            f"Order #{order.id} for {order.client_name} — "
+            + ", ".join(f"{i.quantity}x {i.product_name}" for i in order.items)
+            + f" (${order.total})"
+        ),
+        payload={
+            **trash.snapshot(order, [
+                "client_name", "client_phone", "needed_for_date", "fulfillment_type",
+                "delivery_address", "delivery_name", "card_message", "for_whom",
+                "status", "paid_status", "total",
+            ]),
+            "items": [
+                trash.snapshot(i, ["product_name", "quantity", "unit_price"])
+                for i in order.items
+            ],
+        },
+        user=user,
+    )
+
     db.execute(update(StockAdjustment).where(StockAdjustment.order_id == order_id).values(order_id=None))
     db.execute(update(Notification).where(Notification.related_order_id == order_id).values(related_order_id=None))
     db.delete(order)

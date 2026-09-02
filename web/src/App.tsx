@@ -23,6 +23,7 @@ import Customers from "./pages/Customers";
 import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
 import CompanyStatement from "./pages/CompanyStatement";
+import Trash from "./pages/Trash";
 import FeedbackWidget from "./components/FeedbackWidget";
 import AssistantPanel from "./components/AssistantPanel";
 
@@ -45,6 +46,7 @@ const NAV = [
   // Reading feedback is admin-only rather than section-gated — see the note on
   // GET /feedback. `adminOnly` is honoured by the sidebar and by RequireAdmin.
   { to: "/feedback", label: "Feedback", icon: "💬", section: "settings", adminOnly: true },
+  { to: "/trash", label: "Deleted", icon: "🗑", section: "settings", adminOnly: true },
 ];
 
 function firstAllowed(sections: string[]): string {
@@ -190,6 +192,7 @@ export default function App() {
         <Route path="/bookkeeping/:id/statement" element={<RequireSection section="bookkeeping"><CompanyStatement /></RequireSection>} />
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />
         <Route path="/feedback" element={<RequireAdmin><FeedbackPage /></RequireAdmin>} />
+        <Route path="/trash" element={<RequireAdmin><Trash /></RequireAdmin>} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>
     </Routes>

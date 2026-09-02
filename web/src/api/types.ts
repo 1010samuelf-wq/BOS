@@ -400,3 +400,16 @@ export interface CustomerDetail extends Customer {
   lifetime_value: string;
   orders: CustomerOrderRow[];
 }
+
+// ---- trash (deleted things, kept) ----
+export interface TrashItem {
+  id: number;
+  kind: string;            // ledger_entry | expense | time_entry | order | customer
+  label: string;           // written at delete time — the row it describes is gone
+  payload: Record<string, unknown>;
+  deleted_by: number | null;
+  deleted_by_name: string | null;
+  deleted_at: string;
+  restored_at: string | null;
+  restorable: boolean;     // some kinds are kept but must be re-entered by hand
+}

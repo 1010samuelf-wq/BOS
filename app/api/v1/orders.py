@@ -124,12 +124,12 @@ def update_order(
 def delete_order(
     order_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    user: User = Depends(require_admin),
 ):
     """Permanently remove an order — admin-only, and only once it's already
     cancelled (Cancel already excludes it from every report/revenue figure;
     this is for actually clearing out test or mistaken entries)."""
-    order_service.delete_order(db, order_id)
+    order_service.delete_order(db, order_id, user=user)
     db.commit()
     broadcaster.publish(_ORDERS)
     broadcaster.publish(_STOCK)

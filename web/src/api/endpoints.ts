@@ -34,6 +34,7 @@ import type {
   Task,
   TimeEntry,
   TokenOut,
+  TrashItem,
   WeeklyHours,
 } from "./types";
 
@@ -217,6 +218,12 @@ export const updateLedgerEntry = (
 ) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "PUT", body });
 export const deleteLedgerEntry = (companyId: number, entryId: number) =>
   api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });
+
+// ---- trash ----
+export const listTrash = (includeRestored = false) =>
+  api<TrashItem[]>("/trash", { query: { include_restored: includeRestored } });
+export const restoreTrashItem = (id: number) =>
+  api<TrashItem>(`/trash/${id}/restore`, { method: "POST" });
 
 // ---- feedback ----
 export const submitFeedback = (body: { message: string; source: string; context?: string }) =>

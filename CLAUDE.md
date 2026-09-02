@@ -118,6 +118,16 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   page draws an empty list and the person can't tell "nothing to show" from
   "this is broken". Every page-level query needs an `isError` branch —
   `<LoadFailed what="…" onRetry={…} />` in `components/ui.tsx` is the shared one.
+- **Nothing is hard-deleted; every delete records to the trash first.**
+  `app/services/trash.py::record()` is called *before* the `db.delete(...)`,
+  while the row still exists to snapshot. If you add a delete path anywhere,
+  add the record call with it. `restore()` only handles kinds in
+  `trash.RESTORABLE` (ledger entries, expenses, shifts) — orders and merged
+  customers are kept and readable but deliberately not auto-restored, because
+  re-inserting them would have to replay stock, payment state or a reassignment
+  and getting that half right is worse than retyping. Money in a snapshot is
+  stored as a **string**, never a float, or a restored amount comes back a cent
+  off.
 - **Migrations must be idempotent-guarded.** `0001_initial` builds the whole
   schema from the *current* models via `create_all`, so on a fresh DB it also
   creates columns added by later revisions. Every migration after `0001` must

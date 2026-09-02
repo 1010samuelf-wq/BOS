@@ -100,9 +100,9 @@ def delete_entry(
     company_id: int,
     entry_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(current_user),
+    user: User = Depends(current_user),
 ):
-    company = service.delete_entry(db, company_id, entry_id)
+    company = service.delete_entry(db, company_id, entry_id, user=user)
     db.commit()
     db.refresh(company)
     return company

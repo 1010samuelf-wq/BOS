@@ -601,3 +601,25 @@ textarea.input { resize: vertical; font-family: inherit; }
   .statement-table tr { page-break-inside: avoid; }
   @page { margin: 18mm; }
 }
+
+/* ---- Deleted (trash) ---------------------------------------------------- */
+.trash-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.trash-row:last-child { border-bottom: none; }
+.trash-label { font-weight: 600; overflow-wrap: anywhere; }
+/* The raw snapshot, for the case where something has to be retyped from it. */
+.trash-payload {
+  margin: 8px 0 0;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}

@@ -132,10 +132,25 @@ def update_entry(db: Session, entry_id: int, fields: dict) -> TimeEntry:
     return entry
 
 
-def delete_entry(db: Session, entry_id: int) -> None:
+def delete_entry(db: Session, entry_id: int, user=None) -> None:
     entry = db.get(TimeEntry, entry_id)
     if entry is None:
         raise not_found(f"Time entry {entry_id} not found")
+
+    from app.services import trash
+
+    worked = db.get(User, entry.user_id)
+    trash.record(
+        db,
+        kind="time_entry",
+        label=(
+            f"{worked.name if worked else 'employee ' + str(entry.user_id)}: shift from "
+            f"{entry.clock_in.isoformat()}"
+            + (f" to {entry.clock_out.isoformat()}" if entry.clock_out else " (never clocked out)")
+        ),
+        payload=trash.snapshot(entry, ["user_id", "clock_in", "clock_out", "paid"]),
+        user=user,
+    )
     db.delete(entry)
 
 

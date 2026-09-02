@@ -59,6 +59,7 @@ from app.services import bookkeeping as bookkeeping_service
 from app.services import customer as customer_service
 from app.services import order as order_service
 from app.services import tasks as task_service
+from app.services import trash as trash_service
 
 logger = logging.getLogger("bos.assistant")
 
@@ -559,9 +560,18 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
         expense = db.get(Expense, int(args["expense_id"]))
         if expense is None:
             raise APIError(404, "not_found", "That expense was not found.")
+        trash_service.record(
+            db,
+            kind="expense",
+            label=f"{expense.description} — ${expense.amount} on {expense.spent_on.isoformat()}",
+            payload=trash_service.snapshot(
+                expense, ["description", "amount", "category", "spent_on", "logged_by"]
+            ),
+            user=user,
+        )
         db.delete(expense)
     elif action == "delete_order":
-        order_service.delete_order(db, int(args["order_id"]))
+        order_service.delete_order(db, int(args["order_id"]), user=user)
     elif action == "merge_customers":
         customer_service.merge(db, int(args["duplicate_id"]), int(args["keep_id"]))
     elif action == "rename_customer":
