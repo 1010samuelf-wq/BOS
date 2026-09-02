@@ -100,6 +100,7 @@ export interface Order {
   card_message: string | null;
   payment_timing: PaymentTiming;
   payment_method: PaymentMethod | null;
+  expected_payment_method: PaymentMethod | null;
   paid_status: PaidStatus;
   status: OrderStatus;
   fulfillment_status: FulfillmentStatus;
@@ -147,6 +148,7 @@ export interface OrderCreatePayload {
   card_message?: string | null;
   payment_timing: PaymentTiming;
   payment_method?: PaymentMethod | null;
+  expected_payment_method?: PaymentMethod | null;
   items: (
     | { product_id: number; quantity: number; note?: string | null }
     | { custom_name: string; custom_price: string; save_as_product: boolean; quantity: number; note?: string | null }

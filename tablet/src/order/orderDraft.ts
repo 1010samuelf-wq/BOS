@@ -33,6 +33,8 @@ export interface Draft {
   cardMessage: string;
   paymentTiming: PaymentTiming;
   paymentMethod: PaymentMethod | null;
+  /** What they said they'd pay with. A note about the future — it settles nothing. */
+  expectedPaymentMethod: PaymentMethod | null;
   cardPaymentNote: string; // from the Card popup modal
   generalNotes: string[];
   lines: DraftLine[];
@@ -60,6 +62,7 @@ export function emptyDraft(): Draft {
     cardMessage: "",
     paymentTiming: "now",
     paymentMethod: null,
+    expectedPaymentMethod: null,
     cardPaymentNote: "",
     generalNotes: [],
     lines: [],
@@ -172,6 +175,7 @@ export function draftFromOrder(o: Order): Draft {
     cardMessage: o.card_message ?? "",
     paymentTiming: o.payment_timing,
     paymentMethod: o.payment_method,
+    expectedPaymentMethod: o.expected_payment_method,
     cardPaymentNote: "",
     generalNotes: [],
     lines: o.items.map((i) => ({
@@ -235,6 +239,8 @@ export function buildPayload(draft: Draft): OrderCreatePayload {
     payment_timing: draft.paymentTiming,
     // Backend rejects a method on pay-later orders — it's captured at mark-paid.
     payment_method: draft.paymentTiming === "now" ? draft.paymentMethod : null,
+    expected_payment_method:
+      draft.paymentTiming === "later" ? draft.expectedPaymentMethod : null,
     items: draft.lines.map((l) =>
       l.product_id !== null
         ? { product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null }

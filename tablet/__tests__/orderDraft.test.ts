@@ -166,6 +166,7 @@ const existingOrder: Order = {
   card_message: null,
   payment_timing: "now",
   payment_method: "cash",
+  expected_payment_method: null,
   paid_status: "paid",
   status: "pending",
   fulfillment_status: "pending",
@@ -219,5 +220,55 @@ describe("editing an existing order (draftFromOrder / buildUpdatePayload)", () =
     const d = draftFromOrder(existingOrder);
     // paymentMethod is carried over from the order but edit validation never checks it
     expect(validateEditDraft({ ...d, paymentMethod: null })).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// expected payment method — what the customer said they'd pay with
+//
+// A pay-later note only. It must never be sent as payment_method, or the
+// reports' cash/card breakdown starts counting money nobody handed over.
+// ---------------------------------------------------------------------------
+describe("expected payment method", () => {
+  const base = () => {
+    let d = emptyDraft();
+    d = addProduct(d, croissant);
+    return { ...d, clientName: "Mrs Weiss" };
+  };
+
+  it("is sent on a pay-later order and leaves payment_method null", () => {
+    const d = { ...base(), paymentTiming: "later" as const, expectedPaymentMethod: "cash" as const };
+    const payload = buildPayload(d);
+
+    expect(payload.expected_payment_method).toBe("cash");
+    expect(payload.payment_method).toBeNull();
+  });
+
+  it("is dropped when paying now, where the real method is recorded instead", () => {
+    const d = {
+      ...base(),
+      paymentTiming: "now" as const,
+      paymentMethod: "card" as const,
+      expectedPaymentMethod: "cash" as const,
+    };
+    const payload = buildPayload(d);
+
+    expect(payload.payment_method).toBe("card");
+    expect(payload.expected_payment_method).toBeNull();
+  });
+
+  it("is optional", () => {
+    const d = { ...base(), paymentTiming: "later" as const };
+    expect(buildPayload(d).expected_payment_method).toBeNull();
+  });
+
+  it("never blocks submitting an order", () => {
+    const d = { ...base(), paymentTiming: "later" as const, expectedPaymentMethod: null };
+    expect(validateDraft(d)).toEqual([]);
+  });
+
+  it("is carried back when an existing order is opened for editing", () => {
+    const withExpectation: Order = { ...existingOrder, expected_payment_method: "etransfer" };
+    expect(draftFromOrder(withExpectation).expectedPaymentMethod).toBe("etransfer");
   });
 });

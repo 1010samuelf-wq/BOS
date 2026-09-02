@@ -124,8 +124,39 @@ export default function NewOrderScreen() {
                 ))}
               </View>
             ) : (
-              <View style={styles.unpaidBadge}>
-                <Text style={styles.unpaidText}>Will be marked UNPAID</Text>
+              <View style={styles.expectRow}>
+                <View style={styles.unpaidBadge}>
+                  <Text style={styles.unpaidText}>Will be marked UNPAID</Text>
+                </View>
+                {/* How they said they'll pay. Optional and settles nothing —
+                    it lets the day be planned around what's coming in, and
+                    marking the order paid later defaults to it. */}
+                <Text style={styles.expectLabel}>Expecting</Text>
+                {METHODS.map((m) => (
+                  <Pressable
+                    key={m.key}
+                    style={[
+                      fieldStyles.pill,
+                      draft.expectedPaymentMethod === m.key && styles.pillActive,
+                    ]}
+                    onPress={() =>
+                      set({
+                        expectedPaymentMethod:
+                          draft.expectedPaymentMethod === m.key ? null : m.key,
+                      })
+                    }
+                  >
+                    <Text
+                      style={
+                        draft.expectedPaymentMethod === m.key
+                          ? styles.pillTextActive
+                          : fieldStyles.pillText
+                      }
+                    >
+                      {m.label}
+                    </Text>
+                  </Pressable>
+                ))}
               </View>
             )}
 
@@ -202,6 +233,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.s,
   },
   unpaidText: { color: colors.warn, fontWeight: "700" },
+  expectRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing.s },
+  expectLabel: { color: colors.textMuted, fontSize: 13 },
   totalLabel: { color: colors.textMuted, fontSize: 12 },
   totalValue: { fontSize: 24, fontWeight: "800", color: colors.text },
   problem: { color: colors.danger },
