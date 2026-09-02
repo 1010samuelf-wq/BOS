@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.models import Expense, Order, Product, User, UserRole
 from app.models.base import utc_today
 from app.services import order as order_service
+from app.services import bookkeeping as bookkeeping_service
 from app.services import customer as customer_service
 from app.services import reports as report_service
 from app.services import tasks as task_service
@@ -480,6 +481,97 @@ _register(Tool(
         "for_whom": {"type": "string", "description": "Empty string clears it."},
     }, ["order_id", "for_whom"]),
     "orders",
+    writes=True,
+))
+
+
+def _run_list_companies(db: Session, user: User, args: dict) -> str:
+    rows = bookkeeping_service.list_companies(db, active_only=not args.get("include_inactive", False))
+    if not rows:
+        return "No companies on the books yet."
+    out = []
+    for c in rows:
+        # Balance is signed the same way the ledger reads it: positive means
+        # still owed, in whichever direction the company type implies.
+        owed = c.balance
+        who = "we owe them" if c.type.value == "payable" else "they owe us"
+        state = f"{_money(owed)} — {who}" if owed > 0 else (
+            "settled" if owed == 0 else f"{_money(-owed)} overpaid")
+        out.append(f"id {c.id}: {c.name} ({c.type.value}); {state}"
+                   + ("" if c.active else "; inactive"))
+    return "\n".join(out)
+
+
+_register(Tool(
+    "list_companies",
+    "Companies on the books — suppliers we owe (payable) and parties that owe "
+    "us (receivable) — with their ids and current balance. Call this before "
+    "adding a charge or a payment, so the entry lands on a real company.",
+    _obj({"include_inactive": {"type": "boolean"}}),
+    "bookkeeping",
+    run=_run_list_companies,
+))
+
+
+def _run_company_ledger(db: Session, user: User, args: dict) -> str:
+    company = bookkeeping_service.get_company(db, int(args["company_id"]))
+    if not company.entries:
+        return f"{company.name} has no entries yet."
+    lines = [f"{company.name} ({company.type.value}), balance {_money(company.balance)}:"]
+    for e in company.entries:
+        lines.append(
+            f"  entry {e.id}: {e.entry_date.isoformat()} {e.type.value} "
+            f"{_money(e.amount)}" + (f" — {e.note}" if e.note else "")
+        )
+    return "\n".join(lines)
+
+
+_register(Tool(
+    "company_ledger",
+    "Every charge and payment on one company, with entry ids and the running "
+    "balance. Use it to answer what is owed and what was already paid.",
+    _obj({"company_id": {"type": "integer"}}, ["company_id"]),
+    "bookkeeping",
+    run=_run_company_ledger,
+))
+
+
+_register(Tool(
+    "create_company",
+    "Propose adding a company to the books. Use payable for a supplier the "
+    "shop owes, receivable for someone who owes the shop. Check "
+    "list_companies first so a company that already exists isn't added twice. "
+    "Does not take effect until the person confirms it on screen.",
+    _obj({
+        "name": {"type": "string"},
+        "type": {
+            "type": "string", "enum": ["payable", "receivable"],
+            "description": "payable = we owe them; receivable = they owe us.",
+        },
+    }, ["name", "type"]),
+    "bookkeeping",
+    writes=True,
+))
+
+
+_register(Tool(
+    "add_ledger_entry",
+    "Propose a charge or a payment against a company. A charge increases what "
+    "is owed (a supplier's invoice, work done for a client); a payment "
+    "reduces it. Get company_id from list_companies. Defaults to today when "
+    "no date is given. Does not take effect until the person confirms it on "
+    "screen.",
+    _obj({
+        "company_id": {"type": "integer"},
+        "type": {
+            "type": "string", "enum": ["charge", "payment"],
+            "description": "charge adds to what is owed; payment settles some of it.",
+        },
+        "amount": {"type": "number", "description": "A positive amount in dollars."},
+        "entry_date": _DATE,
+        "note": {"type": "string", "description": "What it was for."},
+    }, ["company_id", "type", "amount"]),
+    "bookkeeping",
     writes=True,
 ))
 

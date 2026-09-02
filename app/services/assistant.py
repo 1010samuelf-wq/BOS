@@ -35,6 +35,7 @@ from app.core.realtime import broadcaster
 from app.models import (
     AssistantConversation,
     AssistantMessage,
+    Company,
     Customer,
     Expense,
     Order,
@@ -44,7 +45,9 @@ from app.models import (
 )
 from app.models.base import utc_today, utcnow
 from app.models.enums import (
+    CompanyType,
     FulfillmentType,
+    LedgerEntryType,
     NoteType,
     OrderStatus,
     PaymentMethod,
@@ -52,6 +55,7 @@ from app.models.enums import (
 )
 from app.schemas.task import TaskCreate
 from app.services import assistant_tools
+from app.services import bookkeeping as bookkeeping_service
 from app.services import customer as customer_service
 from app.services import order as order_service
 from app.services import tasks as task_service
@@ -164,6 +168,47 @@ def _order_or_404(db: Session, order_id: Any) -> Order:
     if order is None:
         raise APIError(404, "not_found", f"Order {oid} was not found.")
     return order
+
+
+def _company_or_404(db: Session, company_id: Any) -> Company:
+    try:
+        cid = int(company_id)
+    except (TypeError, ValueError):
+        raise APIError(400, "bad_action", "That company number isn't valid.")
+    company = db.get(Company, cid)
+    if company is None:
+        raise APIError(404, "not_found", f"Company {cid} was not found.")
+    return company
+
+
+def _positive_amount(raw: Any) -> Decimal:
+    """Money off the wire, quantized to cents.
+
+    Goes through Decimal(str(...)) rather than Decimal(float): the model sends
+    JSON numbers, and Decimal(284.60) is 284.600000000000022737367544323205947
+    which then rounds into the ledger as a figure nobody typed.
+    """
+    try:
+        amount = Decimal(str(raw)).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError, ValueError):
+        raise APIError(400, "bad_action", f"{raw!r} is not an amount I can read.") from None
+    if amount <= 0:
+        raise APIError(400, "bad_action", "An amount has to be more than zero.")
+    return amount
+
+
+def _entry_date(raw: Any) -> date:
+    """A ledger date, defaulting to today when none was given."""
+    text = str(raw or "").strip()
+    if not text:
+        return utc_today()
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        raise APIError(
+            400, "bad_action",
+            f"I couldn't read {text!r} as a date — it needs to be like 2026-09-05.",
+        ) from None
 
 
 def _needed_date(raw: Any) -> datetime:
@@ -299,6 +344,33 @@ def describe(db: Session, action: str, args: dict) -> str:
         if not name:
             raise APIError(400, "bad_action", "The new name is empty.")
         return f'Rename customer "{customer.name}" to "{name}". Past orders keep the name typed on them.'
+    if action == "create_company":
+        name = " ".join(str(args.get("name", "")).split())
+        if not name:
+            raise APIError(400, "bad_action", "The company needs a name.")
+        kind = str(args.get("type", ""))
+        if kind not in {"payable", "receivable"}:
+            raise APIError(400, "bad_action", "A company is either payable or receivable.")
+        which = "a supplier the shop owes" if kind == "payable" else "someone who owes the shop"
+        return f'Add "{name}" to the books as {which}.'
+    if action == "add_ledger_entry":
+        company = _company_or_404(db, args.get("company_id"))
+        kind = str(args.get("type", ""))
+        if kind not in {"charge", "payment"}:
+            raise APIError(400, "bad_action", "That is either a charge or a payment.")
+        amount = _positive_amount(args.get("amount"))
+        when = _entry_date(args.get("entry_date"))
+        note = " ".join(str(args.get("note", "")).split())
+        # Spell out which way the balance moves: "charge" and "payment" read
+        # the same to someone glancing at a confirmation box.
+        after = company.balance + (amount if kind == "charge" else -amount)
+        direction = "adds to" if kind == "charge" else "comes off"
+        return (
+            f"Record a {kind} of ${amount} against {company.name} on "
+            f"{_format_needed(datetime(when.year, when.month, when.day))}"
+            + (f' — "{note}"' if note else "")
+            + f". That {direction} what is owed: ${company.balance} becomes ${after}."
+        )
     if action == "set_order_date":
         o = _order_or_404(db, args.get("order_id"))
         when = _needed_date(args.get("needed_for_date"))
@@ -495,6 +567,28 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
     elif action == "rename_customer":
         customer_service.update(
             db, int(args["customer_id"]), {"name": " ".join(str(args["name"]).split())}
+        )
+    elif action == "create_company":
+        from app.schemas.bookkeeping import CompanyCreate
+
+        bookkeeping_service.create_company(db, CompanyCreate(
+            name=" ".join(str(args["name"]).split()),
+            type=CompanyType(args["type"]),
+        ))
+    elif action == "add_ledger_entry":
+        from app.schemas.bookkeeping import LedgerEntryCreate
+
+        note = " ".join(str(args.get("note", "")).split())
+        bookkeeping_service.add_entry(
+            db,
+            int(args["company_id"]),
+            LedgerEntryCreate(
+                entry_date=_entry_date(args.get("entry_date")),
+                type=LedgerEntryType(args["type"]),
+                amount=_positive_amount(args.get("amount")),
+                note=note or None,
+            ),
+            user.id,
         )
     elif action == "set_order_date":
         from app.schemas.order import OrderUpdate
