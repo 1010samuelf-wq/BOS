@@ -130,6 +130,13 @@ export default function OrderDetail() {
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
           <div style={{ fontSize: 26, fontWeight: 800 }}>${editing && draft ? draftTotal(draft) : o.total}</div>
           <span className={`pill ${o.paid_status}`}>{o.paid_status.toUpperCase()}{o.payment_method ? ` · ${o.payment_method}` : ""}</span>
+          {/* Only while unpaid: once it's paid, the real method above is the
+              fact and the expectation is just history. */}
+          {o.paid_status === "unpaid" && o.expected_payment_method && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              expecting {o.expected_payment_method === "etransfer" ? "e-transfer" : o.expected_payment_method}
+            </div>
+          )}
         </div>
       </div>
 
@@ -246,9 +253,22 @@ export default function OrderDetail() {
         <div className="modal-backdrop">
           <div className="card" style={{ width: 380 }}>
             <h2>How was it paid?</h2>
+            {o.expected_payment_method && (
+              <p className="muted" style={{ fontSize: 13, marginTop: -4 }}>
+                They said{" "}
+                <strong>
+                  {o.expected_payment_method === "etransfer" ? "e-transfer" : o.expected_payment_method}
+                </strong>
+                . Tap it to confirm, or pick what actually happened.
+              </p>
+            )}
             <div className="row" style={{ justifyContent: "center" }}>
               {METHODS.map((m) => (
-                <button key={m} className="btn neutral" onClick={() => { markPaid.mutate(m); setPayOpen(false); }}>
+                <button
+                  key={m}
+                  className={`btn ${m === o.expected_payment_method ? "primary" : "neutral"}`}
+                  onClick={() => { markPaid.mutate(m); setPayOpen(false); }}
+                >
                   {m === "etransfer" ? "E-transfer" : m[0].toUpperCase() + m.slice(1)}
                 </button>
               ))}

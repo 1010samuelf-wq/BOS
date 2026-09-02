@@ -46,6 +46,8 @@ export interface Draft {
   cardMessage: string;
   paymentTiming: PaymentTiming;
   paymentMethod: PaymentMethod | null;
+  /** What they said they'd pay with — a pay-later note, not a claim of payment. */
+  expectedPaymentMethod: PaymentMethod | null;
   cardPaymentNote: string;
   generalNotes: string;
   lines: DraftLine[];
@@ -72,6 +74,7 @@ export function emptyDraft(): Draft {
     cardMessage: "",
     paymentTiming: "now",
     paymentMethod: null,
+    expectedPaymentMethod: null,
     cardPaymentNote: "",
     generalNotes: "",
     lines: [],
@@ -156,6 +159,7 @@ export function draftFromOrder(o: Order): Draft {
     cardMessage: o.card_message ?? "",
     paymentTiming: o.payment_timing,
     paymentMethod: o.payment_method,
+    expectedPaymentMethod: o.expected_payment_method,
     cardPaymentNote: "",
     generalNotes: "",
     lines: o.items.map((i) => ({
@@ -218,6 +222,8 @@ export function buildPayload(d: Draft): OrderCreatePayload {
     card_message: d.cardMessage.trim() || null,
     payment_timing: d.paymentTiming,
     payment_method: d.paymentTiming === "now" ? d.paymentMethod : null,
+    // Only meaningful on a pay-later order; paying now records the real thing.
+    expected_payment_method: d.paymentTiming === "later" ? d.expectedPaymentMethod : null,
     items: d.lines.map((l) =>
       l.product_id !== null
         ? { product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null }

@@ -65,6 +65,11 @@ class OrderCreate(BaseModel):
 
     payment_timing: PaymentTiming
     payment_method: PaymentMethod | None = None
+    # What the customer said they'd pay with. Allowed on any order and never
+    # required — it's a note about the future, not a claim that money moved,
+    # so it deliberately has no cross-field rule that could reject an order at
+    # the counter.
+    expected_payment_method: PaymentMethod | None = None
 
     items: list[OrderItemIn] = Field(min_length=1)
     notes: list[OrderNoteIn] = Field(default_factory=list)
@@ -96,6 +101,7 @@ class OrderUpdate(BaseModel):
     delivery_name: str | None = None
     card_message: str | None = None
     for_whom: str | None = Field(default=None, max_length=200)
+    expected_payment_method: PaymentMethod | None = None
     status: OrderStatus | None = None
     items: list[OrderItemIn] | None = None
 
@@ -162,6 +168,7 @@ class OrderOut(BaseModel):
     for_whom: str | None
     payment_timing: PaymentTiming
     payment_method: PaymentMethod | None
+    expected_payment_method: PaymentMethod | None
     paid_status: PaidStatus
     paid_at: datetime | None
     paid_by: int | None

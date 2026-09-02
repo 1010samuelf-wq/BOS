@@ -182,6 +182,7 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
         delivery_name=payload.delivery_name,
         card_message=payload.card_message,
         for_whom=payload.for_whom,
+        expected_payment_method=payload.expected_payment_method,
         payment_timing=payload.payment_timing,
         payment_method=payload.payment_method,
         paid_status=PaidStatus.paid if pays_now else PaidStatus.unpaid,
@@ -295,7 +296,7 @@ def update_order(
     for field in (
         "client_name", "client_phone", "needed_for_date",
         "fulfillment_type", "delivery_address", "delivery_name", "card_message",
-        "for_whom", "status",
+        "for_whom", "expected_payment_method", "status",
     ):
         if field in data:
             setattr(order, field, data[field])
@@ -389,6 +390,12 @@ def mark_paid(
     # in the right payment-breakdown bucket (spec §2A, §2D).
     if payment_method is not None:
         order.payment_method = payment_method
+    elif order.payment_method is None:
+        # Nothing was specified, so fall back to what the customer said they'd
+        # use. That is the whole point of recording it — the common case is
+        # "he said cash, he paid cash", and it should not need re-entering.
+        # An explicit method always wins, so a changed mind is still recorded.
+        order.payment_method = order.expected_payment_method
     return order
 
 

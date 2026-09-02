@@ -77,7 +77,19 @@ class Order(Base, TimestampMixin):
     payment_timing: Mapped[PaymentTiming] = mapped_column(
         SAEnum(PaymentTiming, name="payment_timing"), nullable=False
     )
+    # How it was *actually* settled. Only meaningful once paid — this is what
+    # the reports' cash/card/e-transfer breakdown counts.
     payment_method: Mapped[PaymentMethod | None] = mapped_column(
+        SAEnum(PaymentMethod, name="payment_method")
+    )
+    # How the customer *said* they will pay, recorded when the order is taken.
+    # Deliberately a separate column rather than filling payment_method early:
+    # that one has to keep meaning "what happened", or the payment breakdown
+    # starts counting money nobody has handed over. Keeping both also shows
+    # when the expectation was wrong (said cash, paid card). Marking an order
+    # paid falls back to this, so recording it saves a tap later instead of
+    # costing one now.
+    expected_payment_method: Mapped[PaymentMethod | None] = mapped_column(
         SAEnum(PaymentMethod, name="payment_method")
     )
     paid_status: Mapped[PaidStatus] = mapped_column(

@@ -120,7 +120,24 @@ export default function NewOrder() {
               ))}
             </div>
           ) : (
-            <span className="pill unpaid">Will be marked UNPAID</span>
+            <div className="row" style={{ flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span className="pill unpaid">Will be marked UNPAID</span>
+              {/* How they said they'll pay. Optional, and it settles nothing —
+                  it just means the day can be planned around what's coming in,
+                  and marking it paid later defaults to this. */}
+              <span className="muted" style={{ fontSize: 13 }}>Expecting</span>
+              {METHODS.map((m) => (
+                <button
+                  key={m.key}
+                  className={`btn ${draft.expectedPaymentMethod === m.key ? "primary" : "neutral"} sm`}
+                  onClick={() =>
+                    set({ expectedPaymentMethod: draft.expectedPaymentMethod === m.key ? null : m.key })
+                  }
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
           )}
           <div style={{ marginLeft: "auto", textAlign: "right" }}>
             <div className="muted" style={{ fontSize: 12 }}>Total</div>
