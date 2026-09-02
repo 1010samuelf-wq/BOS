@@ -94,9 +94,15 @@ or a figure.
 Making changes:
 
 - You cannot change anything yourself. When a change is wanted, call the \
-matching tool once; that shows {name} exactly what you propose and they either \
+matching tool; that shows {name} exactly what you propose and they either \
 confirm it or not. Do not claim anything has been done.
-- Propose one change at a time, and only when it is clearly what was asked for.
+- When one request covers several things — three orders needing a date, a \
+handful of duplicates to merge — call the tool once for each of them in \
+the same reply. They are shown as one list and confirmed together, so \
+splitting them across turns only makes {name} ask over and over. Propose \
+only what was actually asked for.
+- If you need to look something up first, do that, then propose the whole \
+set once you know the ids. Never propose a change against an id you guessed.
 - Never propose cancelling or deleting anything unless the person asked for it \
 in that turn.
 
@@ -158,6 +164,41 @@ def _order_or_404(db: Session, order_id: Any) -> Order:
     if order is None:
         raise APIError(404, "not_found", f"Order {oid} was not found.")
     return order
+
+
+def _needed_date(raw: Any) -> datetime:
+    """Read a needed-for date from the model, verbatim.
+
+    This column is a wall-clock business value, not an instant (see CLAUDE.md):
+    the text is parsed as written and never timezone-converted, because
+    converting makes a date-only order render a day early in production while
+    looking correct on the naive SQLite dev DB.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        raise APIError(400, "bad_action", "No date was given for that order.")
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        raise APIError(
+            400, "bad_action",
+            f"I couldn't read {text!r} as a date — it needs to be like 2026-09-05.",
+        ) from None
+
+
+def _format_needed(value: datetime) -> str:
+    """Render a needed-for date for the confirmation sentence.
+
+    Built by hand rather than with strftime's %-d/%-I, which aren't portable to
+    Windows and would break the suite on the dev machine. Reads the datetime's
+    own components, so it stays wall-clock like everything else here.
+    """
+    base = f"{value.day} {value.strftime('%b %Y')}"
+    if value.hour or value.minute:
+        hour = value.hour % 12 or 12
+        ampm = "AM" if value.hour < 12 else "PM"
+        return f"{base} at {hour}:{value.minute:02d} {ampm}"
+    return base
 
 
 def describe(db: Session, action: str, args: dict) -> str:
@@ -258,6 +299,14 @@ def describe(db: Session, action: str, args: dict) -> str:
         if not name:
             raise APIError(400, "bad_action", "The new name is empty.")
         return f'Rename customer "{customer.name}" to "{name}". Past orders keep the name typed on them.'
+    if action == "set_order_date":
+        o = _order_or_404(db, args.get("order_id"))
+        when = _needed_date(args.get("needed_for_date"))
+        was = _format_needed(o.needed_for_date) if o.needed_for_date else "no date"
+        return (
+            f"Set order #{o.id} ({o.client_name}) to be needed "
+            f"{_format_needed(when)} — currently {was}."
+        )
     if action == "set_order_for_whom":
         o = _order_or_404(db, args.get("order_id"))
         text = " ".join(str(args.get("for_whom", "")).split())
@@ -446,6 +495,15 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
     elif action == "rename_customer":
         customer_service.update(
             db, int(args["customer_id"]), {"name": " ".join(str(args["name"]).split())}
+        )
+    elif action == "set_order_date":
+        from app.schemas.order import OrderUpdate
+
+        order_service.update_order(
+            db,
+            int(args["order_id"]),
+            OrderUpdate(needed_for_date=_needed_date(args.get("needed_for_date"))),
+            user,
         )
     elif action == "set_order_for_whom":
         from app.schemas.order import OrderUpdate

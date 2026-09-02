@@ -175,3 +175,93 @@ def test_the_assistant_can_read_a_customers_history(client, make_product, fake_m
     tool_result = model.calls[1]["messages"][-1]["content"][0]
     assert tool_result["is_error"] is False
     assert "Srugo" in tool_result["content"]
+
+
+# ---------------------------------------------------------------------------
+# setting a needed-for date
+#
+# The shop had three orders taken without a date and asked the assistant to
+# fill them in. Nothing happened, because there was no tool that could set the
+# date — every order write it had (paid, fulfilled, status, note, for_whom)
+# touched something else.
+# ---------------------------------------------------------------------------
+def test_setting_a_date_on_an_order_that_has_none(client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-ac-0012", "No Date Nancy", "5140009999")
+    assert client.get(f"/api/v1/orders/{order['id']}").json()["needed_for_date"] is None
+
+    r = client.post("/api/v1/assistant/act", json={
+        "action": "set_order_date",
+        "args": {"order_id": order["id"], "needed_for_date": "2026-09-05"},
+    })
+    assert r.status_code == 200, r.text
+
+    saved = client.get(f"/api/v1/orders/{order['id']}").json()["needed_for_date"]
+    # Stored verbatim: the date the shop said, not shifted by a timezone.
+    assert saved.startswith("2026-09-05")
+
+
+def test_the_date_confirmation_says_what_it_is_changing_from(client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-ac-0013", "Date Mover", "5140008888")
+
+    from app.services.assistant import describe
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        text = describe(db, "set_order_date",
+                        {"order_id": order["id"], "needed_for_date": "2026-09-05T14:30"})
+    finally:
+        db.close()
+
+    assert "Date Mover" in text
+    assert "5 Sep 2026" in text
+    assert "2:30 PM" in text
+    assert "currently no date" in text
+
+
+def test_an_unreadable_date_is_refused(client, make_product):
+    p = make_product()["id"]
+    order = _order(client, p, "key-ac-0014", "Bad Date", "5140007777")
+
+    r = client.post("/api/v1/assistant/act", json={
+        "action": "set_order_date",
+        "args": {"order_id": order["id"], "needed_for_date": "next tuesday"},
+    })
+    assert r.status_code == 400
+    assert client.get(f"/api/v1/orders/{order['id']}").json()["needed_for_date"] is None
+
+
+def test_dating_several_orders_is_one_batch_of_proposals(client, make_product, fake_model):
+    """The shop's actual request: three undated orders, filled in together
+    rather than one question at a time."""
+    p = make_product()["id"]
+    a = _order(client, p, "key-ac-0015", "First", "5140001000")
+    b = _order(client, p, "key-ac-0016", "Second", "5140002000")
+    c = _order(client, p, "key-ac-0017", "Third", "5140003000")
+
+    fake_model(_Response("tool_use", [
+        _Text("I'll put all three on the 5th."),
+        _ToolUse("set_order_date", {"order_id": a["id"], "needed_for_date": "2026-09-05"}, "t1"),
+        _ToolUse("set_order_date", {"order_id": b["id"], "needed_for_date": "2026-09-05"}, "t2"),
+        _ToolUse("set_order_date", {"order_id": c["id"], "needed_for_date": "2026-09-05"}, "t3"),
+    ]))
+
+    out = client.post("/api/v1/assistant/chat",
+                      json={"message": "the three orders with no date are all for the 5th"}).json()
+
+    assert len(out["proposals"]) == 3
+    assert {p_["action"] for p_ in out["proposals"]} == {"set_order_date"}
+    # Still nothing written until each is confirmed.
+    for order in (a, b, c):
+        assert client.get(f"/api/v1/orders/{order['id']}").json()["needed_for_date"] is None
+
+
+def test_a_cashier_is_offered_the_date_tool(make_user, fake_model):
+    """Taking a date down is ordinary counter work, not a manager action."""
+    _, _, cashier = make_user("Cashier Chaya", "cashier")
+    model = fake_model(_Response("end_turn", [_Text("hi")]))
+    cashier.post("/api/v1/assistant/chat", json={"message": "hello"})
+
+    assert "set_order_date" in model.tool_names

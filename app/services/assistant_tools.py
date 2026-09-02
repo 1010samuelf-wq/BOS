@@ -485,6 +485,24 @@ _register(Tool(
 
 
 _register(Tool(
+    "set_order_date",
+    "Propose setting or changing when an order is needed for. Use this for an "
+    "order that was taken without a date, or when a date moves. Pass a date "
+    "alone when no particular time was given — the shop reads a bare date as "
+    "'that day'. Does not take effect until the person confirms it on screen.",
+    _obj({
+        "order_id": {"type": "integer"},
+        "needed_for_date": {
+            "type": "string",
+            "description": "YYYY-MM-DD, or YYYY-MM-DDTHH:MM when a time was given.",
+        },
+    }, ["order_id", "needed_for_date"]),
+    "orders",
+    writes=True,
+))
+
+
+_register(Tool(
     "create_order",
     "Propose a new order. Call find_products first so every line uses a real "
     "product id and price. Give each item either a product_id OR a "
