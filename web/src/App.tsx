@@ -22,6 +22,7 @@ import Bookkeeping from "./pages/Bookkeeping";
 import Customers from "./pages/Customers";
 import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
+import CompanyStatement from "./pages/CompanyStatement";
 import FeedbackWidget from "./components/FeedbackWidget";
 import AssistantPanel from "./components/AssistantPanel";
 
@@ -186,6 +187,7 @@ export default function App() {
         <Route path="/notifications" element={<RequireSection section="notifications"><Notifications /></RequireSection>} />
         <Route path="/bookkeeping" element={<RequireSection section="bookkeeping"><Bookkeeping /></RequireSection>} />
         <Route path="/bookkeeping/:id" element={<RequireSection section="bookkeeping"><CompanyDetail /></RequireSection>} />
+        <Route path="/bookkeeping/:id/statement" element={<RequireSection section="bookkeeping"><CompanyStatement /></RequireSection>} />
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />
         <Route path="/feedback" element={<RequireAdmin><FeedbackPage /></RequireAdmin>} />
         <Route path="*" element={<Navigate to={home} replace />} />

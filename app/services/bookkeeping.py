@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import not_found
 from app.models import Company, LedgerEntry
-from app.schemas.bookkeeping import CompanyCreate, CompanyUpdate, LedgerEntryCreate
+from app.schemas.bookkeeping import (
+    CompanyCreate,
+    CompanyUpdate,
+    LedgerEntryCreate,
+    LedgerEntryUpdate,
+)
 
 
 def _get_company(db: Session, company_id: int) -> Company:
@@ -67,6 +72,38 @@ def add_entry(db: Session, company_id: int, payload: LedgerEntryCreate, user_id:
         logged_by=user_id,
     )
     db.add(entry)
+    db.flush()
+    db.refresh(company)
+    return company
+
+
+def update_entry(
+    db: Session, company_id: int, entry_id: int, payload: LedgerEntryUpdate
+) -> Company:
+    """Edit one line in place.
+
+    ``exclude_unset`` matters here for the same reason it does on orders: a
+    dump of the whole model would write None over every field the client didn't
+    send, quietly blanking an amount while the person thought they were fixing
+    a note. An explicit ``note: null`` still clears the note, because that key
+    is then present in the payload.
+    """
+    company = _get_company(db, company_id)
+    entry = next((e for e in company.entries if e.id == entry_id), None)
+    if entry is None:
+        raise not_found(f"Entry {entry_id} not found on company {company_id}")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "entry_date" in data and data["entry_date"] is not None:
+        entry.entry_date = data["entry_date"]
+    if "type" in data and data["type"] is not None:
+        entry.type = data["type"]
+    if "amount" in data and data["amount"] is not None:
+        entry.amount = data["amount"]
+    if "note" in data:
+        note = data["note"]
+        entry.note = note.strip() if note else None
+
     db.flush()
     db.refresh(company)
     return company

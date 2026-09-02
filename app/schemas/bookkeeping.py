@@ -26,6 +26,20 @@ class LedgerEntryCreate(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
+class LedgerEntryUpdate(BaseModel):
+    """A partial edit of one ledger line.
+
+    Every field is optional and applied only when actually sent — the same
+    exclude_unset discipline as order updates, so editing a note doesn't blank
+    the amount.
+    """
+
+    entry_date: date | None = None
+    type: LedgerEntryType | None = None
+    amount: Decimal | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=500)
+
+
 class LedgerEntryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

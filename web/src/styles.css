@@ -551,3 +551,53 @@ textarea.input { resize: vertical; font-family: inherit; }
 .assistant-proposal-list { margin: 0 0 10px; padding-left: 20px; }
 .assistant-proposal-list li { margin: 4px 0; }
 .assistant-proposal-list li.running { font-weight: 600; }
+
+/* ---- Company statement -------------------------------------------------- */
+/* A sheet meant to leave the building: it is read by a supplier, not by staff,
+   so it carries its own heading and totals rather than the app's chrome. */
+.statement-sheet {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 28px;
+  margin-top: 12px;
+}
+.statement-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 12px;
+}
+.statement-shop { font-size: 22px; font-weight: 800; }
+.statement-to { margin: 18px 0; }
+.statement-table { width: 100%; margin-top: 8px; }
+.statement-opening td { font-style: italic; }
+.statement-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  align-items: baseline;
+  border-top: 2px solid var(--border);
+  margin-top: 10px;
+  padding-top: 12px;
+  font-size: 18px;
+}
+
+@media print {
+  /* Print the sheet and nothing else: no nav, no buttons, no filter row. */
+  .sidebar, .topbar, .assistant-fab, .assistant-panel, .feedback-fab, .no-print {
+    display: none !important;
+  }
+  body, .page, .statement-sheet {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .page { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .statement-sheet { border: none; border-radius: 0; padding: 0; margin: 0; }
+  .muted { color: #444 !important; }
+  /* Keep a long ledger's header on every page. */
+  .statement-table thead { display: table-header-group; }
+  .statement-table tr { page-break-inside: avoid; }
+  @page { margin: 18mm; }
+}

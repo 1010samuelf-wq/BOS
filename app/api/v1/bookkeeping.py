@@ -15,6 +15,7 @@ from app.schemas.bookkeeping import (
     CompanyOut,
     CompanyUpdate,
     LedgerEntryCreate,
+    LedgerEntryUpdate,
 )
 from app.services import bookkeeping as service
 
@@ -75,6 +76,20 @@ def add_entry(
     user: User = Depends(current_user),
 ):
     company = service.add_entry(db, company_id, payload, user_id=user.id)
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+@router.put("/companies/{company_id}/entries/{entry_id}", response_model=CompanyDetailOut)
+def update_entry(
+    company_id: int,
+    entry_id: int,
+    payload: LedgerEntryUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(current_user),
+):
+    company = service.update_entry(db, company_id, entry_id, payload)
     db.commit()
     db.refresh(company)
     return company
