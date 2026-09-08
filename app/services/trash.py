@@ -26,14 +26,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import APIError, not_found
-from app.models import Company, LedgerEntry, TrashItem, User
+from app.models import Company, LedgerEntry, Product, TrashItem, User
 from app.models.base import utcnow
 from app.models.enums import LedgerEntryType
 from app.models.misc import Expense, TimeEntry
 
 # Kinds that restore() knows how to put back. Everything else is kept and
 # readable but has to be re-entered by hand.
-RESTORABLE = {"ledger_entry", "expense", "time_entry"}
+RESTORABLE = {"ledger_entry", "expense", "time_entry", "product"}
 
 
 def _plain(value: Any) -> Any:
@@ -123,6 +123,19 @@ def restore(db: Session, item_id: int) -> TrashItem:
             category=data.get("category"),
             spent_on=date.fromisoformat(data["spent_on"]),
             logged_by=data.get("logged_by"),
+        ))
+    elif item.kind == "product":
+        # Only ever recorded for a product that was never sold, so there is no
+        # order history to reconcile — it comes back as a plain catalog row.
+        # A recipe does not: it cascaded away with the product, and payload
+        # says whether there was one so nobody is left guessing.
+        db.add(Product(
+            name=data["name"],
+            price=Decimal(data["price"]),
+            category=data.get("category"),
+            active=bool(data.get("active", True)),
+            show_on_menu=bool(data.get("show_on_menu", True)),
+            photo_url=data.get("photo_url"),
         ))
     elif item.kind == "time_entry":
         db.add(TimeEntry(

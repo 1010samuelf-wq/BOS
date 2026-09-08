@@ -418,3 +418,13 @@ export interface TrashItem {
   restored_at: string | null;
   restorable: boolean;     // some kinds are kept but must be re-entered by hand
 }
+
+// ---- tablet app build ----
+/** The signed APK to sideload. Served from backend config so a new build
+    needs no dashboard rebuild. */
+export interface TabletBuild {
+  version: string;
+  build: string;      // Android versionCode
+  built_on: string;
+  url: string;
+}

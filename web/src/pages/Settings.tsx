@@ -8,9 +8,9 @@ import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { Ingredient, Product } from "../api/types";
-import { Loading, PageHead, Tabs } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Tabs, isStalled } from "../components/ui";
 
-type Section = "products" | "ingredients" | "recipes" | "business";
+type Section = "products" | "ingredients" | "recipes" | "business" | "tablet";
 
 // Sentinel option value; no real category can collide with it because the
 // backend strips and rejects blank names, and this isn't a plausible one.
@@ -90,6 +90,7 @@ export default function Settings() {
             { key: "ingredients", label: "Ingredients" },
             { key: "recipes", label: "Recipes" },
             { key: "business", label: "Business" },
+            { key: "tablet", label: "Tablet app" },
           ]}
         />
       </PageHead>
@@ -97,6 +98,7 @@ export default function Settings() {
       {section === "ingredients" && <Ingredients />}
       {section === "recipes" && <Recipes />}
       {section === "business" && <Business />}
+      {section === "tablet" && <TabletApp />}
     </div>
   );
 }
@@ -143,13 +145,14 @@ function PhotoCell({
 }
 
 function ProductRow({
-  p, invalidate, onErr, onToggleActive, onToggleMenu, onUploadPhoto, uploadingId,
+  p, invalidate, onErr, onToggleActive, onToggleMenu, onDelete, onUploadPhoto, uploadingId,
 }: {
   p: Product;
   invalidate: () => void;
   onErr: (e: unknown) => void;
   onToggleActive: (p: Product) => void;
   onToggleMenu: (p: Product) => void;
+  onDelete: (p: Product) => void;
   onUploadPhoto: (p: Product, file: File) => void;
   uploadingId: number | null;
 }) {
@@ -215,6 +218,9 @@ function ProductRow({
         <div className="row">
           <button className="btn neutral sm" onClick={start}>Edit</button>
           <button className="btn neutral sm" onClick={() => onToggleActive(p)}>{p.active ? "Deactivate" : "Activate"}</button>
+          {/* Only ever succeeds for a product that was never sold — the server
+              refuses the rest, because order history references it. */}
+          <button className="btn neutral sm" onClick={() => onDelete(p)}>Delete</button>
         </div>
       </td>
     </tr>
@@ -249,6 +255,11 @@ function Products() {
   });
   const toggleActive = useMutation({
     mutationFn: (p: Product) => api.updateProduct(p.id, { active: !p.active }),
+    onSuccess: invalidate,
+    onError: onErr,
+  });
+  const removeProduct = useMutation({
+    mutationFn: (p: Product) => api.deleteProduct(p.id),
     onSuccess: invalidate,
     onError: onErr,
   });
@@ -290,6 +301,14 @@ function Products() {
                 <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
                   onToggleActive={(x) => toggleActive.mutate(x)}
                   onToggleMenu={(x) => toggleMenu.mutate(x)}
+                  onDelete={(x) => {
+                    // Confirm before, not after: the server's refusal for a
+                    // sold product is informative, but deleting an unsold one
+                    // is instant and there is no undo on this screen.
+                    if (window.confirm(`Delete "${x.name}"? It can be put back from the Deleted page.`)) {
+                      removeProduct.mutate(x);
+                    }
+                  }}
                   onUploadPhoto={(prod, file) => uploadPhoto.mutate({ p: prod, file })}
                   uploadingId={uploadingId}
                 />
@@ -479,6 +498,58 @@ function Recipes() {
         )}
       </div>
     </>
+  );
+}
+
+/** Where to get the tablet APK.
+ *
+ * Needed because an over-the-air update only reaches tablets whose installed
+ * version matches the build it was published for. A tablet that was reset,
+ * replaced, or simply left on an older binary can't be caught up by publishing
+ * again — someone has to install the APK on it. Before this the download link
+ * lived only in a build log.
+ */
+function TabletApp() {
+  const build = useQuery({ queryKey: ["tablet-build"], queryFn: api.getTabletBuild });
+
+  return (
+    <div className="card">
+      <h2>Tablet app</h2>
+      {build.isLoading ? (
+        <Loading />
+      ) : isStalled(build) ? (
+        <LoadFailed what="the tablet build" onRetry={() => void build.refetch()} />
+      ) : (
+        <>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Install this on a tablet that is new, has been reset, or is running an older
+            version. Everyday changes arrive on their own — a tablet only needs this when
+            it is behind.
+          </p>
+          <div className="row" style={{ alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>Version {build.data!.version}</div>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Build {build.data!.build} · {build.data!.built_on}
+              </div>
+            </div>
+            <a
+              className="btn primary"
+              href={build.data!.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{ marginLeft: "auto", textDecoration: "none" }}
+            >
+              ⬇ Download APK
+            </a>
+          </div>
+          <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+            Open this page on the tablet itself to download it there. Android will ask you to
+            allow installing from the browser the first time.
+          </p>
+        </>
+      )}
+    </div>
   );
 }
 

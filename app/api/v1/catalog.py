@@ -6,13 +6,22 @@ require any authenticated user.
 """
 
 from fastapi import APIRouter, Depends, Query, UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import require_any_section, require_section
 from app.core.errors import bad_request, not_found
 from app.database import get_db
-from app.models import Ingredient, Product, Recipe, RecipeItem, User
+from app.models import (
+    Ingredient,
+    ItemType,
+    OrderItem,
+    Product,
+    Recipe,
+    RecipeItem,
+    StockLevel,
+    User,
+)
 from app.schemas.catalog import (
     IngredientCreate,
     IngredientOut,
@@ -25,6 +34,7 @@ from app.schemas.catalog import (
     merge_categories,
 )
 from app.services import photos as photos_service
+from app.services import trash as trash_service
 
 router = APIRouter(tags=["catalog"])
 
@@ -114,6 +124,72 @@ def update_product(
     db.commit()
     db.refresh(product)
     return product
+
+
+@router.delete("/products/{product_id}", status_code=204)
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_section("settings")),
+):
+    """Remove a product that was never sold.
+
+    A product that appears on any order cannot be deleted, and that is a
+    database rule as much as a policy one: ``order_items.product_id`` is NOT
+    NULL with ``ondelete=RESTRICT``, so there is nowhere for the reference to
+    go. Deactivate is the tool for a product you have stopped selling — order
+    history and every report keep working, because each order line already
+    snapshots the name and price it was sold at.
+
+    So this is for genuine mistakes: a typo, a duplicate, something added and
+    never used.
+    """
+    product = db.get(Product, product_id)
+    if product is None:
+        raise not_found(f"Product {product_id} not found")
+
+    sold = db.scalar(
+        select(func.count()).select_from(OrderItem).where(OrderItem.product_id == product_id)
+    ) or 0
+    if sold:
+        raise bad_request(
+            f"'{product.name}' is on {sold} order{'s' if sold != 1 else ''}, so deleting it "
+            "would break that history. Deactivate it instead — it stays on past orders and "
+            "reports but stops appearing when taking new ones.",
+            code="product_in_use",
+        )
+
+    recipe = db.execute(
+        select(Recipe).where(Recipe.product_id == product_id)
+    ).scalar_one_or_none()
+
+    trash_service.record(
+        db,
+        kind="product",
+        label=f"{product.name} — ${product.price}"
+        + (f" ({product.category})" if product.category else ""),
+        payload={
+            **trash_service.snapshot(
+                product, ["name", "price", "category", "active", "show_on_menu", "photo_url"]
+            ),
+            # Kept for the record even though restore rebuilds only the product
+            # itself: the recipe cascades away with it, and a costing nobody
+            # can read back is worse than one sitting here in the snapshot.
+            "had_recipe": recipe is not None,
+        },
+        user=user,
+    )
+
+    # No foreign key ties a stock level to a product — the table is keyed by
+    # (item_type, item_id) so it can serve ingredients too — so this row has to
+    # be cleared by hand or it lingers as a level for a product that is gone.
+    db.execute(
+        delete(StockLevel).where(
+            StockLevel.item_type == ItemType.product, StockLevel.item_id == product_id
+        )
+    )
+    db.delete(product)  # the recipe cascades
+    db.commit()
 
 
 @router.post("/products/{product_id}/photo", response_model=ProductOut)

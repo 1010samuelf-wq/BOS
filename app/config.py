@@ -53,6 +53,19 @@ class Settings(BaseSettings):
     assistant_effort: str = "medium"   # low | medium | high | xhigh | max
     assistant_max_tokens: int = 16000
 
+    # --- tablet app ---
+    # The signed APK staff sideload onto a tablet. Held here rather than baked
+    # into the dashboard bundle so a new build only needs
+    # `flyctl secrets set BOS_TABLET_APK_URL=...` — no frontend rebuild, no
+    # deploy. EAS artifact URLs are permanent, so this only changes when a new
+    # binary is actually built (a JS-only change ships as an OTA instead).
+    tablet_apk_url: str = (
+        "https://expo.dev/artifacts/eas/JmGtIlHqqqa82VDm7TdCQO0lQQ6nyLlPi7_cdOug_dw.apk"
+    )
+    tablet_apk_version: str = "1.1.0"
+    tablet_apk_build: str = "4"           # Android versionCode
+    tablet_apk_built_on: str = "2026-08-30"
+
     def validate_for_runtime(self) -> None:
         if self.env.lower() in {"prod", "production"}:
             if self.jwt_secret == INSECURE_JWT_SECRET or len(self.jwt_secret.encode()) < 32:

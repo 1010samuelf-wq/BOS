@@ -15,3 +15,12 @@ class BusinessProfileOut(BaseModel):
     business_name: str | None
     business_address: str | None
     business_phone: str | None
+
+
+class TabletBuildOut(BaseModel):
+    """The APK staff can install on a tablet."""
+
+    version: str
+    build: str
+    built_on: str
+    url: str
