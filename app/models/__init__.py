@@ -22,7 +22,13 @@ from app.models.enums import (
 )
 from app.models.assistant import AssistantConversation, AssistantMessage
 from app.models.bookkeeping import Company, LedgerEntry
-from app.models.catalog import Ingredient, Product, Recipe, RecipeItem
+from app.models.catalog import (
+    Ingredient,
+    Product,
+    ProductPhoto,
+    Recipe,
+    RecipeItem,
+)
 from app.models.customer import Customer
 from app.models.feedback import Feedback
 from app.models.order import Order, OrderItem, OrderNote
@@ -61,6 +67,7 @@ __all__ = [
     "LedgerEntry",
     "Ingredient",
     "Product",
+    "ProductPhoto",
     "Recipe",
     "RecipeItem",
     "Order",

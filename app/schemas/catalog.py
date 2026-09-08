@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 # Seed categories, always offered first and in this order. Staff can add their
 # own from the product form, so this is a starting point rather than a closed
@@ -49,6 +49,14 @@ class ProductUpdate(BaseModel):
     photo_url: str | None = None
 
 
+class ProductPhotoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    url: str
+    position: int
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,7 +66,9 @@ class ProductOut(BaseModel):
     category: str | None
     active: bool
     show_on_menu: bool
+    # The cover, kept mirroring photos[0] — see services/product_photos.py.
     photo_url: str | None
+    photos: list[ProductPhotoOut] = []
 
 
 class PublicProductOut(BaseModel):
@@ -72,6 +82,17 @@ class PublicProductOut(BaseModel):
     price: Decimal
     category: str | None
     photo_url: str | None
+    # Just the URLs — a customer needs the pictures, not our row ids. Ordered,
+    # cover first, so opening a product starts on the shot from the grid.
+    photos: list[str] = []
+
+    @field_validator("photos", mode="before")
+    @classmethod
+    def _urls_only(cls, value):
+        """Accept the ORM's ProductPhoto rows and keep only the URL."""
+        if not value:
+            return []
+        return [v if isinstance(v, str) else v.url for v in value]
 
 
 # ---- Ingredients ----

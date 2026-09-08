@@ -11,7 +11,7 @@ import json
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import bad_request, not_found
 from app.core.permissions import require_section
@@ -35,8 +35,12 @@ def public_products(category: str | None = Query(default=None), db: Session = De
     # Both flags: `active` is "the shop sells this at all", `show_on_menu` is
     # "advertise it on the website". A product can be sellable at the counter
     # and deliberately absent from the public menu.
-    stmt = select(Product).where(
-        Product.active.is_(True), Product.show_on_menu.is_(True)
+    stmt = (
+        select(Product)
+        # Eager-loaded: the payload carries every photo, and without this each
+        # product would fire its own query for them.
+        .options(selectinload(Product.photos))
+        .where(Product.active.is_(True), Product.show_on_menu.is_(True))
     )
     if category is not None:
         stmt = stmt.where(Product.category == category)

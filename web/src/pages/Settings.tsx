@@ -110,25 +110,43 @@ function useErr() {
 }
 
 function PhotoCell({
-  p, onUpload, uploading,
+  p, onUpload, onManage, uploading,
 }: {
   p: Product;
   onUpload: (p: Product, file: File) => void;
+  onManage: (p: Product) => void;
   uploading: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button
-        className="thumb-btn"
-        title="Upload photo"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        {p.photo_url
-          ? <img src={p.photo_url} alt={p.name} className="thumb" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-          : <span className="thumb thumb-empty">📷</span>}
-      </button>
+      <div className="photo-cell">
+        {/* Every photo, cover first. Clicking one opens the manager; the plus
+            adds another. The cover is what the grid and the tablet show. */}
+        {p.photos.map((ph, i) => (
+          <button
+            key={ph.id}
+            className={`thumb-btn${i === 0 ? " thumb-cover" : ""}`}
+            title={i === 0 ? "Cover photo — shown in the grid and on the tablet" : "Photo"}
+            onClick={() => onManage(p)}
+          >
+            <img
+              src={ph.url}
+              alt={p.name}
+              className="thumb"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            />
+          </button>
+        ))}
+        <button
+          className="thumb-btn thumb-add"
+          title={p.photos.length ? "Add another photo" : "Upload photo"}
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          <span className="thumb thumb-empty">{uploading ? "…" : p.photos.length ? "＋" : "📷"}</span>
+        </button>
+      </div>
       <input
         ref={inputRef}
         type="file"
@@ -145,7 +163,8 @@ function PhotoCell({
 }
 
 function ProductRow({
-  p, invalidate, onErr, onToggleActive, onToggleMenu, onDelete, onUploadPhoto, uploadingId,
+  p, invalidate, onErr, onToggleActive, onToggleMenu, onDelete, onManagePhotos,
+  onUploadPhoto, uploadingId,
 }: {
   p: Product;
   invalidate: () => void;
@@ -153,6 +172,7 @@ function ProductRow({
   onToggleActive: (p: Product) => void;
   onToggleMenu: (p: Product) => void;
   onDelete: (p: Product) => void;
+  onManagePhotos: (p: Product) => void;
   onUploadPhoto: (p: Product, file: File) => void;
   uploadingId: number | null;
 }) {
@@ -177,7 +197,7 @@ function ProductRow({
   if (editing) {
     return (
       <tr>
-        <td><PhotoCell p={p} onUpload={onUploadPhoto} uploading={uploadingId === p.id} /></td>
+        <td><PhotoCell p={p} onUpload={onUploadPhoto} onManage={onManagePhotos} uploading={uploadingId === p.id} /></td>
         <td><input className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ minWidth: 140 }} /></td>
         <td>
           <CategorySelect value={category} onChange={setCategory} placeholder="—" style={{ maxWidth: 160 }} />
@@ -196,7 +216,7 @@ function ProductRow({
 
   return (
     <tr style={{ opacity: p.active ? 1 : 0.5 }}>
-      <td><PhotoCell p={p} onUpload={onUploadPhoto} uploading={uploadingId === p.id} /></td>
+      <td><PhotoCell p={p} onUpload={onUploadPhoto} onManage={onManagePhotos} uploading={uploadingId === p.id} /></td>
       <td>{p.name}</td>
       <td className="muted">{p.category ?? "—"}</td>
       <td className="num">${p.price}</td>
@@ -227,6 +247,76 @@ function ProductRow({
   );
 }
 
+/** Manage one product's photos: set the cover, remove any of them.
+ *
+ * Adding happens from the row's ＋; this is the screen for deciding which shot
+ * leads and dropping the ones that didn't come out.
+ */
+function PhotoManager({
+  product, onClose, invalidate, onErr,
+}: {
+  product: Product;
+  onClose: () => void;
+  invalidate: () => void;
+  onErr: (e: unknown) => void;
+}) {
+  const setCover = useMutation({
+    mutationFn: (photoId: number) => api.setProductCover(product.id, photoId),
+    onSuccess: invalidate,
+    onError: onErr,
+  });
+  const remove = useMutation({
+    mutationFn: (photoId: number) => api.deleteProductPhoto(product.id, photoId),
+    onSuccess: invalidate,
+    onError: onErr,
+  });
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="card" style={{ width: 520, maxWidth: "92vw" }} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0 }}>{product.name} — photos</h2>
+        {product.photos.length === 0 ? (
+          <p className="muted">No photos yet. Use ＋ on the row to add one.</p>
+        ) : (
+          <div className="photo-manager">
+            {product.photos.map((ph, i) => (
+              <div key={ph.id} className={`photo-manage-item${i === 0 ? " is-cover" : ""}`}>
+                <img src={ph.url} alt="" />
+                {i === 0 && <span className="photo-cover-flag">Cover</span>}
+                <div className="row" style={{ gap: 6, marginTop: 6 }}>
+                  {i !== 0 && (
+                    <button
+                      className="btn neutral sm"
+                      disabled={setCover.isPending}
+                      onClick={() => setCover.mutate(ph.id)}
+                    >
+                      Make cover
+                    </button>
+                  )}
+                  <button
+                    className="btn neutral sm"
+                    disabled={remove.isPending}
+                    onClick={() => remove.mutate(ph.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="muted" style={{ fontSize: 13 }}>
+          The cover is what staff see in the order screen and on the tablet. The rest show
+          when a customer opens the product on the website.
+        </p>
+        <div className="row" style={{ justifyContent: "flex-end" }}>
+          <button className="btn neutral" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Products() {
   const client = useQueryClient();
   const { error, onErr } = useErr();
@@ -241,6 +331,7 @@ function Products() {
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");
   const [uploadingId, setUploadingId] = useState<number | null>(null);
+  const [managing, setManaging] = useState<number | null>(null);
   // Bumped after a save to remount CategorySelect, so a picker left in
   // "type a new category" mode returns to the dropdown — where the category
   // just created is now waiting.
@@ -301,6 +392,7 @@ function Products() {
                 <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
                   onToggleActive={(x) => toggleActive.mutate(x)}
                   onToggleMenu={(x) => toggleMenu.mutate(x)}
+                  onManagePhotos={(x) => setManaging(x.id)}
                   onDelete={(x) => {
                     // Confirm before, not after: the server's refusal for a
                     // sold product is informative, but deleting an unsold one
@@ -317,6 +409,17 @@ function Products() {
           </table>
         )}
       </div>
+
+      {/* Read from the live list, so the modal reflects each change without
+          holding its own copy of the product. */}
+      {managing !== null && (products.data ?? []).some((x) => x.id === managing) && (
+        <PhotoManager
+          product={(products.data ?? []).find((x) => x.id === managing)!}
+          onClose={() => setManaging(null)}
+          invalidate={invalidate}
+          onErr={onErr}
+        />
+      )}
     </>
   );
 }

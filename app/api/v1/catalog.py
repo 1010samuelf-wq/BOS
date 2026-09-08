@@ -34,6 +34,7 @@ from app.schemas.catalog import (
     merge_categories,
 )
 from app.services import photos as photos_service
+from app.services import product_photos
 from app.services import trash as trash_service
 
 router = APIRouter(tags=["catalog"])
@@ -207,7 +208,39 @@ async def upload_product_photo(
 
     data = await file.read()
     url = photos_service.upload_product_photo(product_id, file.content_type or "", data)
-    product.photo_url = url
+    # Appends to the gallery. Uploading a second photo used to replace the
+    # first; it now adds one, and the cover only changes when nothing was set
+    # or someone picks a different cover explicitly.
+    product = product_photos.add_photo(db, product_id, url)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.delete("/products/{product_id}/photos/{photo_id}", response_model=ProductOut)
+def delete_product_photo(
+    product_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_section("settings")),
+):
+    """Remove one photo. Deleting the cover promotes the next one."""
+    product = product_photos.delete_photo(db, product_id, photo_id)
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.post("/products/{product_id}/photos/{photo_id}/cover", response_model=ProductOut)
+def set_product_cover(
+    product_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_section("settings")),
+):
+    """Make this the shot shown in the grid, on the tablet, and first on the
+    website."""
+    product = product_photos.make_cover(db, product_id, photo_id)
     db.commit()
     db.refresh(product)
     return product

@@ -145,6 +145,10 @@ export const updateProduct = (id: number, body: Partial<Product>) =>
   api<Product>(`/products/${id}`, { method: "PUT", body });
 export const deleteProduct = (id: number) =>
   api<void>(`/products/${id}`, { method: "DELETE" });
+export const deleteProductPhoto = (productId: number, photoId: number) =>
+  api<Product>(`/products/${productId}/photos/${photoId}`, { method: "DELETE" });
+export const setProductCover = (productId: number, photoId: number) =>
+  api<Product>(`/products/${productId}/photos/${photoId}/cover`, { method: "POST" });
 export const getTabletBuild = () => api<TabletBuild>("/settings/tablet-build");
 export const uploadProductPhoto = (id: number, file: File) =>
   uploadFile<Product>(`/products/${id}/photo`, file);

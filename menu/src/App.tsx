@@ -4,24 +4,119 @@ import { ApiError, getContact, listCategories, listProducts, submitInquiry, type
 import logo from "./logo.png";
 
 function ProductCard({
-  p, qty, onChange,
+  p, qty, onChange, onOpen,
 }: {
   p: PublicProduct;
   qty: number;
   onChange: (qty: number) => void;
+  onOpen: () => void;
 }) {
+  const extra = Math.max(0, p.photos.length - 1);
   return (
     // Highlighted once picked, so the grid itself shows the selection.
     <div className={`card${qty > 0 ? " card-selected" : ""}`}>
-      {p.photo_url
-        ? <img src={p.photo_url} alt={p.name} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-        : <div className="photo-empty">🍰</div>}
+      {/* The picture is the way in: tapping it opens the product larger. The
+          quantity buttons below stay where they were, so picking something
+          off the grid still takes one tap. */}
+      <button className="card-photo" onClick={onOpen} aria-label={`View ${p.name}`}>
+        {p.photo_url
+          ? <img src={p.photo_url} alt={p.name} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+          : <div className="photo-empty">🍰</div>}
+        <span className="card-zoom">⤢</span>
+        {extra > 0 && <span className="card-more">+{extra}</span>}
+      </button>
       <div className="name">{p.name}</div>
       <div className="price">${p.price}</div>
       <div className="qty-row">
         <button className="qty-btn" onClick={() => onChange(Math.max(0, qty - 1))}>−</button>
         <span className="qty-val">{qty}</span>
         <button className="qty-btn" onClick={() => onChange(qty + 1)}>+</button>
+      </div>
+    </div>
+  );
+}
+
+/** One product, opened up: the picture big enough to actually judge, and the
+ * other angles if there are any.
+ *
+ * A grid thumbnail is roughly 170px on a phone, which is fine for finding a
+ * cake and useless for deciding on one. Quantity lives in here too, so a
+ * customer can look properly and then choose without closing it again.
+ */
+function ProductViewer({
+  product, qty, onChange, onClose,
+}: {
+  product: PublicProduct;
+  qty: number;
+  onChange: (qty: number) => void;
+  onClose: () => void;
+}) {
+  const photos = product.photos.length > 0
+    ? product.photos
+    : product.photo_url
+      ? [product.photo_url]
+      : [];
+  const [index, setIndex] = useState(0);
+  const current = photos[index];
+  const step = (by: number) => setIndex((i) => (i + by + photos.length) % photos.length);
+
+  // Escape closes, arrows move between photos — a viewer that traps you is
+  // worse than no viewer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (photos.length > 1 && e.key === "ArrowRight") step(1);
+      if (photos.length > 1 && e.key === "ArrowLeft") step(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="viewer" onClick={(e) => e.stopPropagation()}>
+        <button className="viewer-close" onClick={onClose} aria-label="Close">✕</button>
+
+        <div className="viewer-stage">
+          {current ? (
+            <img src={current} alt={product.name} />
+          ) : (
+            <div className="viewer-empty">🍰</div>
+          )}
+          {photos.length > 1 && (
+            <>
+              <button className="viewer-arrow left" onClick={() => step(-1)} aria-label="Previous photo">‹</button>
+              <button className="viewer-arrow right" onClick={() => step(1)} aria-label="Next photo">›</button>
+              <div className="viewer-count">{index + 1} / {photos.length}</div>
+            </>
+          )}
+        </div>
+
+        {photos.length > 1 && (
+          <div className="viewer-thumbs">
+            {photos.map((url, i) => (
+              <button
+                key={url}
+                className={`viewer-thumb${i === index ? " is-active" : ""}`}
+                onClick={() => setIndex(i)}
+              >
+                <img src={url} alt="" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="viewer-info">
+          <div>
+            <div className="viewer-name">{product.name}</div>
+            <div className="viewer-price">${product.price}</div>
+          </div>
+          <div className="qty-row viewer-qty">
+            <button className="qty-btn" onClick={() => onChange(Math.max(0, qty - 1))}>−</button>
+            <span className="qty-val">{qty}</span>
+            <button className="qty-btn" onClick={() => onChange(qty + 1)}>+</button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -105,6 +200,7 @@ export default function App() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [viewing, setViewing] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
@@ -189,6 +285,7 @@ export default function App() {
               p={p}
               qty={cart[p.id] ?? 0}
               onChange={(q) => setCart((c) => ({ ...c, [p.id]: q }))}
+              onOpen={() => setViewing(p.id)}
             />
           ))}
         </div>
@@ -213,6 +310,15 @@ export default function App() {
           Choose what you'd like above, then call to finalize — we'll take it from there.
         </p>
       </div>
+
+      {viewing !== null && products && products.some((p) => p.id === viewing) && (
+        <ProductViewer
+          product={products.find((p) => p.id === viewing)!}
+          qty={cart[viewing] ?? 0}
+          onChange={(q) => setCart((c) => ({ ...c, [viewing]: q }))}
+          onClose={() => setViewing(null)}
+        />
+      )}
 
       {checkoutOpen && products && (
         <CheckoutModal

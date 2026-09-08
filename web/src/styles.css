@@ -669,3 +669,38 @@ textarea.input { resize: vertical; font-family: inherit; }
   outline-offset: 2px;
 }
 .switch-label { font-size: 12px; color: var(--muted); }
+
+/* ---- product photo cell + manager -------------------------------------- */
+.photo-cell { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+/* The cover is ringed, so which shot leads is visible without opening
+   anything — it's the one staff and the tablet see. */
+.thumb-btn.thumb-cover { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 8px; }
+.thumb-btn.thumb-add { opacity: 0.75; }
+.thumb-btn.thumb-add:hover { opacity: 1; }
+
+.photo-manager {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.photo-manage-item { position: relative; }
+.photo-manage-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.photo-manage-item.is-cover img { border-color: var(--primary); }
+.photo-cover-flag {
+  position: absolute;
+  top: 6px; left: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 3px 8px;
+}

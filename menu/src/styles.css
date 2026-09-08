@@ -369,3 +369,121 @@ body {
   .card { padding: 12px; }
   .card .name { font-size: 16px; }
 }
+
+/* ---- card photo (opens the viewer) -------------------------------------- */
+.card-photo {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  border-radius: 11px;
+  overflow: hidden;
+}
+.card-photo img, .card-photo .photo-empty { display: block; }
+/* Hint that there's more to see. Always visible on touch, where there is no
+   hover to discover it with. */
+.card-zoom, .card-more {
+  position: absolute;
+  bottom: 6px;
+  border-radius: 999px;
+  background: rgba(42, 32, 24, 0.62);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 8px;
+  backdrop-filter: blur(3px);
+}
+.card-zoom { right: 6px; }
+.card-more { left: 6px; }
+
+/* ---- product viewer ----------------------------------------------------- */
+.viewer {
+  position: relative;
+  background: var(--surface);
+  border-radius: 18px;
+  width: min(560px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(42, 32, 24, 0.35);
+}
+.viewer-close {
+  position: absolute;
+  top: 10px; right: 10px;
+  z-index: 2;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(42, 32, 24, 0.55);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+}
+.viewer-stage { position: relative; background: var(--bg-deep); }
+.viewer-stage img {
+  display: block;
+  width: 100%;
+  /* Contain, not cover: this is the screen where the whole cake should be
+     visible, even if that leaves margins. */
+  max-height: 62vh;
+  object-fit: contain;
+}
+.viewer-empty {
+  display: flex; align-items: center; justify-content: center;
+  height: 240px; font-size: 64px; color: var(--primary);
+  background: linear-gradient(140deg, #fbf0e5, #f2ddc9);
+}
+.viewer-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px; height: 44px;      /* finger-sized */
+  border-radius: 50%;
+  border: none;
+  background: rgba(42, 32, 24, 0.5);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.viewer-arrow.left { left: 8px; }
+.viewer-arrow.right { right: 8px; }
+.viewer-count {
+  position: absolute;
+  bottom: 8px; right: 10px;
+  background: rgba(42, 32, 24, 0.55);
+  color: #fff;
+  font-size: 12px;
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+.viewer-thumbs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px 0;
+  overflow-x: auto;
+}
+.viewer-thumb {
+  flex: none;
+  width: 58px; height: 58px;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+.viewer-thumb.is-active { border-color: var(--primary); }
+.viewer-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.viewer-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px 18px;
+}
+.viewer-name { font-family: var(--display); font-size: 21px; font-weight: 600; }
+.viewer-price { color: var(--primary); font-size: 18px; font-weight: 700; }
+.viewer-qty { margin-left: auto; margin-top: 0; padding-top: 0; }

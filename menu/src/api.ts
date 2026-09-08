@@ -39,6 +39,8 @@ export interface PublicProduct {
   price: string;
   category: string | null;
   photo_url: string | null;
+  /** Every photo, cover first. photo_url is photos[0]. */
+  photos: string[];
 }
 
 export const listProducts = () => request<PublicProduct[]>("/public/products");

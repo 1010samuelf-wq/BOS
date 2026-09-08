@@ -31,6 +31,11 @@ export interface RosterEntry {
   role: Role;
 }
 
+export interface ProductPhoto {
+  id: number;
+  url: string;
+  position: number;
+}
 export interface Product {
   id: number;
   name: string;
@@ -39,6 +44,8 @@ export interface Product {
   active: boolean;
   /** Shown on the public menu site. Separate from `active`. */
   show_on_menu: boolean;
+  /** Every photo, cover first. photo_url mirrors photos[0]. */
+  photos: ProductPhoto[];
   photo_url: string | null;
 }
 export interface Ingredient {
