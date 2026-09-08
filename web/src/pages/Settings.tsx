@@ -143,12 +143,13 @@ function PhotoCell({
 }
 
 function ProductRow({
-  p, invalidate, onErr, onToggleActive, onUploadPhoto, uploadingId,
+  p, invalidate, onErr, onToggleActive, onToggleMenu, onUploadPhoto, uploadingId,
 }: {
   p: Product;
   invalidate: () => void;
   onErr: (e: unknown) => void;
   onToggleActive: (p: Product) => void;
+  onToggleMenu: (p: Product) => void;
   onUploadPhoto: (p: Product, file: File) => void;
   uploadingId: number | null;
 }) {
@@ -179,6 +180,7 @@ function ProductRow({
           <CategorySelect value={category} onChange={setCategory} placeholder="—" style={{ maxWidth: 160 }} />
         </td>
         <td className="num"><input className="input" value={price} onChange={(e) => setPrice(e.target.value)} style={{ maxWidth: 90, textAlign: "right" }} /></td>
+        <td className="muted" style={{ fontSize: 12 }}>{p.show_on_menu ? "Shown" : "Hidden"}</td>
         <td>
           <div className="row">
             <button className="btn primary sm" disabled={!name.trim() || !validPrice || save.isPending} onClick={() => save.mutate()}>Save</button>
@@ -195,6 +197,20 @@ function ProductRow({
       <td>{p.name}</td>
       <td className="muted">{p.category ?? "—"}</td>
       <td className="num">${p.price}</td>
+      <td>
+        {/* Whether customers see it on justcakeskosher.com. Separate from
+            Deactivate, which pulls the product out of the shop entirely —
+            plenty of things are sold at the counter but not advertised. */}
+        <label className="switch" title={p.show_on_menu ? "Shown on the website" : "Hidden from the website"}>
+          <input
+            type="checkbox"
+            checked={p.show_on_menu}
+            onChange={() => onToggleMenu(p)}
+          />
+          <span className="switch-track"><span className="switch-thumb" /></span>
+          <span className="switch-label">{p.show_on_menu ? "Shown" : "Hidden"}</span>
+        </label>
+      </td>
       <td>
         <div className="row">
           <button className="btn neutral sm" onClick={start}>Edit</button>
@@ -236,6 +252,11 @@ function Products() {
     onSuccess: invalidate,
     onError: onErr,
   });
+  const toggleMenu = useMutation({
+    mutationFn: (p: Product) => api.updateProduct(p.id, { show_on_menu: !p.show_on_menu }),
+    onSuccess: invalidate,
+    onError: onErr,
+  });
   const uploadPhoto = useMutation({
     mutationFn: (v: { p: Product; file: File }) => api.uploadProductPhoto(v.p.id, v.file),
     onMutate: (v) => setUploadingId(v.p.id),
@@ -263,11 +284,12 @@ function Products() {
         <h2>Catalog</h2>
         {products.isLoading ? <Loading /> : products.isError ? <p className="error">Admin access required.</p> : (
           <table>
-            <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th className="num">Price</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th className="num">Price</th><th>Website</th><th>Actions</th></tr></thead>
             <tbody>
               {(products.data ?? []).map((p) => (
                 <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
                   onToggleActive={(x) => toggleActive.mutate(x)}
+                  onToggleMenu={(x) => toggleMenu.mutate(x)}
                   onUploadPhoto={(prod, file) => uploadPhoto.mutate({ p: prod, file })}
                   uploadingId={uploadingId}
                 />

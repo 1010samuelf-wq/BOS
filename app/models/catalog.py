@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Numeric,
+    String,
+    UniqueConstraint,
+    true as sa_true,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -17,7 +24,17 @@ class Product(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     category: Mapped[str | None] = mapped_column(String(100))
+    # Usable in the shop at all: search, the tap grid, new orders. Turning this
+    # off retires a product everywhere.
     active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    # Shown on the public menu. Separate from `active` on purpose — plenty of
+    # things are sold at the counter but shouldn't be advertised online (a
+    # seasonal item, a wholesale-only line, something not photographed yet), and
+    # before this the only way to hide one from the website was to deactivate
+    # it, which also took it away from staff taking orders.
+    show_on_menu: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa_true(), nullable=False
+    )
     photo_url: Mapped[str | None] = mapped_column(String(500))
 
     recipe: Mapped[Recipe | None] = relationship(

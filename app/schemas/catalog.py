@@ -36,6 +36,7 @@ class ProductCreate(BaseModel):
     price: Decimal = Field(ge=0)
     category: ProductCategory | None = None
     active: bool = True
+    show_on_menu: bool = True
     photo_url: str | None = None
 
 
@@ -44,6 +45,7 @@ class ProductUpdate(BaseModel):
     price: Decimal | None = Field(default=None, ge=0)
     category: ProductCategory | None = None
     active: bool | None = None
+    show_on_menu: bool | None = None
     photo_url: str | None = None
 
 
@@ -55,6 +57,7 @@ class ProductOut(BaseModel):
     price: Decimal
     category: str | None
     active: bool
+    show_on_menu: bool
     photo_url: str | None
 
 

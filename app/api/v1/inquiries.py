@@ -32,7 +32,12 @@ router = APIRouter(
 # ---- public (no auth) --------------------------------------------------
 @public_router.get("/products", response_model=list[PublicProductOut])
 def public_products(category: str | None = Query(default=None), db: Session = Depends(get_db)):
-    stmt = select(Product).where(Product.active.is_(True))
+    # Both flags: `active` is "the shop sells this at all", `show_on_menu` is
+    # "advertise it on the website". A product can be sellable at the counter
+    # and deliberately absent from the public menu.
+    stmt = select(Product).where(
+        Product.active.is_(True), Product.show_on_menu.is_(True)
+    )
     if category is not None:
         stmt = stmt.where(Product.category == category)
     stmt = stmt.order_by(Product.name)
@@ -46,7 +51,11 @@ def public_categories(db: Session = Depends(get_db)):
     rows = db.execute(
         select(Product.category)
         .distinct()
-        .where(Product.active.is_(True), Product.category.is_not(None))
+        .where(
+            Product.active.is_(True),
+            Product.show_on_menu.is_(True),
+            Product.category.is_not(None),
+        )
     ).scalars().all()
     return merge_categories(rows)
 

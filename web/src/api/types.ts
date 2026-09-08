@@ -37,6 +37,8 @@ export interface Product {
   price: string;
   category: string | null;
   active: boolean;
+  /** Shown on the public menu site. Separate from `active`. */
+  show_on_menu: boolean;
   photo_url: string | null;
 }
 export interface Ingredient {
