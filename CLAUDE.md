@@ -79,6 +79,15 @@ Two deploy landmines, both of which have bitten:
    grep -a RNCNetInfo tablet/dist/_expo/static/js/android/*.hbc          # must be empty
    ```
 
+**The production branch now serves two runtimes.** `runtimeVersion.policy` is
+`appVersion`, so an OTA is only picked up by tablets whose installed APK has a
+matching version. Every update before 2026-09-02 was runtime **1.0.0**; the
+first **1.1.0** update was published on 2026-09-02. A tablet still on the old
+1.0.0 APK therefore receives nothing new no matter how many times you run
+`eas update` from `main` — it needs the 1.1.0 APK installed. Check which
+runtimes are live with `eas update:list --branch production` before assuming
+a fix reached the shop floor.
+
 `.github/workflows/deploy.yml` does all of this on GitHub Actions (manual
 dispatch, gated on the backend suite) if you'd rather not deploy locally.
 
