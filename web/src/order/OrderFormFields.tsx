@@ -8,6 +8,7 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 
 import { listCategories, listProductsByCategory, searchProducts } from "../api/endpoints";
 import type { Product } from "../api/types";
+import { withCents } from "./money";
 import {
   addCustomItem,
   addProduct,
@@ -65,7 +66,8 @@ export function OrderHeaderFields({ draft, set }: { draft: Draft; set: (patch: P
             <input className="input" style={{ maxWidth: 180 }} placeholder="Delivery name (recipient)"
               value={draft.deliveryName} onChange={(e) => set({ deliveryName: e.target.value })} />
             <input className="input" style={{ maxWidth: 130 }} placeholder="Delivery $"
-              value={draft.deliveryPrice} onChange={(e) => set({ deliveryPrice: e.target.value })} />
+              value={draft.deliveryPrice} onChange={(e) => set({ deliveryPrice: e.target.value })}
+              onBlur={() => set({ deliveryPrice: withCents(draft.deliveryPrice) })} />
             <input className="input" style={{ flex: 1, minWidth: 180 }} placeholder="Delivery address *"
               value={draft.deliveryAddress} onChange={(e) => set({ deliveryAddress: e.target.value })} />
           </>
@@ -192,7 +194,8 @@ export function OrderItemsEditor({ draft, setDraft }: { draft: Draft; setDraft: 
           <input className="input" placeholder="Item name" value={customName}
             onChange={(e) => setCustomName(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
           <input className="input" placeholder="Price" value={customPrice}
-            onChange={(e) => setCustomPrice(e.target.value)} style={{ maxWidth: 100 }} />
+            onChange={(e) => setCustomPrice(e.target.value)}
+            onBlur={() => setCustomPrice((v) => withCents(v))} style={{ maxWidth: 100 }} />
           <label className="row" style={{ gap: 6, alignItems: "center", fontSize: 13 }}>
             <input type="checkbox" checked={customSave} onChange={(e) => setCustomSave(e.target.checked)} />
             Save as a regular product

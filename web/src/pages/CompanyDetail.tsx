@@ -21,28 +21,10 @@ import {
 import type { CompanyType, LedgerEntry, LedgerEntryType } from "../api/types";
 import { ErrorMsg, LoadFailed, Loading, Switch, SwitchChoice, isStalled } from "../components/ui";
 import { formatDate } from "../order/dates";
+import { withCents } from "../order/money";
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
 const validAmount = (v: string) => /^\d+(\.\d{1,2})?$/.test(v.trim()) && Number(v) > 0;
-
-/** Fills in the cents so nobody has to type them.
- *
- *   150    -> 150.00
- *   150.   -> 150.00
- *   150.5  -> 150.50
- *
- * Runs on blur, never while typing: reformatting mid-keystroke fights the
- * person entering the number. Anything that isn't a plain amount is left
- * exactly as typed, so a typo stays visible instead of being silently
- * rewritten into something that looks deliberate.
- */
-function withCents(value: string): string {
-  const text = value.trim();
-  if (!/^\d+\.?\d{0,2}$/.test(text)) return value;
-  const amount = Number(text);
-  if (!Number.isFinite(amount)) return value;
-  return amount.toFixed(2);
-}
 
 export default function CompanyDetail() {
   const { id } = useParams<{ id: string }>();
