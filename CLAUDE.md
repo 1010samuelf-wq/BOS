@@ -30,7 +30,7 @@ alembic upgrade head
 python dev_server.py               # SQLite dev API on :8000, auto-schema + seeds admin
 
 # web
-cd web && npm install && npx tsc --noEmit && npm run dev     # :5173
+cd web && npm install && npx tsc --noEmit && npm test && npm run dev   # :5173
 
 # tablet
 cd tablet && npm install && npx tsc --noEmit && npx jest
@@ -171,6 +171,12 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   refetch. There is no "changes since" endpoint. `publish` no-ops until the app
   lifespan sets the loop, so it's inert in HTTP unit tests — WS tests need
   `with TestClient(app) as c:`.
+- **The web has tests now — use them.** `cd web && npm test` (Vitest, jsdom).
+  They exist because every bug that reached the shop in September was
+  frontend and the 364 backend tests could not see any of them. Logic worth
+  covering lives in plain `.ts` files (`order/money.ts`, `order/orderDraft.ts`,
+  `order/useFormView.ts`) precisely so it can be tested without rendering a
+  page. `npm test` gates the dashboard deploy in CI.
 - **Test fixtures** (`tests/conftest.py`): `client` is an authenticated admin,
   `make_user(name, role)` returns `(id, token, authed_client)`, `anon_client` has
   no token. Compare money as `Decimal`, not strings.

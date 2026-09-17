@@ -92,6 +92,10 @@ jobs:
         with:
           node-version: "20"
       - run: npm install
+      # Gates the deploy: every bug shipped to the shop in September was
+      # frontend, and the backend suite cannot see any of them.
+      - name: Tests
+        run: npm test
       # The API base is baked into dist/ at build time and the Dockerfile only
       # copies the prebuilt dist/, so this variable MUST be set here. Without it
       # client.ts falls back to http://localhost:8000 and the deployed SPA can't
