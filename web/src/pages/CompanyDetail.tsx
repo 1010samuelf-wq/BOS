@@ -19,7 +19,7 @@ import {
   updateLedgerEntry,
 } from "../api/endpoints";
 import type { CompanyType, LedgerEntry, LedgerEntryType } from "../api/types";
-import { ErrorMsg, LoadFailed, Loading, Switch, isStalled } from "../components/ui";
+import { ErrorMsg, LoadFailed, Loading, Switch, SwitchChoice, isStalled } from "../components/ui";
 import { formatDate } from "../order/dates";
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
@@ -168,14 +168,15 @@ export default function CompanyDetail() {
       <div className="card no-print">
         <h2>Add entry</h2>
         <div className="row" style={{ flexWrap: "wrap", alignItems: "center" }}>
-          <div className="tabs">
-            <button className={`tab${entryType === "charge" ? " active" : ""}`} onClick={() => setEntryType("charge")}>
-              Charge (order/invoice)
-            </button>
-            <button className={`tab${entryType === "payment" ? " active" : ""}`} onClick={() => setEntryType("payment")}>
-              Payment
-            </button>
-          </div>
+          <SwitchChoice
+            value={entryType}
+            onChange={setEntryType}
+            title="A charge adds to what is owed; a payment settles some of it"
+            options={[
+              { key: "charge", label: "Charge" },
+              { key: "payment", label: "Payment" },
+            ] as const}
+          />
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ maxWidth: 160 }} />
           <input className="input" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ maxWidth: 120 }} />
           <input className="input" placeholder="Invoice number (optional)" value={invoice} onChange={(e) => setInvoice(e.target.value)} style={{ flex: 1, minWidth: 160 }} />

@@ -83,6 +83,44 @@ export function isStalled(q: {
   return q.isError || (q.data === undefined && q.fetchStatus === "paused");
 }
 
+/** A switch between two named things, rather than on and off.
+ *
+ * Charge-or-payment is binary but neither side is "off", so a plain Switch
+ * would be a riddle: which position means payment? This shows both words with
+ * the thumb sliding under the chosen one — the same physical control, reading
+ * as a choice instead of a state.
+ */
+export function SwitchChoice<T extends string>({
+  value, options, onChange, title,
+}: {
+  value: T;
+  options: readonly [{ key: T; label: string }, { key: T; label: string }];
+  onChange: (next: T) => void;
+  title?: string;
+}) {
+  const index = options.findIndex((o) => o.key === value);
+  return (
+    <div
+      className="switch-choice"
+      role="group"
+      title={title}
+      data-active={index === 1 ? "right" : "left"}
+    >
+      {options.map((o) => (
+        <button
+          key={o.key}
+          type="button"
+          className={`switch-choice-opt${o.key === value ? " is-on" : ""}`}
+          aria-pressed={o.key === value}
+          onClick={() => onChange(o.key)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** What a page shows when its data couldn't be fetched.
  *
  * Worth a shared component because the alternative is worse than it looks:

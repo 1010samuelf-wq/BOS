@@ -800,3 +800,36 @@ textarea.input { resize: vertical; font-family: inherit; }
   overflow-x: auto;
   background: #fff;
 }
+
+/* ---- two-sided switch --------------------------------------------------- */
+/* Same object as .switch, widened to carry two words. The thumb slides under
+   the chosen one, so the control reads as a position rather than a colour. */
+/* Two-sided switch. The filled side IS the chosen one — no separately
+   positioned thumb, which is one less thing to misplace. */
+.switch-choice {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  border-radius: 999px;
+  background: var(--border);
+  user-select: none;
+}
+.switch-choice-opt {
+  flex: 1;
+  min-width: 92px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.switch-choice-opt.is-on {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}

@@ -2,13 +2,14 @@
 //
 // Nothing is sent from here. The page builds the email and hands it to the
 // person's own mailbox — "Copy email" puts it on the clipboard as rich HTML so
-// pasting into Gmail keeps the logo, photos and layout. That means no sending
-// domain to warm up, no bounces to handle, and replies land in the inbox of
-// whoever sent it, which is what the shop actually wants.
+// pasting into any mail client keeps the logo, photos and layout. That means no
+// sending domain to warm up, no bounces to handle, and replies land in the inbox
+// of whoever sent it, which is what the shop actually wants.
 //
-// "Open Gmail" is a convenience, not the main path: Gmail's compose link takes
-// plain text only, so it opens a blank draft with the subject filled in and you
-// paste the body in. The button says so.
+// "Open email app" is a convenience, not the main path. It's a mailto: link, so
+// the OS picks the app — Android offers whatever is installed, Windows opens the
+// default — because the shop doesn't only use Gmail. It carries the subject and
+// nothing else; the body is the rich version sitting on the clipboard.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -122,11 +123,13 @@ export default function EmailProducts() {
     }
   }
 
-  function openGmail() {
-    // Subject only. Gmail's compose link can't carry HTML, and sending the
-    // products as a wall of plain text would undo the whole point of the page.
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(subject)}`;
-    window.open(url, "_blank", "noopener");
+  function openMailApp() {
+    // mailto:, not a Gmail link. It hands the OS the job, so Android offers
+    // whatever mail apps are installed and Windows opens the default one —
+    // the shop doesn't only use Gmail. Subject only: the body is the rich
+    // version on the clipboard, and pre-filling plain text here would just be
+    // something to delete before pasting.
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}`;
   }
 
   function applyTemplate(t: EmailTemplate) {
@@ -163,14 +166,15 @@ export default function EmailProducts() {
         <button className="btn neutral" disabled={chosen.length === 0} onClick={() => void copyEmail()}>
           {copied ? "✓ Copied" : "📋 Copy email"}
         </button>
-        <button className="btn primary" disabled={!subject.trim()} onClick={openGmail}>
-          ✉ Open Gmail
+        <button className="btn primary" disabled={!subject.trim()} onClick={openMailApp}>
+          ✉ Open email app
         </button>
       </PageHead>
 
       <p className="muted" style={{ marginTop: -4 }}>
-        Pick what you want to show, copy the email, then paste it into Gmail — the pictures
-        and layout come with it. It sends from your own address, so replies come back to you.
+        Pick what you want to show, press <strong>Copy email</strong>, then open your mail
+        app and paste — the pictures and layout come with it. It sends from your own address,
+        so replies come back to you.
       </p>
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
