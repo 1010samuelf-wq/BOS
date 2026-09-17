@@ -19,7 +19,7 @@ import {
   updateLedgerEntry,
 } from "../api/endpoints";
 import type { CompanyType, LedgerEntry, LedgerEntryType } from "../api/types";
-import { ErrorMsg, LoadFailed, Loading, isStalled } from "../components/ui";
+import { ErrorMsg, LoadFailed, Loading, Switch, isStalled } from "../components/ui";
 import { formatDate } from "../order/dates";
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
@@ -34,12 +34,12 @@ export default function CompanyDetail() {
   const [entryType, setEntryType] = useState<LedgerEntryType>("charge");
   const [date, setDate] = useState(todayInput());
   const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
+  const [invoice, setInvoice] = useState("");
 
   // Which line is open for editing, and the working copy of its fields. Held
   // here rather than in each row so only one line is ever mid-edit.
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [draft, setDraft] = useState({ entry_date: "", type: "charge" as LedgerEntryType, amount: "", note: "" });
+  const [draft, setDraft] = useState({ entry_date: "", type: "charge" as LedgerEntryType, amount: "", invoice_number: "" });
   const [editingCompany, setEditingCompany] = useState(false);
   const [companyDraft, setCompanyDraft] = useState({ name: "", type: "payable" as CompanyType });
 
@@ -52,9 +52,10 @@ export default function CompanyDetail() {
 
   const addEntry = useMutation({
     mutationFn: () => addLedgerEntry(companyId, {
-      entry_date: date, type: entryType, amount: amount.trim(), note: note.trim() || null,
+      entry_date: date, type: entryType, amount: amount.trim(),
+      invoice_number: invoice.trim() || null,
     }),
-    onSuccess: () => { setAmount(""); setNote(""); setError(null); invalidate(); },
+    onSuccess: () => { setAmount(""); setInvoice(""); setError(null); invalidate(); },
     onError: onErr,
   });
   const saveEntry = useMutation({
@@ -62,7 +63,7 @@ export default function CompanyDetail() {
       entry_date: draft.entry_date,
       type: draft.type,
       amount: draft.amount.trim(),
-      note: draft.note.trim() || null,
+      invoice_number: draft.invoice_number.trim() || null,
     }),
     onSuccess: () => { setEditingId(null); setError(null); invalidate(); },
     onError: onErr,
@@ -99,7 +100,7 @@ export default function CompanyDetail() {
 
   function startEdit(e: LedgerEntry) {
     setEditingId(e.id);
-    setDraft({ entry_date: e.entry_date, type: e.type, amount: e.amount, note: e.note ?? "" });
+    setDraft({ entry_date: e.entry_date, type: e.type, amount: e.amount, invoice_number: e.invoice_number ?? "" });
   }
 
   return (
@@ -177,7 +178,7 @@ export default function CompanyDetail() {
           </div>
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} style={{ maxWidth: 160 }} />
           <input className="input" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ maxWidth: 120 }} />
-          <input className="input" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+          <input className="input" placeholder="Invoice number (optional)" value={invoice} onChange={(e) => setInvoice(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
           <button className="btn primary" disabled={!validAmount(amount) || addEntry.isPending} onClick={() => addEntry.mutate()}>
             Add
           </button>
@@ -191,7 +192,7 @@ export default function CompanyDetail() {
         ) : (
           <table>
             <thead>
-              <tr><th>Date</th><th>Type</th><th className="num">Amount</th><th>Note</th><th className="no-print" /></tr>
+              <tr><th>Date</th><th>Type</th><th className="num">Amount</th><th>Invoice #</th><th className="no-print" /></tr>
             </thead>
             <tbody>
               {c.entries.map((e) => (
@@ -213,8 +214,8 @@ export default function CompanyDetail() {
                         onChange={(ev) => setDraft((d) => ({ ...d, amount: ev.target.value }))} />
                     </td>
                     <td>
-                      <input className="input" placeholder="Note" value={draft.note}
-                        onChange={(ev) => setDraft((d) => ({ ...d, note: ev.target.value }))} />
+                      <input className="input" placeholder="Invoice number" value={draft.invoice_number}
+                        onChange={(ev) => setDraft((d) => ({ ...d, invoice_number: ev.target.value }))} />
                     </td>
                     <td>
                       <div className="row" style={{ gap: 6 }}>
@@ -236,7 +237,7 @@ export default function CompanyDetail() {
                       {e.type === "charge" ? "Charge" : "Payment"}
                     </td>
                     <td className="num">${e.amount}</td>
-                    <td className="muted">{e.note ?? "—"}</td>
+                    <td className="muted">{e.invoice_number ?? "—"}</td>
                     <td className="no-print">
                       <div className="row" style={{ gap: 6 }}>
                         <button className="btn neutral sm" onClick={() => startEdit(e)}>Edit</button>
@@ -251,9 +252,14 @@ export default function CompanyDetail() {
         )}
       </div>
 
-      <button className="btn neutral no-print" onClick={() => toggleActive.mutate()}>
-        {c.active ? "Archive this company" : "Reactivate this company"}
-      </button>
+      <div className="no-print" style={{ marginTop: 4 }}>
+        <Switch
+          checked={c.active}
+          onChange={() => toggleActive.mutate()}
+          label={c.active ? "Active" : "Archived"}
+          title="Archived companies drop out of the Bookkeeping list but keep their ledger"
+        />
+      </div>
     </div>
   );
 }

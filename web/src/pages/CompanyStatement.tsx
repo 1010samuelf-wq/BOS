@@ -39,7 +39,7 @@ export default function CompanyStatement() {
   const { opening, rows, closing } = useMemo(() => {
     const entries = c?.entries ?? [];
     let open = 0;
-    const inRange: { id: number; date: string; type: string; amount: string; note: string | null; running: number }[] = [];
+    const inRange: { id: number; date: string; type: string; amount: string; invoice: string | null; running: number }[] = [];
     let running = 0;
 
     for (const e of entries) {
@@ -53,7 +53,7 @@ export default function CompanyStatement() {
       if (after) continue;
       running = running === 0 && inRange.length === 0 ? open : running;
       running = addCents(running, e.amount, sign);
-      inRange.push({ id: e.id, date: e.entry_date, type: e.type, amount: e.amount, note: e.note, running });
+      inRange.push({ id: e.id, date: e.entry_date, type: e.type, amount: e.amount, invoice: e.invoice_number, running });
     }
     return { opening: open, rows: inRange, closing: inRange.length ? running : open };
   }, [c, from, to]);
@@ -133,7 +133,7 @@ export default function CompanyStatement() {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>{formatDate(new Date(`${r.date}T00:00:00`))}</td>
-                <td>{r.note ?? (r.type === "charge" ? "Charge" : "Payment")}</td>
+                <td>{r.invoice ? `Invoice ${r.invoice}` : (r.type === "charge" ? "Charge" : "Payment")}</td>
                 <td className="num">{r.type === "charge" ? `$${r.amount}` : ""}</td>
                 <td className="num">{r.type === "payment" ? `$${r.amount}` : ""}</td>
                 <td className="num">{money(r.running)}</td>

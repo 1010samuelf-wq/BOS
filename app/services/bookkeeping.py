@@ -69,7 +69,7 @@ def add_entry(db: Session, company_id: int, payload: LedgerEntryCreate, user_id:
         entry_date=payload.entry_date,
         type=payload.type,
         amount=payload.amount,
-        note=payload.note.strip() if payload.note else None,
+        invoice_number=payload.invoice_number.strip() if payload.invoice_number else None,
         logged_by=user_id,
     )
     db.add(entry)
@@ -86,8 +86,8 @@ def update_entry(
     ``exclude_unset`` matters here for the same reason it does on orders: a
     dump of the whole model would write None over every field the client didn't
     send, quietly blanking an amount while the person thought they were fixing
-    a note. An explicit ``note: null`` still clears the note, because that key
-    is then present in the payload.
+    the invoice number. An explicit ``invoice_number: null`` still clears it,
+    because that key is then present in the payload.
     """
     company = _get_company(db, company_id)
     entry = next((e for e in company.entries if e.id == entry_id), None)
@@ -101,9 +101,10 @@ def update_entry(
         entry.type = data["type"]
     if "amount" in data and data["amount"] is not None:
         entry.amount = data["amount"]
-    if "note" in data:
-        note = data["note"]
-        entry.note = note.strip() if note else None
+    if "invoice_number" in data:
+        value = data["invoice_number"]
+        # Stored exactly as typed — no padding, no stripping of leading zeros.
+        entry.invoice_number = value.strip() if value else None
 
     db.flush()
     db.refresh(company)
@@ -125,10 +126,10 @@ def delete_entry(
         label=(
             f"{company.name}: {entry.type.value} ${entry.amount} "
             f"on {entry.entry_date.isoformat()}"
-            + (f" — {entry.note}" if entry.note else "")
+            + (f" — invoice {entry.invoice_number}" if entry.invoice_number else "")
         ),
         payload=trash.snapshot(
-            entry, ["company_id", "entry_date", "type", "amount", "note", "logged_by"]
+            entry, ["company_id", "entry_date", "type", "amount", "invoice_number", "logged_by"]
         ),
         user=user,
     )

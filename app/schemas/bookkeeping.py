@@ -23,21 +23,21 @@ class LedgerEntryCreate(BaseModel):
     entry_date: date
     type: LedgerEntryType
     amount: Decimal = Field(gt=0)
-    note: str | None = Field(default=None, max_length=500)
+    invoice_number: str | None = Field(default=None, max_length=500)
 
 
 class LedgerEntryUpdate(BaseModel):
     """A partial edit of one ledger line.
 
     Every field is optional and applied only when actually sent — the same
-    exclude_unset discipline as order updates, so editing a note doesn't blank
-    the amount.
+    exclude_unset discipline as order updates, so editing the invoice
+    number doesn't blank the amount.
     """
 
     entry_date: date | None = None
     type: LedgerEntryType | None = None
     amount: Decimal | None = Field(default=None, gt=0)
-    note: str | None = Field(default=None, max_length=500)
+    invoice_number: str | None = Field(default=None, max_length=500)
 
 
 class LedgerEntryOut(BaseModel):
@@ -47,7 +47,7 @@ class LedgerEntryOut(BaseModel):
     entry_date: date
     type: LedgerEntryType
     amount: Decimal
-    note: str | None
+    invoice_number: str | None
 
 
 class CompanyOut(BaseModel):

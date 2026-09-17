@@ -361,7 +361,7 @@ def describe(db: Session, action: str, args: dict) -> str:
             raise APIError(400, "bad_action", "That is either a charge or a payment.")
         amount = _positive_amount(args.get("amount"))
         when = _entry_date(args.get("entry_date"))
-        note = " ".join(str(args.get("note", "")).split())
+        invoice = " ".join(str(args.get("invoice_number", "")).split())
         # Spell out which way the balance moves: "charge" and "payment" read
         # the same to someone glancing at a confirmation box.
         after = company.balance + (amount if kind == "charge" else -amount)
@@ -369,7 +369,7 @@ def describe(db: Session, action: str, args: dict) -> str:
         return (
             f"Record a {kind} of ${amount} against {company.name} on "
             f"{_format_needed(datetime(when.year, when.month, when.day))}"
-            + (f' — "{note}"' if note else "")
+            + (f" — invoice {invoice}" if invoice else "")
             + f". That {direction} what is owed: ${company.balance} becomes ${after}."
         )
     if action == "set_order_date":
@@ -588,7 +588,7 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
     elif action == "add_ledger_entry":
         from app.schemas.bookkeeping import LedgerEntryCreate
 
-        note = " ".join(str(args.get("note", "")).split())
+        invoice = " ".join(str(args.get("invoice_number", "")).split())
         bookkeeping_service.add_entry(
             db,
             int(args["company_id"]),
@@ -596,7 +596,7 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
                 entry_date=_entry_date(args.get("entry_date")),
                 type=LedgerEntryType(args["type"]),
                 amount=_positive_amount(args.get("amount")),
-                note=note or None,
+                invoice_number=invoice or None,
             ),
             user.id,
         )

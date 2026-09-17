@@ -113,7 +113,7 @@ def restore(db: Session, item_id: int) -> TrashItem:
             entry_date=date.fromisoformat(data["entry_date"]),
             type=LedgerEntryType(data["type"]),
             amount=Decimal(data["amount"]),
-            note=data.get("note"),
+            invoice_number=data.get("invoice_number"),
             logged_by=data.get("logged_by"),
         ))
     elif item.kind == "expense":

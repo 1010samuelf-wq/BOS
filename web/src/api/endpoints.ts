@@ -217,12 +217,12 @@ export const updateCompany = (id: number, body: Partial<{ name: string; type: Co
   api<Company>(`/bookkeeping/companies/${id}`, { method: "PUT", body });
 export const addLedgerEntry = (
   companyId: number,
-  body: { entry_date: string; type: LedgerEntryType; amount: string; note?: string | null },
+  body: { entry_date: string; type: LedgerEntryType; amount: string; invoice_number?: string | null },
 ) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries`, { method: "POST", body });
 export const updateLedgerEntry = (
   companyId: number,
   entryId: number,
-  body: Partial<{ entry_date: string; type: LedgerEntryType; amount: string; note: string | null }>,
+  body: Partial<{ entry_date: string; type: LedgerEntryType; amount: string; invoice_number: string | null }>,
 ) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "PUT", body });
 export const deleteLedgerEntry = (companyId: number, entryId: number) =>
   api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });

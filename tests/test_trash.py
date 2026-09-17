@@ -19,7 +19,7 @@ def _company_with_entry(client, amount="150.00", note="flour"):
         "/api/v1/bookkeeping/companies", json={"name": "Flour Co", "type": "payable"}
     ).json()["id"]
     eid = client.post(f"/api/v1/bookkeeping/companies/{cid}/entries", json={
-        "entry_date": "2026-08-01", "type": "charge", "amount": amount, "note": note,
+        "entry_date": "2026-08-01", "type": "charge", "amount": amount, "invoice_number": note,
     }).json()["entries"][0]["id"]
     return cid, eid
 
@@ -52,7 +52,7 @@ def test_putting_a_ledger_line_back_restores_the_balance(client):
     detail = client.get(f"/api/v1/bookkeeping/companies/{cid}").json()
     assert Decimal(detail["balance"]) == Decimal("150.00")
     entry = detail["entries"][0]
-    assert entry["note"] == "flour"
+    assert entry["invoice_number"] == "flour"
     assert entry["entry_date"] == "2026-08-01"
     assert entry["type"] == "charge"
 
@@ -220,7 +220,7 @@ def test_the_trash_records_who_deleted_it(client):
 def test_newest_first(client):
     cid, first = _company_with_entry(client)
     second = client.post(f"/api/v1/bookkeeping/companies/{cid}/entries", json={
-        "entry_date": "2026-08-02", "type": "charge", "amount": "10.00", "note": "sugar",
+        "entry_date": "2026-08-02", "type": "charge", "amount": "10.00", "invoice_number": "sugar",
     }).json()["entries"][-1]["id"]
 
     client.delete(f"/api/v1/bookkeeping/companies/{cid}/entries/{first}")

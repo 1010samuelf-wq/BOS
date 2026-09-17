@@ -18,6 +18,44 @@ export function ErrorMsg({ children }: { children: ReactNode }) {
   return <p className="error">{children}</p>;
 }
 
+/** An on/off control that looks like one.
+ *
+ * The shop asked for this outright — "every switch should really look like a
+ * switch". A pair of Activate/Deactivate buttons makes you read the label to
+ * work out which way round you are; a switch shows the state itself, and the
+ * label only names what it controls.
+ *
+ * `confirm` is for the ones with consequences beyond the screen — turning an
+ * employee off signs them out of the shop — since a switch is easier to hit by
+ * accident than a button you had to read first.
+ */
+export function Switch({
+  checked, onChange, label, title, confirm, disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label?: string;
+  title?: string;
+  confirm?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="switch" title={title}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={() => {
+          if (confirm && !window.confirm(confirm)) return;
+          onChange(!checked);
+        }}
+      />
+      <span className="switch-track"><span className="switch-thumb" /></span>
+      {label && <span className="switch-label">{label}</span>}
+    </label>
+  );
+}
+
 /** A query with nothing to show that isn't doing anything about it.
  *
  * `isError` is not enough on its own. React Query pauses a retry whenever the

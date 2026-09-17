@@ -72,7 +72,7 @@ def test_a_charge_and_a_payment_move_the_balance(client):
 
     client.post("/api/v1/assistant/act", json={"action": "add_ledger_entry", "args": {
         "company_id": cid, "type": "charge", "amount": 150.00,
-        "entry_date": "2026-08-01", "note": "flour order",
+        "entry_date": "2026-08-01", "invoice_number": "flour order",
     }})
     client.post("/api/v1/assistant/act", json={"action": "add_ledger_entry", "args": {
         "company_id": cid, "type": "payment", "amount": 100.00, "entry_date": "2026-08-10",
@@ -81,19 +81,19 @@ def test_a_charge_and_a_payment_move_the_balance(client):
     detail = _detail(client, cid)
     assert Decimal(detail["balance"]) == Decimal("50.00")
     assert [e["type"] for e in detail["entries"]] == ["charge", "payment"]
-    assert detail["entries"][0]["note"] == "flour order"
+    assert detail["entries"][0]["invoice_number"] == "flour order"
 
 
 def test_the_note_and_date_are_kept(client):
     cid = _company(client)["id"]
     client.post("/api/v1/assistant/act", json={"action": "add_ledger_entry", "args": {
         "company_id": cid, "type": "charge", "amount": 42.50,
-        "entry_date": "2026-07-04", "note": "  delivery van   repair  ",
+        "entry_date": "2026-07-04", "invoice_number": "  delivery van   repair  ",
     }})
     entry = _detail(client, cid)["entries"][0]
     assert entry["entry_date"] == "2026-07-04"
     assert Decimal(entry["amount"]) == Decimal("42.50")
-    assert entry["note"] == "delivery van repair"
+    assert entry["invoice_number"] == "delivery van repair"
 
 
 def test_an_entry_with_no_date_lands_on_today(client):
@@ -121,7 +121,7 @@ def test_the_confirmation_spells_out_which_way_the_balance_moves(client):
     try:
         text = describe(db, "add_ledger_entry", {
             "company_id": cid, "type": "payment", "amount": 75,
-            "entry_date": "2026-08-09", "note": "cheque 114",
+            "entry_date": "2026-08-09", "invoice_number": "cheque 114",
         })
     finally:
         db.close()
@@ -175,9 +175,9 @@ def test_several_entries_can_be_proposed_at_once(client, fake_model):
     fake_model(_Response("tool_use", [
         _Text("Three lines off that statement."),
         _ToolUse("add_ledger_entry", {"company_id": cid, "type": "charge", "amount": 100,
-                                      "entry_date": "2026-08-01", "note": "flour"}, "b1"),
+                                      "entry_date": "2026-08-01", "invoice_number": "flour"}, "b1"),
         _ToolUse("add_ledger_entry", {"company_id": cid, "type": "charge", "amount": 60,
-                                      "entry_date": "2026-08-02", "note": "sugar"}, "b2"),
+                                      "entry_date": "2026-08-02", "invoice_number": "sugar"}, "b2"),
         _ToolUse("add_ledger_entry", {"company_id": cid, "type": "payment", "amount": 40,
                                       "entry_date": "2026-08-08"}, "b3"),
     ]))
@@ -197,7 +197,7 @@ def test_the_assistant_can_read_a_companys_ledger(client, fake_model):
     cid = _company(client, "Cheese Guy")["id"]
     client.post("/api/v1/assistant/act", json={"action": "add_ledger_entry", "args": {
         "company_id": cid, "type": "charge", "amount": 90, "entry_date": "2026-08-03",
-        "note": "mozzarella",
+        "invoice_number": "mozzarella",
     }})
 
     model = fake_model(

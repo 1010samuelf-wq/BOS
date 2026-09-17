@@ -21,7 +21,7 @@ import {
 import type { Employee, Role } from "../api/types";
 import { roleLabel } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
-import { Loading, PageHead } from "../components/ui";
+import { Loading, PageHead, Switch } from "../components/ui";
 import { formatDate } from "../order/dates";
 
 const ROLES: Role[] = ["cashier", "manager", "admin"];
@@ -223,18 +223,21 @@ export default function EmployeesHours() {
                       {!e.active ? " · inactive" : ""}
                       <span className="muted"> · {roleLabel(e.role)} · PIN {e.pin_set ? "set" : "awaiting first login"}</span>
                     </div>
-                    {e.active ? (
-                      <>
-                        {e.role !== "admin" && (
-                          <button className="btn neutral sm" onClick={() => reset.mutate(e.id)}>Reset PIN</button>
-                        )}
-                        <button className="btn danger sm" onClick={() => deactivate.mutate(e.id)}>Deactivate</button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="btn primary sm" onClick={() => reactivate.mutate(e.id)}>Reactivate</button>
-                        <button className="btn danger sm" onClick={() => confirmDelete(e)}>Delete</button>
-                      </>
+                    {e.active && e.role !== "admin" && (
+                      <button className="btn neutral sm" onClick={() => reset.mutate(e.id)}>Reset PIN</button>
+                    )}
+                    {/* Confirmed, unlike the catalog switches: turning someone
+                        off signs them out of the shop, and a switch is easier
+                        to catch by accident than a button you had to read. */}
+                    <Switch
+                      checked={e.active}
+                      onChange={() => (e.active ? deactivate.mutate(e.id) : reactivate.mutate(e.id))}
+                      label={e.active ? "Working" : "Inactive"}
+                      confirm={e.active ? `Deactivate ${e.name}? They won't be able to log in.` : undefined}
+                      title="Whether this person can log in and appear on the roster"
+                    />
+                    {!e.active && (
+                      <button className="btn danger sm" onClick={() => confirmDelete(e)}>Delete</button>
                     )}
                   </div>
                   {e.active && (

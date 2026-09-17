@@ -333,7 +333,8 @@ export interface LedgerEntry {
   entry_date: string;
   type: LedgerEntryType;
   amount: string;
-  note: string | null;
+  /** The supplier's invoice number, stored exactly as typed. */
+  invoice_number: string | null;
 }
 export interface Company {
   id: number;

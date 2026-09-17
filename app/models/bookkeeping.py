@@ -51,5 +51,8 @@ class LedgerEntry(Base, TimestampMixin):
     entry_date: Mapped[date] = mapped_column(Date, nullable=False)
     type: Mapped[LedgerEntryType] = mapped_column(SAEnum(LedgerEntryType, name="bookkeeping_entry_type"), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
-    note: Mapped[str | None] = mapped_column(Text)
+    # The supplier's invoice number. Free text on purpose: invoice numbers
+    # are strings, not integers — they carry prefixes and leading zeros that
+    # a numeric column would quietly eat.
+    invoice_number: Mapped[str | None] = mapped_column(Text)
     logged_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))

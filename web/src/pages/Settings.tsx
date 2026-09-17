@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { Ingredient, Product } from "../api/types";
-import { LoadFailed, Loading, PageHead, Tabs, isStalled } from "../components/ui";
+import { LoadFailed, Loading, PageHead, Switch, Tabs, isStalled } from "../components/ui";
 
 type Section = "products" | "ingredients" | "recipes" | "business" | "tablet";
 
@@ -224,20 +224,22 @@ function ProductRow({
         {/* Whether customers see it on justcakeskosher.com. Separate from
             Deactivate, which pulls the product out of the shop entirely —
             plenty of things are sold at the counter but not advertised. */}
-        <label className="switch" title={p.show_on_menu ? "Shown on the website" : "Hidden from the website"}>
-          <input
-            type="checkbox"
-            checked={p.show_on_menu}
-            onChange={() => onToggleMenu(p)}
-          />
-          <span className="switch-track"><span className="switch-thumb" /></span>
-          <span className="switch-label">{p.show_on_menu ? "Shown" : "Hidden"}</span>
-        </label>
+        <Switch
+          checked={p.show_on_menu}
+          onChange={() => onToggleMenu(p)}
+          label={p.show_on_menu ? "Shown" : "Hidden"}
+          title={p.show_on_menu ? "Shown on the website" : "Hidden from the website"}
+        />
       </td>
       <td>
         <div className="row">
           <button className="btn neutral sm" onClick={start}>Edit</button>
-          <button className="btn neutral sm" onClick={() => onToggleActive(p)}>{p.active ? "Deactivate" : "Activate"}</button>
+          <Switch
+            checked={p.active}
+            onChange={() => onToggleActive(p)}
+            label={p.active ? "Selling" : "Retired"}
+            title="Whether the shop sells this at all — search, the tap grid and new orders"
+          />
           {/* Only ever succeeds for a product that was never sold — the server
               refuses the rest, because order history references it. */}
           <button className="btn neutral sm" onClick={() => onDelete(p)}>Delete</button>
@@ -472,7 +474,13 @@ function Ingredients() {
                   <td>{i.name}</td><td>{i.unit}</td>
                   <td className="num">${i.cost_per_unit}</td>
                   <td className="num">{i.low_stock_threshold}</td>
-                  <td><button className="btn neutral sm" onClick={() => toggleActive.mutate(i)}>{i.active ? "Deactivate" : "Activate"}</button></td>
+                  <td>
+                    <Switch
+                      checked={i.active}
+                      onChange={() => toggleActive.mutate(i)}
+                      label={i.active ? "In use" : "Retired"}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

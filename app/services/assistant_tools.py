@@ -521,7 +521,8 @@ def _run_company_ledger(db: Session, user: User, args: dict) -> str:
     for e in company.entries:
         lines.append(
             f"  entry {e.id}: {e.entry_date.isoformat()} {e.type.value} "
-            f"{_money(e.amount)}" + (f" — {e.note}" if e.note else "")
+            f"{_money(e.amount)}"
+            + (f" — invoice {e.invoice_number}" if e.invoice_number else "")
         )
     return "\n".join(lines)
 
@@ -569,7 +570,10 @@ _register(Tool(
         },
         "amount": {"type": "number", "description": "A positive amount in dollars."},
         "entry_date": _DATE,
-        "note": {"type": "string", "description": "What it was for."},
+        "invoice_number": {
+            "type": "string",
+            "description": "The supplier's invoice number, exactly as printed.",
+        },
     }, ["company_id", "type", "amount"]),
     "bookkeeping",
     writes=True,
