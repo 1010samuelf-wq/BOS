@@ -24,6 +24,8 @@ import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
 import CompanyStatement from "./pages/CompanyStatement";
 import EmailProducts from "./pages/EmailProducts";
+import NewOrderV2 from "./pages/NewOrderV2";
+import { useOrderFormView } from "./order/useFormView";
 import Trash from "./pages/Trash";
 import FeedbackWidget from "./components/FeedbackWidget";
 import AssistantPanel from "./components/AssistantPanel";
@@ -111,6 +113,14 @@ function RequireSection({ section, children }: { section: string; children: Reac
 }
 
 /** Admin-only pages. Non-admins are bounced to their first allowed section. */
+/** Which order form this device asked for. Classic unless someone switched.
+ *  Both are always routable — flipping the switch re-renders straight into
+ *  the other one, so a person can go back mid-order if it doesn't suit. */
+function NewOrderRoute() {
+  const [view] = useOrderFormView();
+  return view === "new" ? <NewOrderV2 /> : <NewOrder />;
+}
+
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   if (user?.role !== "admin") return <Navigate to={firstAllowed(user?.sections ?? [])} replace />;
@@ -178,7 +188,7 @@ export default function App() {
       <Route path="/no-access" element={user ? <NoAccess /> : <Navigate to="/login" replace />} />
       <Route element={user ? <Shell /> : <Navigate to="/login" replace />}>
         <Route path="/orders" element={<RequireSection section="orders"><Orders /></RequireSection>} />
-        <Route path="/orders/new" element={<RequireSection section="orders"><NewOrder /></RequireSection>} />
+        <Route path="/orders/new" element={<RequireSection section="orders"><NewOrderRoute /></RequireSection>} />
         <Route path="/orders/:id" element={<RequireSection section="orders"><OrderDetail /></RequireSection>} />
         <Route path="/customers" element={<RequireSection section="orders"><Customers /></RequireSection>} />
         <Route path="/production" element={<RequireSection section="production"><Production /></RequireSection>} />

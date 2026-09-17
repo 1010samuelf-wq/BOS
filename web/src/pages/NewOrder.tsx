@@ -10,7 +10,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { ApiRequestError } from "../api/client";
 import { createOrder, toggleInquiryHandled } from "../api/endpoints";
 import type { Inquiry, PaymentMethod } from "../api/types";
-import { PageHead } from "../components/ui";
+import { PageHead, SwitchChoice } from "../components/ui";
+import { useOrderFormView } from "../order/useFormView";
 import { OrderHeaderFields, OrderItemsEditor } from "../order/OrderFormFields";
 import {
   buildPayload,
@@ -52,6 +53,7 @@ export default function NewOrder() {
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
+  const [, setView] = useOrderFormView();
   const navigate = useNavigate();
   const client = useQueryClient();
 
@@ -84,7 +86,17 @@ export default function NewOrder() {
 
   return (
     <div className="page">
-      <PageHead title="New order" />
+      <PageHead title="New order">
+        <SwitchChoice
+          value="classic"
+          onChange={(v) => setView(v === "new" ? "new" : "classic")}
+          title="Switch between this form and the new one. Your choice sticks on this device."
+          options={[
+            { key: "classic", label: "Classic" },
+            { key: "new", label: "New" },
+          ] as const}
+        />
+      </PageHead>
 
       {fromInquiry && (
         <div className="card" style={{ borderColor: "var(--primary)", background: "var(--bg-accent, #fff8f0)" }}>
