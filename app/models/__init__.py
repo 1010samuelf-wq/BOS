@@ -30,6 +30,7 @@ from app.models.catalog import (
     RecipeItem,
 )
 from app.models.customer import Customer
+from app.models.email_template import EmailTemplate
 from app.models.feedback import Feedback
 from app.models.order import Order, OrderItem, OrderNote
 from app.models.settings import AppSettings
@@ -63,6 +64,7 @@ __all__ = [
     "AssistantMessage",
     "Company",
     "Customer",
+    "EmailTemplate",
     "Feedback",
     "LedgerEntry",
     "Ingredient",

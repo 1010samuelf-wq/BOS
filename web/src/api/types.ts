@@ -436,3 +436,17 @@ export interface TabletBuild {
   built_on: string;
   url: string;
 }
+
+// ---- email templates ----
+/** Saved product email: the wording *and* the selection. */
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  intro: string | null;
+  signoff: string | null;
+  product_ids: number[];
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}

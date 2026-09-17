@@ -23,6 +23,7 @@ import Customers from "./pages/Customers";
 import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
 import CompanyStatement from "./pages/CompanyStatement";
+import EmailProducts from "./pages/EmailProducts";
 import Trash from "./pages/Trash";
 import FeedbackWidget from "./components/FeedbackWidget";
 import AssistantPanel from "./components/AssistantPanel";
@@ -34,6 +35,7 @@ const NAV = [
   { to: "/orders", label: "Orders", icon: "🧾", section: "orders" },
   { to: "/inquiries", label: "Inquiries", icon: "📥", section: "orders" },
   { to: "/customers", label: "Customers", icon: "🧑‍🍳", section: "orders" },
+  { to: "/email", label: "Email products", icon: "✉️", section: "orders" },
   { to: "/production", label: "Production", icon: "🥐", section: "production" },
   { to: "/deliveries", label: "Deliveries", icon: "🚚", section: "deliveries" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
@@ -192,6 +194,7 @@ export default function App() {
         <Route path="/bookkeeping/:id/statement" element={<RequireSection section="bookkeeping"><CompanyStatement /></RequireSection>} />
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />
         <Route path="/feedback" element={<RequireAdmin><FeedbackPage /></RequireAdmin>} />
+        <Route path="/email" element={<RequireSection section="orders"><EmailProducts /></RequireSection>} />
         <Route path="/trash" element={<RequireAdmin><Trash /></RequireAdmin>} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>

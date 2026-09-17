@@ -33,6 +33,7 @@ import type {
   SalesReport,
   Task,
   TimeEntry,
+  EmailTemplate,
   TabletBuild,
   TokenOut,
   TrashItem,
@@ -150,6 +151,18 @@ export const deleteProductPhoto = (productId: number, photoId: number) =>
 export const setProductCover = (productId: number, photoId: number) =>
   api<Product>(`/products/${productId}/photos/${photoId}/cover`, { method: "POST" });
 export const getTabletBuild = () => api<TabletBuild>("/settings/tablet-build");
+
+// ---- email templates ----
+export const listEmailTemplates = () => api<EmailTemplate[]>("/email-templates");
+export const createEmailTemplate = (body: {
+  name: string; subject: string; intro: string; signoff: string; product_ids: number[];
+}) => api<EmailTemplate>("/email-templates", { method: "POST", body });
+export const updateEmailTemplate = (id: number, body: {
+  name: string; subject: string; intro: string; signoff: string; product_ids: number[];
+}) => api<EmailTemplate>(`/email-templates/${id}`, { method: "PUT", body });
+export const deleteEmailTemplate = (id: number) =>
+  api<void>(`/email-templates/${id}`, { method: "DELETE" });
+
 export const uploadProductPhoto = (id: number, file: File) =>
   uploadFile<Product>(`/products/${id}/photo`, file);
 export const listIngredients = (active?: boolean) =>

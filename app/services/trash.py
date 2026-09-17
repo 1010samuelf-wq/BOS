@@ -26,14 +26,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import APIError, not_found
-from app.models import Company, LedgerEntry, Product, TrashItem, User
+from app.models import Company, EmailTemplate, LedgerEntry, Product, TrashItem, User
 from app.models.base import utcnow
 from app.models.enums import LedgerEntryType
 from app.models.misc import Expense, TimeEntry
 
 # Kinds that restore() knows how to put back. Everything else is kept and
 # readable but has to be re-entered by hand.
-RESTORABLE = {"ledger_entry", "expense", "time_entry", "product"}
+RESTORABLE = {"ledger_entry", "expense", "time_entry", "product", "email_template"}
 
 
 def _plain(value: Any) -> Any:
@@ -136,6 +136,14 @@ def restore(db: Session, item_id: int) -> TrashItem:
             active=bool(data.get("active", True)),
             show_on_menu=bool(data.get("show_on_menu", True)),
             photo_url=data.get("photo_url"),
+        ))
+    elif item.kind == "email_template":
+        db.add(EmailTemplate(
+            name=data["name"],
+            subject=data.get("subject") or "",
+            intro=data.get("intro"),
+            signoff=data.get("signoff"),
+            product_ids=data.get("product_ids") or [],
         ))
     elif item.kind == "time_entry":
         db.add(TimeEntry(

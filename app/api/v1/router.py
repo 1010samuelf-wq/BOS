@@ -20,6 +20,7 @@ from app.api.v1 import (
     sync,
     tasks,
     time,
+    email_templates,
     trash,
     ws,
 )
@@ -43,6 +44,7 @@ api_router.include_router(feedback.router)
 api_router.include_router(assistant.router)
 api_router.include_router(customers.router)
 api_router.include_router(sync.router)
+api_router.include_router(email_templates.router)
 api_router.include_router(trash.router)
 api_router.include_router(inquiries.public_router)
 api_router.include_router(inquiries.router)
