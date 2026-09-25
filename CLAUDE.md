@@ -191,6 +191,15 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   milliseconds and then snaps into place, which reads as a rendering bug. GFM
   needs the delimiter row to have the same cell count as the header, so
   `|---|` under a three-column header is not yet a table.
+- **`["products"]` is three different lists now.** The Settings catalog and the
+  email picker ask for `active=true`; the Deleted page's "Retired products"
+  section asks for `active=false`. They key on `["products", true|false]` —
+  sharing one key would have each screen serving the other's filtered list.
+  `invalidateQueries({ queryKey: ["products"] })` still refreshes all of them,
+  because TanStack matches keys by prefix. The two lists must partition the
+  catalog (`tests/test_retired_products.py` pins this): a leak either way means
+  a retired product shows in both places or, worse, neither — and then there is
+  no way back to selling it short of a hand-written API call.
 - **The web has tests now — use them.** `cd web && npm test` (Vitest, jsdom).
   They exist because every bug that reached the shop in September was
   frontend and the 364 backend tests could not see any of them. Logic worth

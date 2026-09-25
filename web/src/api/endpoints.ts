@@ -134,7 +134,14 @@ export const updateExpense = (id: number, body: { description?: string; amount?:
   api<unknown>(`/expenses/${id}`, { method: "PUT", body });
 
 // ---- catalog (Admin) ----
-export const listProducts = () => api<Product[]>("/products");
+/** The catalog, optionally narrowed to what the shop is currently selling.
+ *
+ * `active: true` is the working catalog; `active: false` is the retired ones,
+ * which live on the Deleted page. Callers pass the filter explicitly and key
+ * their query on it — sharing one `["products"]` key across two filters would
+ * have each screen serving the other's list. */
+export const listProducts = (active?: boolean) =>
+  api<Product[]>("/products", { query: { active } });
 // Active products in one category — backs the order screen's category buttons.
 export const listProductsByCategory = (category: string) =>
   api<Product[]>("/products", { query: { category, active: true } });

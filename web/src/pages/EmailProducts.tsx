@@ -39,7 +39,12 @@ export default function EmailProducts() {
   const [templateName, setTemplateName] = useState("");
   const [loadedTemplate, setLoadedTemplate] = useState<number | null>(null);
 
-  const products = useQuery({ queryKey: ["products"], queryFn: api.listProducts });
+  // Retired products aren't offered: there's no point emailing a customer a
+  // photo and price for something the shop has stopped selling.
+  const products = useQuery({
+    queryKey: ["products", true],
+    queryFn: () => api.listProducts(true),
+  });
   const categories = useQuery({ queryKey: ["product-categories"], queryFn: api.listCategories });
   const profile = useQuery({ queryKey: ["business"], queryFn: api.getBusinessProfile });
   const templates = useQuery({ queryKey: ["email-templates"], queryFn: api.listEmailTemplates });

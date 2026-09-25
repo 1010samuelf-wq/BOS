@@ -5,13 +5,19 @@
 // others are kept for the record but have to be re-entered, because putting
 // them back automatically would mean replaying stock or payment state and
 // getting it half right.
+//
+// Retired products sit here too, in their own section. Turning a product off is
+// not a delete — the row stays, and order history keeps pointing at it — but it
+// is the same intent ("we don't sell this any more") and the same question
+// later ("where did it go?"). Keeping it in the Settings catalog meant a list
+// that grew forever and mixed what's on offer with what isn't.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { ApiRequestError } from "../api/client";
-import { listTrash, restoreTrashItem } from "../api/endpoints";
-import type { TrashItem } from "../api/types";
+import { listProducts, listTrash, restoreTrashItem, updateProduct } from "../api/endpoints";
+import type { Product, TrashItem } from "../api/types";
 import { ErrorMsg, LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 import { formatDateTime } from "../order/dates";
 
@@ -66,7 +72,8 @@ export default function Trash() {
       </PageHead>
 
       <p className="muted" style={{ marginTop: -4 }}>
-        Everything deleted anywhere in the app lands here. Nothing is thrown away.
+        Everything deleted anywhere in the app lands here, along with products
+        that have been turned off. Nothing is thrown away.
       </p>
 
       {error && <ErrorMsg>{error}</ErrorMsg>}
@@ -124,6 +131,78 @@ export default function Trash() {
           ))}
         </div>
       )}
+
+      <RetiredProducts onError={setError} />
+    </div>
+  );
+}
+
+
+/** Products that were turned off in Settings.
+ *
+ * Separate from the trash list because they are not trash rows: the product
+ * still exists, so putting one back is a flag flip rather than a restore, and
+ * it always works.
+ */
+function RetiredProducts({ onError }: { onError: (message: string | null) => void }) {
+  const client = useQueryClient();
+
+  const q = useQuery({
+    queryKey: ["products", false],
+    queryFn: () => listProducts(false),
+  });
+
+  const putBack = useMutation({
+    mutationFn: (p: Product) => updateProduct(p.id, { active: true }),
+    onSuccess: () => {
+      onError(null);
+      // It reappears in the Settings catalog, search and the tap grid.
+      client.invalidateQueries();
+    },
+    onError: (e: unknown) =>
+      onError(e instanceof ApiRequestError ? e.message : "That couldn't be put back."),
+  });
+
+  // A failure has to be visible: an empty section and a broken one look
+  // identical otherwise, and someone hunting for a product they turned off
+  // would conclude it was gone for good.
+  if (isStalled(q)) {
+    return (
+      <div className="card">
+        <LoadFailed what="the retired products" onRetry={() => void q.refetch()} />
+      </div>
+    );
+  }
+  // Nothing retired is the normal state — don't take up the screen saying so.
+  if (q.isLoading || (q.data ?? []).length === 0) return null;
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Retired products</h2>
+      <p className="muted" style={{ fontSize: 12, marginTop: -4 }}>
+        Turned off in Settings, so they're out of search, the tap grid and new
+        orders. Past orders still show them. Put one back and it returns to the
+        catalog.
+      </p>
+      {(q.data ?? []).map((p) => (
+        <div key={p.id} className="trash-row">
+          <span style={{ fontSize: 20 }}>🥐</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="trash-label">{p.name}</div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Product · ${p.price}
+              {p.category ? ` · ${p.category}` : ""}
+            </div>
+          </div>
+          <button
+            className="btn primary sm"
+            disabled={putBack.isPending}
+            onClick={() => putBack.mutate(p)}
+          >
+            Put back
+          </button>
+        </div>
+      ))}
     </div>
   );
 }

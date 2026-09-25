@@ -322,7 +322,12 @@ function PhotoManager({
 function Products() {
   const client = useQueryClient();
   const { error, onErr } = useErr();
-  const products = useQuery({ queryKey: ["products"], queryFn: api.listProducts });
+  // Only what's being sold. Turning a product off moves it to the Deleted
+  // page, so this list stays the things actually on offer.
+  const products = useQuery({
+    queryKey: ["products", true],
+    queryFn: () => api.listProducts(true),
+  });
   // Saving a product may have introduced a category, so refresh that list too.
   const invalidate = () => {
     client.invalidateQueries({ queryKey: ["products"] });
@@ -386,6 +391,10 @@ function Products() {
       </div>
       <div className="card">
         <h2>Catalog</h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: -4, marginBottom: 10 }}>
+          What the shop sells. Turn one off and it moves to the Deleted page — it
+          stays there, out of search and new orders, until you put it back.
+        </p>
         {products.isLoading ? <Loading /> : products.isError ? <p className="error">Admin access required.</p> : (
           <table>
             <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th className="num">Price</th><th>Website</th><th>Actions</th></tr></thead>
@@ -494,7 +503,10 @@ function Ingredients() {
 function Recipes() {
   const client = useQueryClient();
   const { error, onErr } = useErr();
-  const products = useQuery({ queryKey: ["products"], queryFn: api.listProducts });
+  const products = useQuery({
+    queryKey: ["products", true],
+    queryFn: () => api.listProducts(true),
+  });
   const ingredients = useQuery({ queryKey: ["ingredients"], queryFn: () => api.listIngredients() });
   const [productId, setProductId] = useState<number | "">("");
   const [items, setItems] = useState<{ ingredient_id: number; quantity: string }[]>([]);
