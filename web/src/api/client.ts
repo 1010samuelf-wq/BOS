@@ -23,6 +23,12 @@ export function setAuthToken(token: string | null) {
 // of leaving the app stuck showing a stale error. AuthProvider registers the
 // actual logout() here (this module has no React/router access of its own).
 let onUnauthorized: (() => void) | null = null;
+/** The bearer header, for the handful of callers that build their own fetch
+ *  (streaming, uploads) instead of going through `api()`. */
+export function authHeader(): Record<string, string> {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
 export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }

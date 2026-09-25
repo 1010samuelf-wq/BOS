@@ -22,6 +22,9 @@ import {
   assistantStatus,
   deleteAssistantConversation,
 } from "../api/endpoints";
+import { ApiRequestError } from "../api/client";
+import { stablePrefix } from "../assistant/partial";
+import { streamChat } from "../assistant/stream";
 import type { AssistantProposal, ChatTurn } from "../api/types";
 import { formatDateTime } from "../order/dates";
 
@@ -77,6 +80,10 @@ export default function AssistantPanel() {
   // the whole panel freezing on "Doing it…".
   const [runningIdx, setRunningIdx] = useState<number | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
+  // The answer as it arrives, and what the assistant is doing while it isn't
+  // writing yet. Both are cleared the moment the turn lands in `lines`.
+  const [streamed, setStreamed] = useState("");
+  const [working, setWorking] = useState("");
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -91,12 +98,38 @@ export default function AssistantPanel() {
   });
 
   const ask = useMutation({
-    mutationFn: (text: string) => assistantChat(text, conversationId),
+    mutationFn: async (text: string) => {
+      setStreamed("");
+      setWorking("");
+      try {
+        return await streamChat(text, conversationId, (event) => {
+          if (event.type === "status") setWorking(event.text);
+          else setStreamed((cur) => cur + event.text);
+        });
+      } catch (err) {
+        // Only a connection-level failure is retried the old way: `stream_failed`
+        // means the request never reached the turn (a proxy in front that won't
+        // pass an event stream, say), so nothing has been recorded and asking
+        // again is free. A turn that broke *mid*-answer is not retried — the
+        // question is already stored, and a second run would double it.
+        if (err instanceof ApiRequestError && err.code === "stream_failed") {
+          setWorking("");
+          return await assistantChat(text, conversationId);
+        }
+        throw err;
+      }
+    },
     onSuccess: (out) => {
       setConversationId(out.conversation_id);
       if (out.reply) setLines((cur) => [...cur, { role: "assistant", text: out.reply }]);
       setProposals(out.proposals);
+      setStreamed("");
+      setWorking("");
       queryClient.invalidateQueries({ queryKey: ["assistant", "conversations"] });
+    },
+    onError: () => {
+      setStreamed("");
+      setWorking("");
     },
   });
 
@@ -166,7 +199,7 @@ export default function AssistantPanel() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [lines, proposals, ask.isPending]);
+  }, [lines, proposals, streamed, working, ask.isPending]);
 
   function newChat() {
     setConversationId(null);
@@ -257,7 +290,20 @@ export default function AssistantPanel() {
               </div>
             ))}
 
-            {ask.isPending && <div className="assistant-msg assistant muted">Thinking…</div>}
+            {ask.isPending && (
+              // Whichever of the three the turn is up to: looking something up,
+              // writing, or neither yet.
+              <div className="assistant-msg assistant">
+                {streamed ? (
+                  <>
+                    <Markdown text={stablePrefix(streamed)} />
+                    <span className="assistant-caret" aria-hidden="true" />
+                  </>
+                ) : (
+                  <span className="muted">{working || "Thinking…"}</span>
+                )}
+              </div>
+            )}
 
             {ask.isError && (
               <div className="assistant-msg assistant tone-low">

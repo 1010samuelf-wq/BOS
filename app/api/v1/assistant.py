@@ -9,11 +9,16 @@ only endpoint that writes, and it re-checks permissions against the caller.
 Conversations are private to the employee who had them.
 """
 
+import json
+import logging
+
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.auth import current_user
-from app.database import get_db
+from app.core.errors import APIError
+from app.database import SessionLocal, get_db
 from app.models import User
 from app.schemas.assistant import (
     ActIn,
@@ -25,6 +30,8 @@ from app.schemas.assistant import (
     ConversationSummary,
 )
 from app.services import assistant as assistant_service
+
+logger = logging.getLogger("bos.assistant")
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
@@ -43,6 +50,59 @@ def chat(
 ):
     out = assistant_service.chat(db, user, payload.message, payload.conversation_id)
     return ChatOut(**out)
+
+
+@router.post("/chat/stream")
+def chat_stream(
+    payload: ChatIn,
+    user: User = Depends(current_user),
+):
+    """The same turn as `/chat`, streamed.
+
+    Server-sent events, one JSON object per `data:` line, of three kinds:
+    `status` while a lookup runs, `delta` for each piece of the answer, and one
+    final `done` carrying exactly what `/chat` would have returned — including
+    the proposals, which can only be known once the turn is over.
+
+    `/chat` stays for clients that can't stream, and both go through the same
+    generator, so a fallback can't answer differently from the stream.
+
+    Note there's no `Depends(get_db)`: the body below runs *after* this function
+    returns, by which point a dependency-managed session has been handed back.
+    The session is opened and closed inside the generator instead.
+    """
+
+    def events():
+        db = SessionLocal()
+        try:
+            for event in assistant_service.chat_events(
+                db, user, payload.message, payload.conversation_id, stream=True
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+        except APIError as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': exc.message})}\n\n"
+        except Exception:
+            # The status line is long gone by now — 200 went out with the first
+            # byte — so the only way to tell the person is in the stream itself.
+            logger.exception("assistant stream failed")
+            yield (
+                "data: "
+                + json.dumps(
+                    {"type": "error", "message": "The assistant stopped unexpectedly."}
+                )
+                + "\n\n"
+            )
+        finally:
+            db.close()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # stop any proxy holding the chunks back
+        },
+    )
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])

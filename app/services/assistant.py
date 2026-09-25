@@ -746,15 +746,70 @@ def _upstream_error(exc: Exception) -> APIError:
     return APIError(502, "assistant_unavailable", "The assistant could not answer that.")
 
 
-def chat(
+# What a lookup is called when staff see it go past. Deliberately plain: the
+# point is reassurance that something is happening, not a tool name.
+_LOOKUP_WORDS = {
+    "list_orders": "orders", "get_order": "that order",
+    "sales_report": "the sales figures", "production_report": "the bake list",
+    "deliveries": "deliveries", "list_tasks": "tasks",
+    "staff_hours": "hours", "list_employees": "the staff list",
+    "find_products": "the catalogue", "list_expenses": "expenses",
+    "find_customers": "customers", "customer_orders": "their order history",
+    "list_companies": "the books", "company_ledger": "that ledger",
+}
+
+
+def _looking_up(calls) -> str:
+    names = [c.name for c in calls]
+    words = [_LOOKUP_WORDS.get(x) for x in names]
+    known = [w for w in words if w]
+    if not known:
+        return "Looking that up…"
+    if len(known) == 1:
+        return f"Checking {known[0]}…"
+    return f"Checking {', '.join(known[:-1])} and {known[-1]}…"
+
+
+def _run_model(client, *, stream: bool, **kwargs):
+    """One model call, yielding text as it arrives when streaming.
+
+    A generator so the caller can `yield from` it: the deltas flow straight out
+    to the browser, and the finished message comes back as the return value, so
+    the tool loop below is identical either way.
+
+    Not streaming is the default because the tests drive a scripted fake that
+    implements `create`, and because `execute()` and anything else calling
+    `chat()` wants the whole answer anyway.
+    """
+    if not stream:
+        return client.beta.messages.create(**kwargs)
+    with client.beta.messages.stream(**kwargs) as streamed:
+        for piece in streamed.text_stream:
+            if piece:
+                yield {"type": "delta", "text": piece}
+        return streamed.get_final_message()
+
+
+def chat_events(
     db: Session,
     user: User,
     message: str,
     conversation_id: int | None = None,
     *,
     client=None,
-) -> dict:
-    """Run one turn against a stored conversation.
+    stream: bool = False,
+):
+    """One turn, as a stream of events.
+
+    Yields `{"type": "status"}` while a lookup runs, `{"type": "delta"}` for
+    text as the model produces it, and exactly one `{"type": "done"}` carrying
+    the same payload `chat()` returns.
+
+    The status events matter as much as the deltas: most of the 8-10 seconds is
+    the model thinking and tools running, not text arriving, so a silent spinner
+    told staff nothing about whether anything was happening.
+
+    Run one turn against a stored conversation.
 
     History is read from the database, not from the request, so the browser
     cannot rewrite what was said earlier. Tool calls are re-run from scratch
@@ -814,6 +869,7 @@ def chat(
             convo.updated_at = utcnow()
             db.commit()
         return {
+            "type": "done",
             "conversation_id": convo.id,
             "title": convo.title,
             "reply": reply,
@@ -822,7 +878,9 @@ def chat(
 
     for _ in range(MAX_STEPS):
         try:
-            response = client.beta.messages.create(
+            response = yield from _run_model(
+                client,
+                stream=stream,
                 model=settings.assistant_model,
                 max_tokens=settings.assistant_max_tokens,
                 system=_system_blocks(user),
@@ -840,14 +898,16 @@ def chat(
         # Always check the stop reason before reading content: on a refusal the
         # content list is empty or partial.
         if response.stop_reason == "refusal":
-            return _finish(
+            yield _finish(
                 "I can't help with that one. Try rephrasing, or ask someone to "
                 "look it up directly.",
                 None,
             )
+            return
 
         if response.stop_reason != "tool_use":
-            return _finish(_text_of(response) or "(no answer)", None)
+            yield _finish(_text_of(response) or "(no answer)", None)
+            return
 
         calls = [b for b in response.content if b.type == "tool_use"]
 
@@ -864,9 +924,11 @@ def chat(
                     "args": args,
                     "summary": describe(db, call.name, args),
                 })
-            return _finish(_text_of(response), proposals)
+            yield _finish(_text_of(response), proposals)
+            return
 
         # Otherwise run the reads and hand the results back.
+        yield {"type": "status", "text": _looking_up(calls)}
         messages.append({"role": "assistant", "content": response.content})
         results = []
         for call in calls:
@@ -896,4 +958,27 @@ def chat(
             })
         messages.append({"role": "user", "content": results})
 
-    return _finish("I couldn't work that out — try asking it a different way.", None)
+    yield _finish("I couldn't work that out — try asking it a different way.", None)
+
+
+def chat(
+    db: Session,
+    user: User,
+    message: str,
+    conversation_id: int | None = None,
+    *,
+    client=None,
+) -> dict:
+    """One turn, all at once.
+
+    Drains `chat_events` and hands back the final payload, so the streaming and
+    non-streaming paths can never drift: there is one implementation and this
+    throws away the progress events.
+    """
+    done: dict | None = None
+    for event in chat_events(db, user, message, conversation_id, client=client, stream=False):
+        if event.get("type") == "done":
+            done = event
+    if done is None:  # pragma: no cover - the generator always finishes with one
+        raise APIError(502, "assistant_failed", "The assistant did not answer.")
+    return {k: v for k, v in done.items() if k != "type"}

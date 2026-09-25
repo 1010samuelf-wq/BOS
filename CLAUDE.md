@@ -171,6 +171,26 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   refetch. There is no "changes since" endpoint. `publish` no-ops until the app
   lifespan sets the loop, so it's inert in HTTP unit tests — WS tests need
   `with TestClient(app) as c:`.
+- **A streamed response outlives its request, so it can't use `Depends(get_db)`.**
+  `POST /assistant/chat/stream` opens its own `SessionLocal()` inside the
+  generator and closes it in a `finally`. A dependency-managed session is handed
+  back when the endpoint function returns, which for a `StreamingResponse` is
+  *before* the first byte is produced. The same shape applies to the error path:
+  the 200 has already gone out, so a failure mid-stream can only reach the
+  person as an `{"type": "error"}` event — raising gives them a dead spinner.
+- **The assistant has one turn implementation, not two.**
+  `assistant.chat_events()` is the generator; `chat()` drains it and throws the
+  progress events away. Don't add logic to one path only — a fallback that
+  answers differently from the stream is the worst version of this. The browser
+  falls back to `/chat` on `stream_failed` *only*, because that code is raised
+  before the turn runs; retrying after a mid-answer failure would record the
+  person's question twice.
+- **Half-arrived markdown is not markdown.** `web/src/assistant/partial.ts`
+  holds back a trailing table whose delimiter row hasn't landed and an unclosed
+  `**`. Without it a streamed table shows raw `|` pipes for a few hundred
+  milliseconds and then snaps into place, which reads as a rendering bug. GFM
+  needs the delimiter row to have the same cell count as the header, so
+  `|---|` under a three-column header is not yet a table.
 - **The web has tests now — use them.** `cd web && npm test` (Vitest, jsdom).
   They exist because every bug that reached the shop in September was
   frontend and the 364 backend tests could not see any of them. Logic worth

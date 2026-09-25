@@ -54,6 +54,39 @@ class FakeModel:
     def tool_names(self):
         return {t["name"] for t in self.calls[0]["tools"]}
 
+    def stream(self, **kwargs):
+        """The streaming shape of the same scripted response.
+
+        Chops the reply into small pieces so a test can tell "the whole answer
+        arrived in one delta" apart from "it actually streamed".
+        """
+        self.calls.append(kwargs)
+        response = self._responses.pop(0)
+        return _FakeStream(response)
+
+
+class _FakeStream:
+    def __init__(self, response):
+        self._response = response
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    @property
+    def text_stream(self):
+        for block in self._response.content:
+            if getattr(block, "type", None) != "text":
+                continue
+            words = block.text.split(" ")
+            for i, word in enumerate(words):
+                yield word if i == len(words) - 1 else word + " "
+
+    def get_final_message(self):
+        return self._response
+
 
 @pytest.fixture
 def fake_model(monkeypatch):
