@@ -13,7 +13,6 @@ import Reports from "./pages/Reports";
 import Production from "./pages/Production";
 import Deliveries from "./pages/Deliveries";
 import Inquiries from "./pages/Inquiries";
-import EmployeesHours from "./pages/EmployeesHours";
 import Time from "./pages/Time";
 import Tasks from "./pages/Tasks";
 import Notifications from "./pages/Notifications";
@@ -41,7 +40,9 @@ const NAV = [
   { to: "/production", label: "Production", icon: "🥐", section: "production" },
   { to: "/deliveries", label: "Deliveries", icon: "🚚", section: "deliveries" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
-  { to: "/employees", label: "Employees & hours", icon: "👥", section: "employees" },
+  // Employees & hours is a tab under Admin / Settings, not a nav item: it's
+  // admin work rather than a daily screen, and the shop asked for it there.
+  // "My time" stays — that's every employee's own clock, not staff management.
   { to: "/time", label: "My time", icon: "⏱", section: "time" },
   { to: "/tasks", label: "Tasks", icon: "✅", section: "tasks" },
   { to: "/notifications", label: "Notifications", icon: "🔔", section: "notifications" },
@@ -195,7 +196,16 @@ export default function App() {
         <Route path="/inquiries" element={<RequireSection section="orders"><Inquiries /></RequireSection>} />
         <Route path="/deliveries" element={<RequireSection section="deliveries"><Deliveries /></RequireSection>} />
         <Route path="/reports" element={<RequireSection section="reports"><Reports /></RequireSection>} />
-        <Route path="/employees" element={<RequireSection section="employees"><EmployeesHours /></RequireSection>} />
+        {/* Moved under Settings. Kept so old links and bookmarks still land
+            in the right place rather than on a blank route. */}
+        <Route
+          path="/employees"
+          element={
+            <RequireSection section="employees">
+              <Navigate to="/settings?tab=employees" replace />
+            </RequireSection>
+          }
+        />
         <Route path="/time" element={<RequireSection section="time"><Time /></RequireSection>} />
         <Route path="/tasks" element={<RequireSection section="tasks"><Tasks /></RequireSection>} />
         <Route path="/notifications" element={<RequireSection section="notifications"><Notifications /></RequireSection>} />

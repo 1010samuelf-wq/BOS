@@ -4,13 +4,15 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { Ingredient, Product } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 import { LoadFailed, Loading, PageHead, Switch, Tabs, isStalled } from "../components/ui";
-
-type Section = "products" | "ingredients" | "recipes" | "business" | "tablet";
+import { resolveTab, visibleTabs } from "../settings/tabs";
+import EmployeesHours from "./EmployeesHours";
 
 // Sentinel option value; no real category can collide with it because the
 // backend strips and rejects blank names, and this isn't a plausible one.
@@ -78,30 +80,37 @@ function CategorySelect({
 }
 
 export default function Settings() {
-  const [section, setSection] = useState<Section>("products");
+  const { user } = useAuth();
+  // `employees` is admin-only and can't be granted, so in practice this is
+  // "is an admin" — but read the section rather than the role, so the tab
+  // follows the permission model if that ever changes.
+  const canManageStaff = user?.sections.includes("employees") ?? false;
+
+  // The tab lives in the URL so /settings?tab=employees can be linked to and
+  // survives a reload. The old /employees route redirects here.
+  const [params, setParams] = useSearchParams();
+  const section = resolveTab(params.get("tab"), canManageStaff);
+  const setSection = (next: typeof section) => setParams({ tab: next }, { replace: true });
+
   return (
     <div className="page">
       <PageHead title="Admin / Settings">
         <Tabs
           value={section}
           onChange={setSection}
-          options={[
-            { key: "products", label: "Products" },
-            { key: "ingredients", label: "Ingredients" },
-            { key: "recipes", label: "Recipes" },
-            { key: "business", label: "Business" },
-            { key: "tablet", label: "Tablet app" },
-          ]}
+          options={visibleTabs(canManageStaff)}
         />
       </PageHead>
       {section === "products" && <Products />}
       {section === "ingredients" && <Ingredients />}
       {section === "recipes" && <Recipes />}
+      {section === "employees" && <EmployeesHours embedded />}
       {section === "business" && <Business />}
       {section === "tablet" && <TabletApp />}
     </div>
   );
 }
+
 
 function useErr() {
   const [error, setError] = useState<string | null>(null);

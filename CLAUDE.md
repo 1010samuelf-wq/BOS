@@ -200,6 +200,14 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   catalog (`tests/test_retired_products.py` pins this): a leak either way means
   a retired product shows in both places or, worse, neither — and then there is
   no way back to selling it short of a hand-written API call.
+- **Settings tabs come from the URL (`/settings?tab=…`).**
+  `web/src/settings/tabs.ts` resolves it; an unknown tab falls back to Products
+  rather than rendering nothing. Employees & hours is a tab there, not a nav
+  item, and `/employees` redirects to it. The staff tab is gated on the
+  `employees` section — admin-only and not grantable, so in practice admins
+  only, but read the section rather than the role. Moving it was safe precisely
+  because `employees` implies admin implies `settings`; check that relation
+  before moving anything else under Settings, or you lock someone out.
 - **The web has tests now — use them.** `cd web && npm test` (Vitest, jsdom).
   They exist because every bug that reached the shop in September was
   frontend and the 364 backend tests could not see any of them. Logic worth

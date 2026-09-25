@@ -90,7 +90,14 @@ function RateEditor({ emp, onSave, saving }: { emp: Employee; onSave: (v: string
   );
 }
 
-export default function EmployeesHours() {
+/** Employees, their permissions, and the week's hours.
+ *
+ * Lives as a tab under Admin / Settings, which is where the shop went looking
+ * for it — it's admin work, not a daily screen. `embedded` drops the page
+ * shell so Settings can supply its own heading; the standalone route is kept
+ * for old links and redirects there.
+ */
+export default function EmployeesHours({ embedded = false }: { embedded?: boolean }) {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
@@ -140,9 +147,8 @@ export default function EmployeesHours() {
     onError: onErr,
   });
 
-  return (
-    <div className="page">
-      <PageHead title="Employees & hours" />
+  const body = (
+    <>
       {error && <p className="error">{error}</p>}
 
       {issued && (
@@ -257,6 +263,14 @@ export default function EmployeesHours() {
           </div>
         </>
       )}
+    </>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="page">
+      <PageHead title="Employees & hours" />
+      {body}
     </div>
   );
 }
