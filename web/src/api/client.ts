@@ -1,9 +1,12 @@
 // fetch wrapper: base URL from Vite env, bearer token injection, and the
 // backend's uniform { error: { code, message } } surfaced as ApiRequestError.
 
-// Empty in production: the dashboard's own nginx proxies /api to the backend, so
-// the whole app is one origin (locked-down devices only need the dashboard domain
-// allowlisted). Falls back to the local dev backend when unset.
+// Both production builds (the deploy workflow and the documented local command)
+// bake in the backend's own origin, so the browser talks to it directly — the
+// dashboard's nginx serves static files only and never proxies /api. Worth
+// knowing when a response misbehaves: the only proxy in the path is Fly's, and
+// nothing between here and the API buffers an event stream. Falls back to the
+// local dev backend when unset.
 export const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const V1 = `${API_URL}/api/v1`;
 
