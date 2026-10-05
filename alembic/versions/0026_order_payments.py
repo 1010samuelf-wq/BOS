@@ -24,6 +24,7 @@ Create Date: 2026-09-25
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy import inspect
+from sqlalchemy.dialects import postgresql
 
 revision = "0026_order_payments"
 down_revision = "0025_email_templates"
@@ -33,6 +34,23 @@ depends_on = None
 
 def _has_table(bind, table: str) -> bool:
     return table in inspect(bind).get_table_names()
+
+
+def _method_type(bind):
+    """The existing payment_method enum, reused rather than recreated.
+
+    `sa.Enum(..., create_type=False)` does **not** work: that keyword belongs to
+    `postgresql.ENUM`, and `sa.Enum` quietly ignores it and emits CREATE TYPE
+    anyway — which fails with DuplicateObject because 0001 already made the type.
+    This cost one aborted deploy (caught by the release command, so nothing was
+    applied). On SQLite `sa.Enum` is just a VARCHAR + CHECK, with no type to
+    clash over.
+    """
+    if bind.dialect.name == "postgresql":
+        return postgresql.ENUM(
+            "cash", "card", "etransfer", name="payment_method", create_type=False
+        )
+    return sa.Enum("cash", "card", "etransfer", name="payment_method")
 
 
 def upgrade() -> None:
@@ -46,17 +64,8 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("order_id", sa.Integer(), nullable=False, index=True),
         sa.Column("amount", sa.Numeric(10, 2), nullable=False),
-        # Reuses the existing payment_method enum. create_type=False matters on
-        # Postgres: the type is already there and CREATE TYPE would fail.
-        sa.Column(
-            "method",
-            sa.Enum(
-                "cash", "card", "etransfer",
-                name="payment_method",
-                create_type=False,
-            ),
-            nullable=True,
-        ),
+        # Reuses the existing payment_method enum — see _method_type().
+        sa.Column("method", _method_type(bind), nullable=True),
         sa.Column("received_on", sa.Date(), nullable=False, index=True),
         sa.Column("note", sa.String(200), nullable=True),
         sa.Column("taken_by", sa.Integer(), nullable=True),
