@@ -13,7 +13,9 @@ import type { Inquiry, PaymentMethod } from "../api/types";
 import { PageHead, SwitchChoice } from "../components/ui";
 import { useOrderFormView } from "../order/useFormView";
 import { OrderHeaderFields, OrderItemsEditor } from "../order/OrderFormFields";
+import { withCents } from "../order/money";
 import {
+  balanceAfterDeposit,
   buildPayload,
   draftTotal,
   emptyDraft,
@@ -53,6 +55,9 @@ export default function NewOrder() {
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
+  // What's left to collect once the deposit is in — shown next to the field so
+  // the split is visible before the order is submitted.
+  const depositLeft = balanceAfterDeposit(draft);
   const [, setView] = useOrderFormView();
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -149,6 +154,25 @@ export default function NewOrder() {
                   {m.label}
                 </button>
               ))}
+              {/* A deposit taken at the counter: "$100 now, $300 on
+                  collection". It's income today, so it counts today — the
+                  balance counts when it's collected. */}
+              <span className="muted" style={{ fontSize: 13, marginLeft: 8 }}>Deposit</span>
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="none"
+                value={draft.deposit}
+                onChange={(e) => set({ deposit: e.target.value })}
+                onBlur={() => set({ deposit: withCents(draft.deposit) })}
+                style={{ maxWidth: 90, textAlign: "right" }}
+                title="Money taken now; the rest stays owing"
+              />
+              {depositLeft && (
+                <span className="muted" style={{ fontSize: 13 }}>
+                  ${depositLeft} on collection
+                </span>
+              )}
             </div>
           )}
           <div style={{ marginLeft: "auto", textAlign: "right" }}>

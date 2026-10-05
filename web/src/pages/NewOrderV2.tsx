@@ -29,6 +29,7 @@ import { OrderItemsEditor } from "../order/OrderFormFields";
 import { withCents } from "../order/money";
 import {
   buildPayload,
+  balanceAfterDeposit,
   draftTotal,
   emptyDraft,
   validateDraft,
@@ -84,6 +85,7 @@ export default function NewOrderV2() {
   const location = useLocation();
   const fromInquiry = (location.state as { fromInquiry?: Inquiry } | null)?.fromInquiry ?? null;
   const [draft, setDraft] = useState<Draft>(() => (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
+  const depositLeft = balanceAfterDeposit(draft);
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
@@ -251,10 +253,31 @@ export default function NewOrderV2() {
               </div>
             </Field>
           )}
+
+          {draft.paymentTiming === "later" && (
+            <Field label="Deposit now (optional)">
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="none"
+                value={draft.deposit}
+                onChange={(e) => set({ deposit: e.target.value })}
+                onBlur={() => set({ deposit: withCents(draft.deposit) })}
+                style={{ textAlign: "right" }}
+              />
+            </Field>
+          )}
         </div>
 
         {draft.paymentTiming === "later" && (
-          <p className="ov2-unpaid">This order will be saved as <strong>unpaid</strong>.</p>
+          depositLeft ? (
+            // Say the split back, in the shop's own words.
+            <p className="ov2-unpaid">
+              <strong>${draft.deposit}</strong> taken now · <strong>${depositLeft}</strong> on collection.
+            </p>
+          ) : (
+            <p className="ov2-unpaid">This order will be saved as <strong>unpaid</strong>.</p>
+          )
         )}
       </Section>
 

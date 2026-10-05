@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -71,6 +71,13 @@ class OrderCreate(BaseModel):
     # the counter.
     expected_payment_method: PaymentMethod | None = None
 
+    # Money taken at the counter when the order is written up, when it isn't
+    # the whole total: "$100 now, $300 on collection". A fixed amount, not a
+    # percentage — that is how the shop quotes it. Capped at the total by the
+    # service rather than rejected, so a deposit that happens to equal the
+    # total is simply full payment.
+    deposit: Decimal | None = Field(default=None, ge=0, decimal_places=2)
+
     items: list[OrderItemIn] = Field(min_length=1)
     notes: list[OrderNoteIn] = Field(default_factory=list)
 
@@ -82,6 +89,11 @@ class OrderCreate(BaseModel):
             raise ValueError("payment_method is required when paying now")
         if self.payment_timing == PaymentTiming.later and self.payment_method is not None:
             raise ValueError("payment_method must be omitted for pay-later orders")
+        if self.deposit is not None and self.payment_timing == PaymentTiming.now:
+            # Paying now already means the whole total; a deposit as well is a
+            # contradiction, and guessing which the person meant is worse than
+            # asking.
+            raise ValueError("deposit is for pay-later orders — paying now settles the whole total")
         return self
 
 
@@ -151,6 +163,29 @@ class OrderNoteOut(BaseModel):
     created_at: datetime
 
 
+class OrderPaymentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    amount: Decimal
+    method: PaymentMethod | None
+    received_on: date
+    note: str | None
+    taken_by: int | None
+    created_at: datetime
+
+
+class PaymentIn(BaseModel):
+    """Record money taken against an order."""
+
+    amount: Decimal = Field(gt=0, decimal_places=2)
+    method: PaymentMethod | None = None
+    # Defaults to today in the service. Settable because money isn't always
+    # entered the day it arrived, and this date is what the reports use.
+    received_on: date | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -182,5 +217,11 @@ class OrderOut(BaseModel):
     total: Decimal
     locked_by: int | None
     locked_at: datetime | None
+    # Derived from the payments, not stored, so they can't drift from the
+    # money. `paid_status` stays two-state: an order with a deposit is still
+    # "unpaid" until the balance reaches zero.
+    amount_paid: Decimal
+    balance_due: Decimal
     items: list[OrderItemOut]
     notes: list[OrderNoteOut]
+    payments: list[OrderPaymentOut]

@@ -132,6 +132,58 @@ class Order(Base, TimestampMixin):
     notes: Mapped[list[OrderNote]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
     )
+    payments: Mapped[list[OrderPayment]] = relationship(
+        back_populates="order",
+        cascade="all, delete-orphan",
+        order_by="OrderPayment.received_on, OrderPayment.id",
+    )
+
+    @property
+    def amount_paid(self) -> Decimal:
+        """What has actually been collected so far."""
+        return sum((p.amount for p in self.payments), Decimal("0.00"))
+
+    @property
+    def balance_due(self) -> Decimal:
+        """What is still owed. Never negative — an overpayment is not a debt."""
+        return max(self.total - self.amount_paid, Decimal("0.00"))
+
+
+class OrderPayment(Base):
+    """One payment against an order. A deposit now, the rest on collection.
+
+    Each payment carries **its own date**, because that is the date the money
+    arrived and reports are cash-basis: $100 taken today and $300 on collection
+    are income on two different days, and booking both against the order date
+    would put next week's money in this week's figures.
+
+    `paid_status` on the order stays a two-state flag (unpaid until the balance
+    reaches zero) rather than growing a "partial" value — the tablet prints that
+    field verbatim and treats anything that isn't "unpaid" as settled, so a new
+    value would make a part-paid order look fully paid on a device that cannot
+    be updated right now.
+    """
+
+    __tablename__ = "order_payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id"), nullable=False, index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    method: Mapped[PaymentMethod | None] = mapped_column(
+        SAEnum(PaymentMethod, name="payment_method")
+    )
+    # The business day the money arrived — a plain date, like Expense.spent_on,
+    # because that is how it is reported and reconciled.
+    received_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    note: Mapped[str | None] = mapped_column(String(200))
+    taken_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+    order: Mapped[Order] = relationship(back_populates="payments")
 
 
 class OrderItem(Base):

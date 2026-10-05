@@ -23,6 +23,7 @@ from app.models import (
     Order,
     OrderItem,
     OrderNote,
+    OrderPayment,
     OrderStatus,
     PaidStatus,
     PaymentMethod,
@@ -31,7 +32,7 @@ from app.models import (
     StockAdjustment,
     User,
 )
-from app.models.base import utcnow
+from app.models.base import utc_today, utcnow
 from app.schemas.order import OrderCreate, OrderUpdate
 from app.services import stock as stock_service
 
@@ -192,6 +193,10 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
         fulfillment_status=FulfillmentStatus.pending,
         total=subtotal + delivery,
         items=items,
+        # Paying in full now is just a payment, recorded like any other so it
+        # lands in the reports on the day it was taken. A deposit is the same
+        # thing for part of the total.
+        payments=_initial_payments(payload, subtotal + delivery, pays_now, now, user),
         notes=[
             OrderNote(text=n.text, type=n.type, created_at=now)
             for n in payload.notes
@@ -199,6 +204,11 @@ def create_order(db: Session, payload: OrderCreate, user: User) -> tuple[Order, 
     )
     db.add(order)
     db.flush()  # assign order.id before writing stock rows tied to it
+
+    # Derive the paid flag from the money actually taken, so a deposit that
+    # happens to cover the whole total settles the order instead of leaving it
+    # owing nothing but still marked unpaid.
+    _sync_paid_status(order, user, payload.payment_method or payload.expected_payment_method)
 
     stock_service.deduct_for_order(db, order, user_id=user.id)
     return order, True
@@ -374,29 +384,164 @@ def delete_order(db: Session, order_id: int, user=None) -> None:
     db.delete(order)
 
 
+def _initial_payments(payload, total: Decimal, pays_now: bool, now, user: User) -> list[OrderPayment]:
+    """The money taken at the counter when the order was written up.
+
+    Three cases: paid in full on the spot, a deposit with the rest to come, or
+    nothing yet. A deposit that covers the whole total is simply full payment.
+    """
+    deposit = getattr(payload, "deposit", None)
+    if deposit is not None and deposit > 0:
+        amount = min(deposit, total)
+        return [
+            OrderPayment(
+                amount=amount,
+                method=payload.payment_method or payload.expected_payment_method,
+                received_on=now.date(),
+                note=None if amount >= total else "Deposit",
+                taken_by=user.id,
+                created_at=now,
+            )
+        ]
+    if pays_now:
+        return [
+            OrderPayment(
+                amount=total,
+                method=payload.payment_method,
+                received_on=now.date(),
+                taken_by=user.id,
+                created_at=now,
+            )
+        ]
+    return []
+
+
+def _sync_paid_status(order: Order, user: User, method: PaymentMethod | None) -> None:
+    """Derive the order's paid flag from what has actually been collected.
+
+    Called after every change to the payment list so the flag can never drift
+    from the money. Deliberately two-state — see `OrderPayment`'s note on why
+    there is no "partial".
+    """
+    if order.balance_due <= 0 and order.payments:
+        if order.paid_status != PaidStatus.paid:
+            order.paid_status = PaidStatus.paid
+            order.paid_at = utcnow()
+            order.paid_by = user.id
+        # How it was settled, for the order's own summary line. The report
+        # breakdown reads the individual payments, so a split cash/card order
+        # is still counted correctly there.
+        if method is not None:
+            order.payment_method = method
+        elif order.payment_method is None:
+            # Nothing was specified, so fall back to what the customer said
+            # they'd use. That is the whole point of recording it — the common
+            # case is "he said cash, he paid cash", and it should not need
+            # re-entering. An explicit method always wins.
+            order.payment_method = order.expected_payment_method
+    else:
+        # Back to owing money — a payment was removed, or an item was added
+        # after it was settled.
+        order.paid_status = PaidStatus.unpaid
+        order.paid_at = None
+        order.paid_by = None
+
+
+def record_payment(
+    db: Session,
+    order_id: int,
+    user: User,
+    *,
+    amount: Decimal,
+    method: PaymentMethod | None = None,
+    received_on: date | None = None,
+    note: str | None = None,
+) -> Order:
+    """Take money against an order: a deposit now, the balance later.
+
+    `received_on` defaults to today but is settable, because money is not
+    always entered the day it arrived — and the date is what the reports use.
+    """
+    order = _load(db, order_id, lock=True)
+    if order.status == OrderStatus.cancelled:
+        raise bad_request("Cancelled orders can't take a payment.", code="order_cancelled")
+    if amount <= 0:
+        raise bad_request("A payment has to be more than zero.", code="bad_amount")
+    # Refuse an overpayment rather than storing it. There is no refund concept
+    # here, so an amount above the balance is a typo far more often than a tip,
+    # and silently banking it would overstate the day's takings.
+    if amount > order.balance_due:
+        raise bad_request(
+            f"That's more than the ${order.balance_due} still owing on this order.",
+            code="overpayment",
+        )
+
+    order.payments.append(
+        OrderPayment(
+            amount=amount,
+            method=method,
+            received_on=received_on or utc_today(),
+            note=note,
+            taken_by=user.id,
+            created_at=utcnow(),
+        )
+    )
+    db.flush()
+    _sync_paid_status(order, user, method)
+    return order
+
+
+def delete_payment(db: Session, order_id: int, payment_id: int, user: User) -> Order:
+    """Remove a mis-keyed payment. Snapshotted to the trash first."""
+    from app.services import trash as trash_service
+
+    order = _load(db, order_id, lock=True)
+    payment = next((p for p in order.payments if p.id == payment_id), None)
+    if payment is None:
+        raise not_found("That payment was not found on this order.")
+
+    trash_service.record(
+        db,
+        kind="order_payment",
+        label=f"${payment.amount} on order #{order.id} ({order.client_name})",
+        # Money as a string, never a float, or a restored amount is a cent off.
+        payload=trash_service.snapshot(
+            payment,
+            ["id", "order_id", "amount", "method", "received_on", "note", "taken_by"],
+        ),
+        user=user,
+    )
+    order.payments.remove(payment)
+    db.flush()
+    # Removing money can un-pay an order, which is the point: a payment entered
+    # against the wrong order has to come back off this one's takings.
+    _sync_paid_status(order, user, None)
+    return order
+
+
 def mark_paid(
     db: Session,
     order_id: int,
     user: User,
     payment_method: PaymentMethod | None = None,
 ) -> Order:
+    """Settle the rest of an order in one go.
+
+    Kept as its own endpoint because "he's paid" is the overwhelmingly common
+    action and nobody should have to type the balance. It is now just a payment
+    for whatever is outstanding, so a deposit taken earlier is accounted for.
+    """
     order = _load(db, order_id, lock=True)
     if order.paid_status == PaidStatus.paid:
         raise bad_request("Order is already paid.", code="already_paid")
-    order.paid_status = PaidStatus.paid
-    order.paid_at = utcnow()
-    order.paid_by = user.id
-    # Record how it was collected (e.g. cash/e-transfer on pickup) so it lands
-    # in the right payment-breakdown bucket (spec §2A, §2D).
-    if payment_method is not None:
-        order.payment_method = payment_method
-    elif order.payment_method is None:
-        # Nothing was specified, so fall back to what the customer said they'd
-        # use. That is the whole point of recording it — the common case is
-        # "he said cash, he paid cash", and it should not need re-entering.
-        # An explicit method always wins, so a changed mind is still recorded.
-        order.payment_method = order.expected_payment_method
-    return order
+    # Resolve the method *here*, onto the payment row, because that row is what
+    # the report breakdown reads. An explicit method wins; otherwise fall back
+    # to what the order already recorded, then to what the customer said they'd
+    # use — the common case is "he said cash, he paid cash", and it should not
+    # need re-entering. `record_payment` itself stays literal: it banks exactly
+    # the method it is given.
+    method = payment_method or order.payment_method or order.expected_payment_method
+    return record_payment(db, order_id, user, amount=order.balance_due, method=method)
 
 
 def fulfill_order(db: Session, order_id: int, user: User) -> Order:

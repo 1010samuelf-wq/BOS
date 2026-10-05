@@ -32,7 +32,7 @@ from app.models.catalog import (
 from app.models.customer import Customer
 from app.models.email_template import EmailTemplate
 from app.models.feedback import Feedback
-from app.models.order import Order, OrderItem, OrderNote
+from app.models.order import Order, OrderItem, OrderNote, OrderPayment
 from app.models.settings import AppSettings
 from app.models.stock import StockAdjustment, StockLevel
 from app.models.sync import SyncedOperation
@@ -75,6 +75,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderNote",
+    "OrderPayment",
     "AppSettings",
     "StockAdjustment",
     "StockLevel",

@@ -114,9 +114,29 @@ export interface Order {
   status: OrderStatus;
   fulfillment_status: FulfillmentStatus;
   total: string;
+  /** Collected so far, and what's still owed. Derived from `payments` on the
+   *  server, so they can't drift from the money. Note `paid_status` stays
+   *  two-state: an order with a deposit is still "unpaid" until the balance
+   *  reaches zero. */
+  amount_paid: string;
+  balance_due: string;
   locked_by: number | null;
   items: OrderItemOut[];
   notes: OrderNoteOut[];
+  payments: OrderPaymentOut[];
+}
+
+/** One payment against an order — a deposit, or the balance, or anything
+ *  between. Each carries its own date because that's the day it counts as
+ *  income. */
+export interface OrderPaymentOut {
+  id: number;
+  amount: string;
+  method: PaymentMethod | null;
+  received_on: string;
+  note: string | null;
+  taken_by: number | null;
+  created_at: string;
 }
 
 // Payload for POST /orders (mirrors backend OrderCreate).
@@ -134,6 +154,10 @@ export interface OrderCreatePayload {
   payment_timing: PaymentTiming;
   payment_method?: PaymentMethod | null;
   expected_payment_method?: PaymentMethod | null;
+  /** Fixed amount taken now on a pay-later order; null when nothing was taken.
+   *  The server caps it at the total and refuses it alongside payment_timing
+   *  "now", which already means the whole amount. */
+  deposit?: string | null;
   items: (
     | { product_id: number; quantity: number; note?: string | null }
     | { custom_name: string; custom_price: string; save_as_product: boolean; quantity: number; note?: string | null }

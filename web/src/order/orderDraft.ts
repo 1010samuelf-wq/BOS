@@ -48,6 +48,10 @@ export interface Draft {
   paymentMethod: PaymentMethod | null;
   /** What they said they'd pay with — a pay-later note, not a claim of payment. */
   expectedPaymentMethod: PaymentMethod | null;
+  /** Money taken at the counter now, when it isn't the whole total: "$100 now,
+   *  $300 on collection". A fixed amount, which is how the shop quotes it.
+   *  Blank means nothing was taken. Pay-later only — paying now settles it all. */
+  deposit: string;
   cardPaymentNote: string;
   generalNotes: string;
   lines: DraftLine[];
@@ -75,6 +79,7 @@ export function emptyDraft(): Draft {
     paymentTiming: "now",
     paymentMethod: null,
     expectedPaymentMethod: null,
+    deposit: "",
     cardPaymentNote: "",
     generalNotes: "",
     lines: [],
@@ -118,6 +123,33 @@ export function draftTotal(d: Draft): string {
   return fromCents(c);
 }
 
+/** Is this deposit enterable as money, and does it leave something to collect?
+ *
+ * A deposit for the whole total is accepted (it's simply full payment), but a
+ * deposit *larger* than the total is a typo — there's no refund concept to
+ * absorb it, and banking it would overstate the day's takings. */
+export function depositProblem(d: Draft): string | null {
+  const text = d.deposit.trim();
+  if (text === "") return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return "Deposit must be an amount like 100 or 100.50.";
+  if (Number(text) <= 0) return "A deposit has to be more than zero.";
+  if (toCents(text) > toCents(draftTotal(d))) return "Deposit is more than the order total.";
+  return null;
+}
+
+/** What's still owed after the deposit, or null when there's nothing to show.
+ *
+ * Null rather than "0.00" for the three cases where a balance line would be
+ * noise or a lie: no deposit typed, a deposit that isn't a number yet (someone
+ * is mid-keystroke), and a deposit covering the whole total — that's just
+ * payment in full, not a split. */
+export function balanceAfterDeposit(d: Draft): string | null {
+  const text = d.deposit.trim();
+  if (text === "" || !/^\d+(\.\d{1,2})?$/.test(text)) return null;
+  const left = toCents(draftTotal(d)) - toCents(text);
+  return left > 0 ? fromCents(left) : null;
+}
+
 export function validateDraft(d: Draft): string[] {
   const p: string[] = [];
   if (!d.clientName.trim()) p.push("Client name is required.");
@@ -125,6 +157,8 @@ export function validateDraft(d: Draft): string[] {
   if (d.fulfillment === "delivery" && !d.deliveryAddress.trim())
     p.push("Delivery address is required for delivery orders.");
   if (d.paymentTiming === "now" && !d.paymentMethod) p.push("Choose a payment method.");
+  const deposit = depositProblem(d);
+  if (deposit) p.push(deposit);
   if (d.deliveryPrice.trim() !== "" && !/^\d+(\.\d{1,2})?$/.test(d.deliveryPrice.trim()))
     p.push("Delivery price must be a number like 5 or 5.50.");
   return p;
@@ -159,6 +193,9 @@ export function draftFromOrder(o: Order): Draft {
     cardMessage: o.card_message ?? "",
     paymentTiming: o.payment_timing,
     paymentMethod: o.payment_method,
+    // Editing an order never re-takes a deposit; payments are managed on their
+    // own panel, where each one keeps the date it actually arrived.
+    deposit: "",
     expectedPaymentMethod: o.expected_payment_method,
     cardPaymentNote: "",
     generalNotes: "",
@@ -224,6 +261,10 @@ export function buildPayload(d: Draft): OrderCreatePayload {
     payment_method: d.paymentTiming === "now" ? d.paymentMethod : null,
     // Only meaningful on a pay-later order; paying now records the real thing.
     expected_payment_method: d.paymentTiming === "later" ? d.expectedPaymentMethod : null,
+    // Same reason: a deposit is a part-payment towards a balance, so it only
+    // makes sense when the rest is still to come. The server rejects both at
+    // once rather than guessing which was meant.
+    deposit: d.paymentTiming === "later" && d.deposit.trim() !== "" ? d.deposit.trim() : null,
     items: d.lines.map((l) =>
       l.product_id !== null
         ? { product_id: l.product_id, quantity: l.quantity, note: l.note.trim() || null }

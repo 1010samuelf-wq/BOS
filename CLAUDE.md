@@ -162,8 +162,29 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
 - **Stock is advisory and may go negative** — a sale never blocks. Because every
   order deducts stock at creation, the production report's `to_bake` is `-in_stock`,
   *not* `needed - in_stock` (that double-counts).
-- **Reports are cash-basis** — revenue/COGS count only paid orders; labor counts
-  only paid-out shifts.
+- **Reports are cash-basis, counted on the day the money arrived.** Revenue
+  comes from `order_payments` rows in the window, **not** from the orders in it,
+  because an order can be settled in instalments: a $100 deposit one week and
+  $300 on collection the next are income in two different weeks. Don't "simplify"
+  this back to `orders.total` on `order_date` — that books money in a week it
+  wasn't taken and double-counts anything already reported. COGS still follows
+  the order (matched once it's fully settled; splitting a recipe across a
+  part-payment would be guesswork), and labor still counts only paid-out shifts.
+  The `unpaid` breakdown bucket is `balance_due`, not `total`, or a part-paid
+  order shows money that's already been banked as revenue.
+- **`paid_status` is deliberately two-state, and must stay that way.** It is
+  derived from the payments (`_sync_paid_status`): "paid" only once
+  `balance_due` hits zero, so a part-paid order reads "unpaid". Do **not** add a
+  "partial" value — `tablet/app/(main)/orders/index.tsx` and `deliveries.tsx`
+  print this field verbatim and branch on `=== "unpaid"`, so a new value makes a
+  part-paid order look collected on a device that can't be updated while the
+  tablet is parked. "Unpaid" is the safe reading: money is still owed.
+  `amount_paid`/`balance_due` are additive fields the tablet simply ignores.
+- **`mark_paid` settles the *balance*, not the total.** It records a payment for
+  whatever is outstanding, so a deposit already taken isn't charged twice. It
+  also resolves the method onto the payment row (explicit → the order's →
+  `expected_payment_method`), because that row is what the breakdown reads;
+  `record_payment` itself stays literal. `tests/test_deposits.py` pins both.
 - **Logging `extra=` must not use reserved keys** (`message`, `asctime`) — stdlib
   logging raises `KeyError`. Prefix them (`notif_message`).
 - **Realtime is push-only and coarse.** `broadcaster.publish` emits

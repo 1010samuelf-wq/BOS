@@ -4,6 +4,9 @@ import type { Product } from "../api/types";
 import {
   addCustomItem,
   addProduct,
+  balanceAfterDeposit,
+  buildPayload,
+  depositProblem,
   draftTotal,
   emptyDraft,
   lineTotal,
@@ -136,5 +139,71 @@ describe("validation", () => {
   it("reports every problem at once, not just the first", () => {
     const d = { ...emptyDraft(), paymentTiming: "now" as const };
     expect(validateDraft(d).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/** The shop quotes a deposit as a fixed amount: "$100 now, $300 on
+ *  collection". These pin the split the form shows and the payload it sends. */
+describe("deposits", () => {
+  const order = (deposit: string) => ({
+    ...addProduct(emptyDraft(), product({ price: "400.00" })),
+    clientName: "Mrs Weiss",
+    paymentTiming: "later" as const,
+    deposit,
+  });
+
+  it("shows nothing to collect when no deposit was typed", () => {
+    expect(balanceAfterDeposit(order(""))).toBeNull();
+  });
+
+  it("works out what is left on collection", () => {
+    expect(balanceAfterDeposit(order("100"))).toBe("300.00");
+    expect(balanceAfterDeposit(order("100.50"))).toBe("299.50");
+  });
+
+  it("stays quiet mid-keystroke rather than flashing a wrong figure", () => {
+    expect(balanceAfterDeposit(order("1."))).toBeNull();
+    expect(balanceAfterDeposit(order("abc"))).toBeNull();
+  });
+
+  it("shows no balance when the deposit is the whole total", () => {
+    // That's payment in full, not a split — a "$0.00 on collection" line
+    // would be noise.
+    expect(balanceAfterDeposit(order("400"))).toBeNull();
+    expect(balanceAfterDeposit(order("450"))).toBeNull();
+  });
+
+  it("accepts a deposit up to the total", () => {
+    expect(depositProblem(order("100"))).toBeNull();
+    expect(depositProblem(order("400"))).toBeNull();
+    expect(depositProblem(order(""))).toBeNull();
+  });
+
+  it("rejects a deposit bigger than the order", () => {
+    // No refund concept to absorb it, so it's a typo.
+    expect(depositProblem(order("500"))).toContain("more than the order total");
+  });
+
+  it("rejects something that isn't money", () => {
+    expect(depositProblem(order("lots"))).toContain("amount like");
+    expect(depositProblem(order("0"))).toContain("more than zero");
+  });
+
+  it("blocks submitting an order with a bad deposit", () => {
+    expect(validateDraft(order("500")).length).toBeGreaterThan(0);
+    expect(validateDraft(order("100"))).toEqual([]);
+  });
+
+  it("sends the deposit only on a pay-later order", () => {
+    expect(buildPayload(order("100")).deposit).toBe("100");
+
+    const payingNow = { ...order("100"), paymentTiming: "now" as const, paymentMethod: "cash" as const };
+    // Paying now already settles the whole total; sending both would be
+    // contradictory and the server refuses it.
+    expect(buildPayload(payingNow).deposit).toBeNull();
+  });
+
+  it("sends null when nothing was taken", () => {
+    expect(buildPayload(order("")).deposit).toBeNull();
   });
 });

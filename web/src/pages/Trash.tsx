@@ -26,6 +26,7 @@ const KIND_LABEL: Record<string, string> = {
   expense: "Expense",
   time_entry: "Shift",
   order: "Order",
+  order_payment: "Payment on an order",
   customer: "Customer",
 };
 const KIND_ICON: Record<string, string> = {
@@ -33,6 +34,7 @@ const KIND_ICON: Record<string, string> = {
   expense: "🧾",
   time_entry: "⏱",
   order: "🧁",
+  order_payment: "💵",
   customer: "🧑‍🍳",
 };
 

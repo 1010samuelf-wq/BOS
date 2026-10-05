@@ -11,6 +11,7 @@ import type { Order, PaymentMethod } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { ErrorMsg, Loading } from "../components/ui";
 import { formatNeeded, neededDeadline } from "../order/dates";
+import { PaymentsPanel } from "../order/PaymentsPanel";
 import { OrderHeaderFields, OrderItemsEditor } from "../order/OrderFormFields";
 import { buildUpdatePayload, draftFromOrder, draftTotal, validateEditDraft, type Draft } from "../order/orderDraft";
 
@@ -130,6 +131,13 @@ export default function OrderDetail() {
         <div style={{ marginLeft: "auto", textAlign: "right" }}>
           <div style={{ fontSize: 26, fontWeight: 800 }}>${editing && draft ? draftTotal(draft) : o.total}</div>
           <span className={`pill ${o.paid_status}`}>{o.paid_status.toUpperCase()}{o.payment_method ? ` · ${o.payment_method}` : ""}</span>
+          {/* A deposit leaves the order "unpaid", which on its own reads as
+              "nothing has been paid". Say what's actually outstanding. */}
+          {Number(o.amount_paid) > 0 && o.paid_status === "unpaid" && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              ${o.amount_paid} paid · <strong>${o.balance_due} still owing</strong>
+            </div>
+          )}
           {/* Only while unpaid: once it's paid, the real method above is the
               fact and the expectation is just history. */}
           {o.paid_status === "unpaid" && o.expected_payment_method && (
@@ -181,6 +189,13 @@ export default function OrderDetail() {
         </>
       )}
 
+      {/* Payments — between the items and the notes, because "what's been
+          paid" is read far more often than the notes are. Hidden while editing
+          so the two forms don't compete for the screen. */}
+      {!editing && (
+        <PaymentsPanel order={o} onChanged={invalidate} onError={setErr} />
+      )}
+
       {/* Notes */}
       <div className="card">
         <h2>Notes</h2>
@@ -208,7 +223,11 @@ export default function OrderDetail() {
             ))}
           </div>
           <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
-            {o.paid_status === "unpaid" && <button className="btn success" onClick={() => setPayOpen(true)}>Mark as paid</button>}
+            {o.paid_status === "unpaid" && (
+              <button className="btn success" onClick={() => setPayOpen(true)}>
+                {Number(o.amount_paid) > 0 ? `Take the remaining $${o.balance_due}` : "Mark as paid"}
+              </button>
+            )}
             {o.status === "ready" && <button className="btn primary" onClick={() => fulfill.mutate()}>{fulfilLabel}</button>}
             <button className="btn danger" onClick={() => setCancelOpen(true)}>Cancel order</button>
           </div>

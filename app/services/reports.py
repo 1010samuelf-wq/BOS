@@ -29,6 +29,7 @@ from app.models import (
     ItemType,
     Order,
     OrderItem,
+    OrderPayment,
     OrderStatus,
     PaidStatus,
     PaymentMethod,
@@ -105,26 +106,48 @@ def sales_report(db: Session, from_date: date, to_date: date) -> SalesReportOut:
     }
     cost_cache: dict = {}
 
+    # Cash-basis, counted on the day the money arrived.
+    #
+    # Revenue comes from the *payments* in the window, not from the orders in
+    # it, because an order can be settled in instalments on different days: a
+    # $100 deposit in one week and $300 on collection the next are income in
+    # two different weeks. Booking the whole total against the order date would
+    # put money in a week it wasn't taken, and would double-count once part of
+    # it had already been reported.
+    payments = db.execute(
+        select(OrderPayment)
+        .join(Order, OrderPayment.order_id == Order.id)
+        .where(
+            OrderPayment.received_on >= from_date,
+            OrderPayment.received_on <= to_date,
+            Order.status != OrderStatus.cancelled,
+        )
+    ).scalars().all()
+
+    for payment in payments:
+        revenue += payment.amount
+        if payment.method == PaymentMethod.cash:
+            breakdown["cash"] += payment.amount
+        elif payment.method == PaymentMethod.card:
+            breakdown["card"] += payment.amount
+        elif payment.method == PaymentMethod.etransfer:
+            breakdown["etransfer"] += payment.amount
+        else:
+            breakdown["unspecified"] += payment.amount
+
     for order in orders:
-        # Cash-basis: revenue (and the COGS matched against it) only count once
-        # money has actually changed hands. An unpaid order still shows up in
-        # order_count and the "unpaid" breakdown bucket below, so it isn't
-        # invisible — it just isn't counted as income until it's paid.
+        # COGS is matched to the revenue it produced, so it follows the same
+        # rule: count an order's ingredients once it is fully settled. Matching
+        # part of a recipe to a part-payment would be guesswork.
         if order.paid_status == PaidStatus.paid:
-            revenue += order.total
             for item in order.items:
                 ingredient_cost += product_ingredient_cost(db, item.product_id, cost_cache) * item.quantity
 
+        # Still-owed money, so the figure answers "what is outstanding?" — it
+        # is not revenue and is not added to it. A part-paid order contributes
+        # only its remaining balance here.
         if order.paid_status == PaidStatus.unpaid:
-            breakdown["unpaid"] += order.total
-        elif order.payment_method == PaymentMethod.cash:
-            breakdown["cash"] += order.total
-        elif order.payment_method == PaymentMethod.card:
-            breakdown["card"] += order.total
-        elif order.payment_method == PaymentMethod.etransfer:
-            breakdown["etransfer"] += order.total
-        else:
-            breakdown["unspecified"] += order.total
+            breakdown["unpaid"] += order.balance_due
 
     expenses = db.execute(
         select(Expense)

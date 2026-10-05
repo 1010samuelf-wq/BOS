@@ -25,6 +25,7 @@ from app.schemas.order import (
     OrderCreate,
     OrderOut,
     OrderUpdate,
+    PaymentIn,
 )
 from app.services import order as order_service
 from app.services import pdf as pdf_service
@@ -175,6 +176,50 @@ def cancel_order(
     broadcaster.publish(_ORDERS)
     if payload.reverse_stock:
         broadcaster.publish(_STOCK)
+    return order
+
+
+@router.post("/{order_id}/payments", response_model=OrderOut)
+def add_payment(
+    order_id: int,
+    payload: PaymentIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_section("orders")),
+):
+    """Take a deposit, or the balance, or anything in between.
+
+    Each payment keeps its own date, so "$100 today, $300 on collection" is
+    reported as income on the two days it actually arrived.
+    """
+    order = order_service.record_payment(
+        db,
+        order_id,
+        user,
+        amount=payload.amount,
+        method=payload.method,
+        received_on=payload.received_on,
+        note=payload.note,
+    )
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+@router.delete("/{order_id}/payments/{payment_id}", response_model=OrderOut)
+def remove_payment(
+    order_id: int,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_section("orders")),
+):
+    """Undo a mis-keyed payment. Snapshotted to the Deleted page first.
+
+    This can take an order back to unpaid, which is the point — a payment
+    entered against the wrong order has to come off this one's takings.
+    """
+    order = order_service.delete_payment(db, order_id, payment_id, user)
+    db.commit()
+    db.refresh(order)
     return order
 
 

@@ -74,6 +74,14 @@ export const updateOrder = (id: number, payload: OrderUpdatePayload) =>
   api<Order>(`/orders/${id}`, { method: "PUT", body: payload });
 export const lockOrder = (id: number) => api<Order>(`/orders/${id}/lock`, { method: "POST" });
 export const releaseOrderLock = (id: number) => api<Order>(`/orders/${id}/release-lock`, { method: "POST" });
+export const addOrderPayment = (
+  id: number,
+  body: { amount: string; method?: string | null; received_on?: string; note?: string | null },
+) => api<Order>(`/orders/${id}/payments`, { method: "POST", body });
+
+export const deleteOrderPayment = (orderId: number, paymentId: number) =>
+  api<Order>(`/orders/${orderId}/payments/${paymentId}`, { method: "DELETE" });
+
 export const markPaid = (id: number, payment_method?: string) =>
   api<Order>(`/orders/${id}/mark-paid`, { method: "POST", body: payment_method ? { payment_method } : {} });
 export const fulfillOrder = (id: number) => api<Order>(`/orders/${id}/fulfill`, { method: "POST" });
