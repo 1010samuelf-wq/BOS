@@ -15,9 +15,10 @@ if [ ! -x .venv/bin/python ]; then
 fi
 .venv/bin/pip install -q --disable-pip-version-check -r requirements.txt
 
-# Frontends: npm install (not ci) so the cached container state is reused.
+# Frontends: npm install (not ci) so the cached container state is reused;
+# --no-save keeps the cloud npm from rewriting the committed lockfiles.
 for dir in web tablet menu; do
-  (cd "$dir" && npm install --no-audit --no-fund --loglevel=error)
+  (cd "$dir" && npm install --no-save --no-audit --no-fund --loglevel=error)
 done
 
 # Make `python` / `pytest` resolve to the venv for the rest of the session.
