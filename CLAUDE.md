@@ -250,3 +250,15 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   contact details.
 - Production is a live shop. Don't create junk data in the prod DB to test; use
   the local SQLite dev server instead.
+- **Cloud sessions: no branches, no PRs — commit to `main` and deploy.** The
+  owner works from their phone and does not want a review/merge step. When a
+  change is done, run the suites for every part it touches (backend `pytest`,
+  web `tsc` + `npm test`, tablet `tsc` + `jest`), commit straight to `main`,
+  push, then deploy the affected app(s) by dispatching
+  `.github/workflows/deploy.yml` (target `backend` / `dashboard` / `menu` /
+  `all`) and confirm the run went green. Changes that touch nothing deployed
+  (docs, tests, tooling) just get pushed. If any suite is red, fix it before
+  pushing — `main` is what ships. Tablet OTA is not in that workflow (it needs
+  an Expo token), so say so rather than skip it silently when a tablet change
+  needs to reach the devices. `.claude/hooks/session-start.sh` installs all
+  dependencies when a cloud session starts.
