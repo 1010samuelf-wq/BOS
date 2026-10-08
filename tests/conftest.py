@@ -49,6 +49,13 @@ def _seed_admin() -> None:
 @pytest.fixture(autouse=True)
 def fresh_db():
     Base.metadata.drop_all(engine)
+    if engine.dialect.name == "postgresql":
+        # Recreating the schema gives every enum type a new OID, but pooled
+        # psycopg connections keep server-side prepared statements bound to
+        # the old ones ("cache lookup failed for type", "cached plan must not
+        # change result type"). Drop the pool so each test starts clean. Not
+        # on SQLite: its in-memory DB lives on the one pooled connection.
+        engine.dispose()
     Base.metadata.create_all(engine)
     _seed_admin()
     yield
