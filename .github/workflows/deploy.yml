@@ -90,7 +90,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm install
       # Gates the deploy: every bug shipped to the shop in September was
       # frontend, and the backend suite cannot see any of them.
@@ -127,7 +127,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm install
       # Same build-time bake as the dashboard - see the comment in that job.
       - run: npm run build

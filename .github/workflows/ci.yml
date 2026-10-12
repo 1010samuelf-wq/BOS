@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm install
       - name: Typecheck
         run: npx tsc --noEmit
@@ -59,7 +59,7 @@ jobs:
         run: npm test
 
   web:
-    name: Web dashboard (typecheck + build)
+    name: Web dashboard (typecheck + tests + build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -68,7 +68,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm install
+      # Same tests that gate the dashboard deploy, so a red one shows up on
+      # the push rather than only when someone tries to release.
+      - name: Tests
+        run: npm test
       - name: Build (runs tsc)
         run: npm run build
