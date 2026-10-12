@@ -928,3 +928,20 @@ textarea.input { resize: vertical; font-family: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .assistant-caret { animation: none; opacity: 0.5; }
 }
+
+/* Settings → Photo inbox */
+.inbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+.inbox-item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.inbox-item select { width: 100%; }
+.inbox-filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

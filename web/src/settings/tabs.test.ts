@@ -22,6 +22,10 @@ describe("choosing the settings tab", () => {
     expect(resolveTab("Recipes", true)).toBe(DEFAULT_TAB);
   });
 
+  it("opens the photo inbox for anyone who can see settings", () => {
+    expect(resolveTab("photos", false)).toBe("photos");
+  });
+
   it("gives staff management to someone who can manage staff", () => {
     expect(resolveTab("employees", true)).toBe("employees");
   });

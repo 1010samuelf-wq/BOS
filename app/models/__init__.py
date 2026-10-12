@@ -33,6 +33,7 @@ from app.models.customer import Customer
 from app.models.email_template import EmailTemplate
 from app.models.feedback import Feedback
 from app.models.order import Order, OrderItem, OrderNote, OrderPayment
+from app.models.photo_inbox import InboxPhoto
 from app.models.settings import AppSettings
 from app.models.stock import StockAdjustment, StockLevel
 from app.models.sync import SyncedOperation
@@ -66,6 +67,7 @@ __all__ = [
     "Customer",
     "EmailTemplate",
     "Feedback",
+    "InboxPhoto",
     "LedgerEntry",
     "Ingredient",
     "Product",

@@ -9,6 +9,7 @@ import type {
   Company,
   CompanyDetail,
   CompanyType,
+  InboxPhoto,
   Deliveries,
   AssistantReply,
   Conversation,
@@ -180,6 +181,14 @@ export const deleteEmailTemplate = (id: number) =>
 
 export const uploadProductPhoto = (id: number, file: File) =>
   uploadFile<Product>(`/products/${id}/photo`, file);
+
+// ---- photo inbox: upload now, assign to a product later ----
+export const listInboxPhotos = () => api<InboxPhoto[]>("/photo-inbox");
+export const uploadInboxPhoto = (file: File) => uploadFile<InboxPhoto>("/photo-inbox", file);
+export const assignInboxPhoto = (photoId: number, productId: number) =>
+  api<Product>(`/photo-inbox/${photoId}/assign`, { method: "POST", body: { product_id: productId } });
+export const discardInboxPhoto = (photoId: number) =>
+  api<void>(`/photo-inbox/${photoId}`, { method: "DELETE" });
 export const listIngredients = (active?: boolean) =>
   api<Ingredient[]>("/ingredients", { query: active === undefined ? {} : { active } });
 export const createIngredient = (body: {

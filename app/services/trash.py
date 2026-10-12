@@ -26,14 +26,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import APIError, not_found
-from app.models import Company, EmailTemplate, LedgerEntry, Product, TrashItem, User
+from app.models import Company, EmailTemplate, InboxPhoto, LedgerEntry, Product, TrashItem, User
 from app.models.base import utcnow
 from app.models.enums import LedgerEntryType
 from app.models.misc import Expense, TimeEntry
 
 # Kinds that restore() knows how to put back. Everything else is kept and
 # readable but has to be re-entered by hand.
-RESTORABLE = {"ledger_entry", "expense", "time_entry", "product", "email_template"}
+RESTORABLE = {
+    "ledger_entry", "expense", "time_entry", "product", "email_template", "inbox_photo",
+}
 
 
 def _plain(value: Any) -> Any:
@@ -144,6 +146,13 @@ def restore(db: Session, item_id: int) -> TrashItem:
             intro=data.get("intro"),
             signoff=data.get("signoff"),
             product_ids=data.get("product_ids") or [],
+        ))
+    elif item.kind == "inbox_photo":
+        # The file never left storage, so putting the row back is the whole job.
+        db.add(InboxPhoto(
+            url=data["url"],
+            filename=data.get("filename"),
+            uploaded_by=data.get("uploaded_by"),
         ))
     elif item.kind == "time_entry":
         db.add(TimeEntry(

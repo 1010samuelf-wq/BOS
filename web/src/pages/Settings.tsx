@@ -13,6 +13,7 @@ import { useAuth } from "../auth/AuthContext";
 import { LoadFailed, Loading, PageHead, Switch, Tabs, isStalled } from "../components/ui";
 import { resolveTab, visibleTabs } from "../settings/tabs";
 import EmployeesHours from "./EmployeesHours";
+import PhotoInbox from "../settings/PhotoInbox";
 
 // Sentinel option value; no real category can collide with it because the
 // backend strips and rejects blank names, and this isn't a plausible one.
@@ -102,6 +103,7 @@ export default function Settings() {
         />
       </PageHead>
       {section === "products" && <Products />}
+      {section === "photos" && <PhotoInbox />}
       {section === "ingredients" && <Ingredients />}
       {section === "recipes" && <Recipes />}
       {section === "employees" && <EmployeesHours embedded />}

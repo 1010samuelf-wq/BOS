@@ -28,6 +28,7 @@ const KIND_LABEL: Record<string, string> = {
   order: "Order",
   order_payment: "Payment on an order",
   customer: "Customer",
+  inbox_photo: "Unassigned photo",
 };
 const KIND_ICON: Record<string, string> = {
   ledger_entry: "📒",
@@ -36,6 +37,7 @@ const KIND_ICON: Record<string, string> = {
   order: "🧁",
   order_payment: "💵",
   customer: "🧑‍🍳",
+  inbox_photo: "🖼",
 };
 
 export default function Trash() {

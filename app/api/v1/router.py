@@ -14,6 +14,7 @@ from app.api.v1 import (
     inquiries,
     notifications,
     orders,
+    photo_inbox,
     reports,
     settings,
     stock,
@@ -31,6 +32,7 @@ api_router.include_router(auth.router)
 api_router.include_router(orders.router)
 api_router.include_router(stock.router)
 api_router.include_router(catalog.router)
+api_router.include_router(photo_inbox.router)
 api_router.include_router(employees.router)
 api_router.include_router(time.router)
 api_router.include_router(expenses.router)

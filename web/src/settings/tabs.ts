@@ -6,6 +6,7 @@
 
 export type SettingsTab =
   | "products"
+  | "photos"
   | "ingredients"
   | "recipes"
   | "employees"
@@ -14,6 +15,7 @@ export type SettingsTab =
 
 const LABELS: { key: SettingsTab; label: string }[] = [
   { key: "products", label: "Products" },
+  { key: "photos", label: "Photo inbox" },
   { key: "ingredients", label: "Ingredients" },
   { key: "recipes", label: "Recipes" },
   { key: "employees", label: "Employees & hours" },

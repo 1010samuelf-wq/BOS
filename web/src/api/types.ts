@@ -48,6 +48,15 @@ export interface Product {
   photos: ProductPhoto[];
   photo_url: string | null;
 }
+/** A photo uploaded but not yet matched to a product. */
+export interface InboxPhoto {
+  id: number;
+  url: string;
+  filename: string | null;
+  uploaded_by: number | null;
+  uploaded_by_name: string | null;
+  uploaded_at: string;
+}
 export interface Ingredient {
   id: number;
   name: string;
