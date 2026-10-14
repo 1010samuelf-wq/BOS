@@ -14,6 +14,7 @@ import { LoadFailed, Loading, PageHead, Switch, Tabs, isStalled } from "../compo
 import { resolveTab, visibleTabs } from "../settings/tabs";
 import EmployeesHours from "./EmployeesHours";
 import PhotoInbox from "../settings/PhotoInbox";
+import PriceSheetImport from "../settings/PriceSheetImport";
 
 // Sentinel option value; no real category can collide with it because the
 // backend strips and rejects blank names, and this isn't a plausible one.
@@ -471,6 +472,7 @@ function Ingredients() {
   return (
     <>
       {error && <p className="error">{error}</p>}
+      <PriceSheetImport />
       <div className="card">
         <h2>Add ingredient</h2>
         <div className="row" style={{ flexWrap: "wrap" }}>

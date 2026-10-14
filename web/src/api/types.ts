@@ -57,6 +57,25 @@ export interface InboxPhoto {
   uploaded_by_name: string | null;
   uploaded_at: string;
 }
+export interface PriceSheet {
+  name: string;
+  rows: number;
+}
+export interface PriceChange {
+  action: "update" | "add" | "unchanged" | "skip";
+  name: string;
+  ingredient_id: number | null;
+  unit: string | null;
+  old_price: string | null;
+  new_price: string | null;
+  note: string;
+  reason: string;
+}
+export interface PriceImport {
+  sheet: string;
+  applied: boolean;
+  changes: PriceChange[];
+}
 export interface Ingredient {
   id: number;
   name: string;

@@ -101,6 +101,10 @@ class Change:
     reason: str = ""
 
 
+# Sheets that ship with the app, loadable from Settings → Ingredients.
+SHEETS_DIR = Path(__file__).resolve().parent / "data"
+
+
 def read_sheet(path: Path) -> list[Row]:
     with path.open(newline="", encoding="utf-8") as f:
         return [
@@ -115,6 +119,17 @@ def read_sheet(path: Path) -> list[Row]:
             for r in csv.DictReader(f)
             if r["name"].strip()
         ]
+
+
+def bundled_sheets() -> list[str]:
+    """Names (file stems) of the sheets shipped in app/tools/data, newest first."""
+    return sorted((p.stem for p in SHEETS_DIR.glob("*.csv")), reverse=True)
+
+
+def bundled_sheet(name: str) -> Path | None:
+    """The path for a bundled sheet name, or None. Looked up from the listing
+    rather than joined onto the directory, so a name can't climb out of it."""
+    return SHEETS_DIR / f"{name}.csv" if name in bundled_sheets() else None
 
 
 def plan(db: Session, rows: list[Row]) -> list[Change]:

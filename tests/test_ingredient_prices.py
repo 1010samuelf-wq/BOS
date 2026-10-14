@@ -107,3 +107,51 @@ def test_the_october_sheet_loads_cleanly_into_an_empty_list(db):
     # Handwritten corrections win over the printed figure.
     assert by_name["Margarine (bulk)"].new_price == Decimal("3.5000")
     assert by_name["Whipping cream (whip topping)"].new_price == Decimal("6.0000")
+
+
+# ---------------------------------------------------------------------------
+# the Settings → Ingredients button (API)
+# ---------------------------------------------------------------------------
+NAME = "ingredient_prices_2026-10"
+
+
+def test_the_bundled_sheet_is_listed(client):
+    sheets = client.get("/api/v1/price-sheets").json()
+    assert {"name": NAME, "rows": 60} in sheets
+
+
+def test_preview_through_the_api_writes_nothing(client):
+    r = client.post(f"/api/v1/price-sheets/{NAME}/import")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["applied"] is False
+    assert len([c for c in body["changes"] if c["action"] == "add"]) == 60
+    assert client.get("/api/v1/ingredients").json() == []
+
+
+def test_apply_through_the_api_adds_and_updates(client):
+    client.post("/api/v1/ingredients", json={"name": "Butter", "unit": "kg", "cost_per_unit": "20"})
+
+    body = client.post(f"/api/v1/price-sheets/{NAME}/import?apply=true").json()
+    assert body["applied"] is True
+
+    rows = {i["name"]: i for i in client.get("/api/v1/ingredients").json()}
+    assert len(rows) == 60
+    assert rows["Butter"]["unit"] == "kg"
+    assert Decimal(rows["Butter"]["cost_per_unit"]) == Decimal("30.8427")
+    assert Decimal(rows["Eggs (whole)"]["cost_per_unit"]) == Decimal("0.2889")
+
+    # Applying again changes nothing.
+    again = client.post(f"/api/v1/price-sheets/{NAME}/import").json()
+    assert {c["action"] for c in again["changes"]} == {"unchanged"}
+
+
+def test_an_unknown_or_sneaky_sheet_name_is_404(client):
+    assert client.post("/api/v1/price-sheets/nope/import").status_code == 404
+    assert client.post("/api/v1/price-sheets/..%2F..%2Fconfig/import").status_code == 404
+
+
+def test_importing_needs_the_settings_section(make_user):
+    _, _, cashier = make_user("Cashier Cass", "cashier")
+    assert cashier.get("/api/v1/price-sheets").status_code == 403
+    assert cashier.post(f"/api/v1/price-sheets/{NAME}/import?apply=true").status_code == 403

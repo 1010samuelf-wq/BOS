@@ -10,6 +10,8 @@ import type {
   CompanyDetail,
   CompanyType,
   InboxPhoto,
+  PriceImport,
+  PriceSheet,
   Deliveries,
   AssistantReply,
   Conversation,
@@ -199,6 +201,13 @@ export const createIngredient = (body: {
 }) => api<Ingredient>("/ingredients", { method: "POST", body });
 export const updateIngredient = (id: number, body: Partial<Ingredient>) =>
   api<Ingredient>(`/ingredients/${id}`, { method: "PUT", body });
+// Supplier price sheets shipped with the app: preview, then apply.
+export const listPriceSheets = () => api<PriceSheet[]>("/price-sheets");
+export const importPriceSheet = (name: string, apply: boolean) =>
+  api<PriceImport>(`/price-sheets/${encodeURIComponent(name)}/import`, {
+    method: "POST",
+    query: { apply },
+  });
 export const getRecipe = (productId: number) => api<Recipe>(`/recipes/${productId}`);
 export const upsertRecipe = (body: { product_id: number; yield_qty: number; items: { ingredient_id: number; quantity: string }[] }) =>
   api<Recipe>("/recipes", { method: "POST", body });
