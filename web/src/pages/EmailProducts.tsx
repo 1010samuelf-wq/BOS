@@ -20,6 +20,9 @@ import type { EmailTemplate, Product } from "../api/types";
 import { ErrorMsg, LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 import { buildEmailHtml, buildEmailText, type EmailParts } from "../email/buildEmail";
 
+// The public ordering site — the email's "Order online" button and footer link.
+const MENU_SITE = "https://justcakeskosher.com";
+
 const DEFAULT_INTRO =
   "Hi,\n\nHere's a look at what we have available. Let us know what you'd like and " +
   "we'll get it ready for you.";
@@ -107,6 +110,8 @@ export default function EmailProducts() {
     logoUrl: `${window.location.origin}/logo.png`,
     shopName: profile.data?.business_name || "Just Cake",
     phone: profile.data?.business_phone,
+    address: profile.data?.business_address,
+    websiteUrl: MENU_SITE,
   };
   const html = buildEmailHtml(parts);
 
