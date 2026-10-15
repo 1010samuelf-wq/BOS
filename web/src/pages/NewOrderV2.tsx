@@ -84,7 +84,10 @@ function Field({ label, children, grow }: { label: string; children: React.React
 export default function NewOrderV2() {
   const location = useLocation();
   const fromInquiry = (location.state as { fromInquiry?: Inquiry } | null)?.fromInquiry ?? null;
-  const [draft, setDraft] = useState<Draft>(() => (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
+  // A scanned order form arrives already turned into a draft (scan/scanDraft.ts).
+  const fromScan = (location.state as { fromScan?: Draft } | null)?.fromScan ?? null;
+  const [draft, setDraft] = useState<Draft>(() =>
+    fromScan ?? (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
   const depositLeft = balanceAfterDeposit(draft);
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
@@ -135,6 +138,11 @@ export default function NewOrderV2() {
         />
       </PageHead>
 
+      {fromScan && (
+        <div className="ov2-banner">
+          <strong>Read from a scanned document</strong> — check every line against the paper before submitting.
+        </div>
+      )}
       {fromInquiry && (
         <div className="ov2-banner">
           <strong>From a justcakeskosher.com inquiry</strong> — check it over, then submit like any order.

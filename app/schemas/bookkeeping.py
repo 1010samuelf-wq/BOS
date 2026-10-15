@@ -48,6 +48,13 @@ class LedgerEntryOut(BaseModel):
     type: LedgerEntryType
     amount: Decimal
     invoice_number: str | None
+    # Set on a vendor invoice once it's been marked paid.
+    paid_on: date | None = None
+    payment_entry_id: int | None = None
+
+
+class MarkPaidIn(BaseModel):
+    paid_on: date | None = None  # defaults to today
 
 
 class CompanyOut(BaseModel):

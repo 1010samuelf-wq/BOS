@@ -7,10 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import current_user
-from app.core.errors import not_found
+from app.core.errors import APIError, not_found
 from app.core.permissions import require_section
 from app.database import get_db
-from app.models import Expense, User
+from app.models import Expense, LedgerEntry, User
 from app.models.base import utc_today
 from app.schemas.expense import ExpenseCreate, ExpenseOut, ExpenseUpdate
 from app.services import trash as trash_service
@@ -81,6 +81,11 @@ def delete_expense(
     expense = db.get(Expense, expense_id)
     if expense is None:
         raise not_found(f"Expense {expense_id} not found")
+    # Made by Mark paid on a vendor invoice: deleting it here would leave the
+    # invoice saying "paid" with nothing in Reports. Undo from Bookkeeping.
+    if db.scalar(select(LedgerEntry.id).where(LedgerEntry.expense_id == expense.id)):
+        raise APIError(400, "expense_from_mark_paid",
+                       "This expense came from paying a vendor invoice. Use \"Undo paid\" on the invoice in Bookkeeping.")
     trash_service.record(
         db,
         kind="expense",

@@ -107,9 +107,10 @@ export async function downloadCsv(path: string, filename: string): Promise<void>
 // Multipart file upload (e.g. a product photo picked from disk). Body must be
 // FormData with no explicit Content-Type — the browser sets the multipart
 // boundary itself.
-export async function uploadFile<T>(path: string, file: File): Promise<T> {
+export async function uploadFile<T>(path: string, file: File, fields: Record<string, string> = {}): Promise<T> {
   const form = new FormData();
   form.append("file", file);
+  for (const [k, v] of Object.entries(fields)) form.append(k, v);
   const res = await fetch(`${V1}${path}`, {
     method: "POST",
     headers: { ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },

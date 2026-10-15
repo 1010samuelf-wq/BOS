@@ -24,6 +24,7 @@ import CompanyDetail from "./pages/CompanyDetail";
 import CompanyStatement from "./pages/CompanyStatement";
 import EmailProducts from "./pages/EmailProducts";
 import Flyers from "./pages/Flyers";
+import Scan from "./pages/Scan";
 import NewOrderV2 from "./pages/NewOrderV2";
 import { useOrderFormView } from "./order/useFormView";
 import Trash from "./pages/Trash";
@@ -39,6 +40,9 @@ const NAV = [
   { to: "/customers", label: "Customers", icon: "🧑‍🍳", section: "orders" },
   { to: "/email", label: "Email products", icon: "✉️", section: "orders" },
   { to: "/flyers", label: "Flyers", icon: "🗞", section: "orders" },
+  // Shown with either section: orders scan order forms, bookkeeping scans
+  // vendor invoices. `anyOf` widens the gate; `section` stays the primary.
+  { to: "/scan", label: "Scan a document", icon: "📷", section: "orders", anyOf: ["orders", "bookkeeping"] },
   { to: "/production", label: "Production", icon: "🥐", section: "production" },
   { to: "/deliveries", label: "Deliveries", icon: "🚚", section: "deliveries" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
@@ -56,7 +60,13 @@ const NAV = [
   { to: "/trash", label: "Deleted", icon: "🗑", section: "settings", adminOnly: true },
 ];
 
+function canSee(n: { section: string; anyOf?: string[] }, sections: string[]): boolean {
+  return (n.anyOf ?? [n.section]).some((s) => sections.includes(s));
+}
+
 function firstAllowed(sections: string[]): string {
+  // Primary section only: a page several sections can open (Scan) is never
+  // anyone's landing page.
   const item = NAV.find((n) => sections.includes(n.section) && !n.adminOnly);
   return item ? item.to : "/no-access";
 }
@@ -109,6 +119,15 @@ function ClockControl() {
 }
 
 /** Redirect to the first allowed section if the employee lacks this one. */
+/** Like RequireSection, for a page more than one section may use. */
+function RequireAnySection({ sections, children }: { sections: string[]; children: ReactNode }) {
+  const { user } = useAuth();
+  if (!sections.some((s) => user?.sections.includes(s))) {
+    return <Navigate to={firstAllowed(user?.sections ?? [])} replace />;
+  }
+  return <>{children}</>;
+}
+
 function RequireSection({ section, children }: { section: string; children: ReactNode }) {
   const { user } = useAuth();
   if (!user?.sections.includes(section)) return <Navigate to={firstAllowed(user?.sections ?? [])} replace />;
@@ -141,7 +160,7 @@ function Shell() {
     <div className="app">
       <nav className="sidebar">
         <img src="/logo.png" alt="Just Cake" className="brand-logo" />
-        {NAV.filter((n) => sections.includes(n.section) && (!n.adminOnly || user?.role === "admin")).map((n) => (
+        {NAV.filter((n) => canSee(n, sections) && (!n.adminOnly || user?.role === "admin")).map((n) => (
           <NavLink key={n.to} to={n.to} className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}>
             <span>{n.icon}</span>
             <span>{n.label}</span>
@@ -219,6 +238,7 @@ export default function App() {
         <Route path="/email" element={<RequireSection section="orders"><EmailProducts /></RequireSection>} />
 
         <Route path="/flyers" element={<RequireSection section="orders"><Flyers /></RequireSection>} />
+        <Route path="/scan" element={<RequireAnySection sections={["orders", "bookkeeping"]}><Scan /></RequireAnySection>} />
         <Route path="/trash" element={<RequireAdmin><Trash /></RequireAdmin>} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>

@@ -51,7 +51,10 @@ const METHODS: { key: PaymentMethod; label: string }[] = [
 export default function NewOrder() {
   const location = useLocation();
   const fromInquiry = (location.state as { fromInquiry?: Inquiry } | null)?.fromInquiry ?? null;
-  const [draft, setDraft] = useState<Draft>(() => (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
+  // A scanned order form arrives already turned into a draft (scan/scanDraft.ts).
+  const fromScan = (location.state as { fromScan?: Draft } | null)?.fromScan ?? null;
+  const [draft, setDraft] = useState<Draft>(() =>
+    fromScan ?? (fromInquiry ? draftFromInquiry(fromInquiry) : emptyDraft()));
   const [cardModal, setCardModal] = useState(false);
   const [cardNote, setCardNote] = useState("");
   const [problems, setProblems] = useState<string[]>([]);
@@ -103,6 +106,11 @@ export default function NewOrder() {
         />
       </PageHead>
 
+      {fromScan && (
+        <div className="card" style={{ borderColor: "var(--primary)", background: "var(--bg-accent, #fff8f0)" }}>
+          <strong>Read from a scanned document</strong> — check every line against the paper before submitting.
+        </div>
+      )}
       {fromInquiry && (
         <div className="card" style={{ borderColor: "var(--primary)", background: "var(--bg-accent, #fff8f0)" }}>
           <strong>From a justcakeskosher.com inquiry</strong> — review and edit as needed, then submit like any order.

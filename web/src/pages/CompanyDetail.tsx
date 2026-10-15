@@ -14,6 +14,8 @@ import { ApiRequestError } from "../api/client";
 import {
   addLedgerEntry,
   deleteLedgerEntry,
+  markLedgerPaid,
+  unmarkLedgerPaid,
   getCompany,
   updateCompany,
   updateLedgerEntry,
@@ -69,6 +71,20 @@ export default function CompanyDetail() {
     onSuccess: () => { setEditingId(null); setError(null); invalidate(); },
     onError: onErr,
   });
+  // Paying a vendor invoice. The date defaults to today; Reports counts the
+  // expense on whatever day is picked here.
+  const [payingId, setPayingId] = useState<number | null>(null);
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const markPaid = useMutation({
+    mutationFn: (entryId: number) => markLedgerPaid(companyId, entryId, payDate),
+    onSuccess: () => { setPayingId(null); setError(null); invalidate(); },
+    onError: onErr,
+  });
+  const unmarkPaid = useMutation({
+    mutationFn: (entryId: number) => unmarkLedgerPaid(companyId, entryId),
+    onSuccess: () => { setError(null); invalidate(); },
+    onError: onErr,
+  });
   const removeEntry = useMutation({
     mutationFn: (entryId: number) => deleteLedgerEntry(companyId, entryId),
     onSuccess: () => { setError(null); invalidate(); },
@@ -98,6 +114,8 @@ export default function CompanyDetail() {
 
   const c = q.data!;
   const tone = c.type === "payable" ? "tone-neg" : "tone-ok";
+  // Payment lines that "Mark paid" made — changed only through Undo paid.
+  const linkedPayments = new Set(c.entries.map((x) => x.payment_entry_id).filter((x): x is number => !!x));
 
   function startEdit(e: LedgerEntry) {
     setEditingId(e.id);
@@ -132,7 +150,7 @@ export default function CompanyDetail() {
               onChange={(e) => setCompanyDraft((d) => ({ ...d, type: e.target.value as CompanyType }))}
               style={{ maxWidth: 170 }}
             >
-              <option value="payable">We owe them</option>
+              <option value="payable">Vendor</option>
               <option value="receivable">They owe us</option>
             </select>
             <button
@@ -148,7 +166,7 @@ export default function CompanyDetail() {
           <div>
             <h1 style={{ margin: 0 }}>{c.name}</h1>
             <div className="muted">
-              {c.type === "payable" ? "We owe them" : "They owe us"}
+              {c.type === "payable" ? "Vendor" : "They owe us"}
               <button
                 className="btn neutral sm no-print"
                 style={{ marginLeft: 8 }}
@@ -247,11 +265,41 @@ export default function CompanyDetail() {
                       {e.type === "charge" ? "Charge" : "Payment"}
                     </td>
                     <td className="num">${e.amount}</td>
-                    <td className="muted">{e.invoice_number ?? "—"}</td>
+                    <td className="muted">
+                      {e.invoice_number ?? "—"}
+                      {e.paid_on && (
+                        <span className="paid-badge">Paid {formatDate(new Date(`${e.paid_on}T00:00:00`))}</span>
+                      )}
+                    </td>
                     <td className="no-print">
-                      <div className="row" style={{ gap: 6 }}>
-                        <button className="btn neutral sm" onClick={() => startEdit(e)}>Edit</button>
-                        <button className="btn neutral sm" onClick={() => removeEntry.mutate(e.id)}>Delete</button>
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                        {c.type === "payable" && e.type === "charge" && !e.paid_on && (
+                          payingId === e.id ? (
+                            <>
+                              <input className="input" type="date" value={payDate} style={{ maxWidth: 150 }}
+                                onChange={(ev) => setPayDate(ev.target.value)} aria-label="Paid on" />
+                              <button className="btn primary sm" disabled={!payDate || markPaid.isPending}
+                                onClick={() => markPaid.mutate(e.id)}>Confirm paid</button>
+                              <button className="btn neutral sm" onClick={() => setPayingId(null)}>Cancel</button>
+                            </>
+                          ) : (
+                            <button className="btn primary sm" onClick={() => setPayingId(e.id)}>Mark paid</button>
+                          )
+                        )}
+                        {e.paid_on ? (
+                          <button className="btn neutral sm" disabled={unmarkPaid.isPending}
+                            onClick={() => {
+                              if (window.confirm("Undo this payment? The payment line and its expense go to the Deleted page.")) {
+                                unmarkPaid.mutate(e.id);
+                              }
+                            }}>Undo paid</button>
+                        ) : !linkedPayments.has(e.id) && (
+                          <>
+                            <button className="btn neutral sm" onClick={() => startEdit(e)}>Edit</button>
+                            <button className="btn neutral sm" onClick={() => removeEntry.mutate(e.id)}>Delete</button>
+                          </>
+                        )}
+                        {linkedPayments.has(e.id) && <span className="muted" style={{ fontSize: 12 }}>From "Mark paid"</span>}
                       </div>
                     </td>
                   </tr>

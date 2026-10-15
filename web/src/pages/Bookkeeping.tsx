@@ -44,7 +44,7 @@ export default function Bookkeeping() {
             onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
           <div className="tabs">
             <button className={`tab${type === "payable" ? " active" : ""}`} onClick={() => setType("payable")}>
-              We owe them
+              Vendors
             </button>
             <button className={`tab${type === "receivable" ? " active" : ""}`} onClick={() => setType("receivable")}>
               They owe us
@@ -62,7 +62,7 @@ export default function Bookkeeping() {
         <LoadFailed what="the ledger" onRetry={() => void companies.refetch()} />
       ) : (
         <>
-          <CompanyGroup title="We owe" tone="tone-neg" companies={payable} onOpen={(id) => navigate(`/bookkeeping/${id}`)} />
+          <CompanyGroup title="Vendors" tone="tone-neg" companies={payable} onOpen={(id) => navigate(`/bookkeeping/${id}`)} />
           <CompanyGroup title="Owed to us" tone="tone-ok" companies={receivable} onOpen={(id) => navigate(`/bookkeeping/${id}`)} />
         </>
       )}

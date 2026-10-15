@@ -14,6 +14,8 @@ import type {
   PriceSheet,
   ProductList,
   PublicProduct,
+  ScanKind,
+  ScanResult,
   ProductListImport,
   ProductListRow,
   Deliveries,
@@ -286,6 +288,20 @@ export const updateLedgerEntry = (
 ) => api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "PUT", body });
 export const deleteLedgerEntry = (companyId: number, entryId: number) =>
   api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}`, { method: "DELETE" });
+
+// Pay a vendor invoice: records the payment and an expense (so it shows in
+// Reports on the day paid). Undo takes both back.
+export const markLedgerPaid = (companyId: number, entryId: number, paidOn: string) =>
+  api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}/mark-paid`, {
+    method: "POST", body: { paid_on: paidOn },
+  });
+export const unmarkLedgerPaid = (companyId: number, entryId: number) =>
+  api<CompanyDetail>(`/bookkeeping/companies/${companyId}/entries/${entryId}/unmark-paid`, { method: "POST" });
+
+// ---- scan a document (AI reads a photo/PDF into a draft; nothing is saved) ----
+export const scanOptions = () => api<{ kinds: ScanKind[]; enabled: boolean }>("/scan");
+export const scanDocument = (file: File, hint?: ScanKind) =>
+  uploadFile<ScanResult>("/scan", file, hint ? { hint } : {});
 
 // ---- trash ----
 export const listTrash = (includeRestored = false) =>

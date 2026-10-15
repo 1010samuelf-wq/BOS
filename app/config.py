@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     assistant_model: str = "claude-opus-5"
     assistant_effort: str = "medium"   # low | medium | high | xhigh | max
     assistant_max_tokens: int = 16000
+    # Reading scanned orders and vendor invoices (POST /scan). Separate from the
+    # assistant so either can be tuned without moving the other.
+    scan_model: str = "claude-opus-5-5"
+    scan_effort: str = "medium"        # low | medium | high | xhigh | max
 
     # --- tablet app ---
     # The signed APK staff sideload onto a tablet. Held here rather than baked

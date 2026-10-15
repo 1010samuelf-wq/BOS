@@ -10,6 +10,7 @@ from app.core.permissions import require_section
 from app.database import get_db
 from app.models import User
 from app.schemas.bookkeeping import (
+    MarkPaidIn,
     CompanyCreate,
     CompanyDetailOut,
     CompanyOut,
@@ -103,6 +104,35 @@ def delete_entry(
     user: User = Depends(current_user),
 ):
     company = service.delete_entry(db, company_id, entry_id, user=user)
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+@router.post("/companies/{company_id}/entries/{entry_id}/mark-paid", response_model=CompanyDetailOut)
+def mark_entry_paid(
+    company_id: int,
+    entry_id: int,
+    payload: MarkPaidIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """Pay a vendor invoice: records the payment and an expense for Reports."""
+    company = service.mark_paid(db, company_id, entry_id, payload.paid_on, user)
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+@router.post("/companies/{company_id}/entries/{entry_id}/unmark-paid", response_model=CompanyDetailOut)
+def unmark_entry_paid(
+    company_id: int,
+    entry_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """Undo a Mark paid: the payment and the expense go to the trash."""
+    company = service.unmark_paid(db, company_id, entry_id, user)
     db.commit()
     db.refresh(company)
     return company

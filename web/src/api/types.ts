@@ -57,6 +57,40 @@ export interface InboxPhoto {
   uploaded_by_name: string | null;
   uploaded_at: string;
 }
+export interface ScannedItem {
+  product_id: number | null;
+  product_name: string | null;
+  catalog_price: string | null;
+  written_as: string;
+  quantity: number;
+  unit_price: string;
+  note: string;
+}
+export interface ScannedOrder {
+  customer_name: string;
+  customer_phone: string;
+  needed_for_date: string;
+  needed_for_time: string;
+  fulfillment: "pickup" | "delivery" | "";
+  delivery_address: string;
+  card_message: string;
+  notes: string;
+  items: ScannedItem[];
+}
+export interface ScannedVendorInvoice {
+  vendor_id: number | null;
+  vendor_name: string;
+  invoice_number: string;
+  date: string;
+  total: string;
+}
+export interface ScanResult {
+  kind: "order" | "vendor_invoice" | "unreadable";
+  order: ScannedOrder | null;
+  vendor_invoice: ScannedVendorInvoice | null;
+  warnings: string[];
+}
+export type ScanKind = "order" | "vendor_invoice";
 /** What the public website shows: active AND switched on for the website. */
 export interface PublicProduct {
   id: number;
@@ -423,6 +457,9 @@ export interface LedgerEntry {
   amount: string;
   /** The supplier's invoice number, stored exactly as typed. */
   invoice_number: string | null;
+  /** A vendor invoice marked paid: the day, and the payment line it made. */
+  paid_on?: string | null;
+  payment_entry_id?: number | null;
 }
 export interface Company {
   id: number;

@@ -56,3 +56,13 @@ class LedgerEntry(Base, TimestampMixin):
     # a numeric column would quietly eat.
     invoice_number: Mapped[str | None] = mapped_column(Text)
     logged_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    # A vendor invoice (a charge) marked paid. Paying records two things that
+    # live on: the payment line on this ledger and an Expense, so the money
+    # shows in Reports on the day it left. These point at both, so the invoice
+    # can show "Paid" and an undo can remove exactly what it added.
+    paid_on: Mapped[date | None] = mapped_column(Date)
+    payment_entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("bookkeeping_entries.id", ondelete="SET NULL")
+    )
+    expense_id: Mapped[int | None] = mapped_column(ForeignKey("expenses.id", ondelete="SET NULL"))

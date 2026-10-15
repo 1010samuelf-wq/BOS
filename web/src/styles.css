@@ -1071,3 +1071,31 @@ textarea.input { resize: vertical; font-family: inherit; }
   }
   .flyer-page:last-child { break-after: auto; }
 }
+
+/* Bookkeeping: a vendor invoice that's been paid */
+.paid-badge {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--success);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* Scan a document */
+.scan-file { margin-top: 12px; }
+.scan-file img { max-width: 100%; max-height: 360px; border: 1px solid var(--border); border-radius: 8px; }
+.scan-warnings {
+  background: #fff8e6;
+  border: 1px solid #f0d58a;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.scan-warnings ul { margin: 4px 0 0 18px; padding: 0; }
+.scan-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.scan-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.scan-form label > span { color: var(--muted); }
