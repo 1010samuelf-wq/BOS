@@ -57,6 +57,16 @@ export interface InboxPhoto {
   uploaded_by_name: string | null;
   uploaded_at: string;
 }
+/** What the public website shows: active AND switched on for the website. */
+export interface PublicProduct {
+  id: number;
+  name: string;
+  price: string;
+  category: string | null;
+  photo_url: string | null;
+  /** Cover first. */
+  photos: string[];
+}
 export interface ProductList {
   name: string;
   rows: number;

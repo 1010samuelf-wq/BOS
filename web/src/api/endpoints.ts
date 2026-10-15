@@ -13,6 +13,7 @@ import type {
   PriceImport,
   PriceSheet,
   ProductList,
+  PublicProduct,
   ProductListImport,
   ProductListRow,
   Deliveries,
@@ -223,6 +224,9 @@ export const upsertRecipe = (body: { product_id: number; yield_qty: number; item
   api<Recipe>("/recipes", { method: "POST", body });
 
 // ---- settings (Admin) ----
+// The website's own product feed — flyers use it so they show exactly what the
+// website shows.
+export const listPublicProducts = () => api<PublicProduct[]>("/public/products");
 export const getBusinessProfile = () => api<BusinessProfile>("/settings/business-profile");
 export const updateBusinessProfile = (body: BusinessProfile) =>
   api<BusinessProfile>("/settings/business-profile", { method: "PUT", body });

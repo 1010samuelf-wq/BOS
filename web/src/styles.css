@@ -949,3 +949,125 @@ textarea.input { resize: vertical; font-family: inherit; }
 /* Settings → Products → baker's list: roomy rows for typing on a tablet */
 .list-import td { vertical-align: middle; padding-top: 6px; padding-bottom: 6px; }
 .list-import input[type="checkbox"] { width: 20px; height: 20px; }
+
+/* ---- Flyers ------------------------------------------------------------- */
+/* A flyer page is a Letter sheet (8.5 × 11 in). Everything inside is sized in
+   cqw — a percentage of the page's own width — so the on-screen preview is the
+   printed page scaled down, not a different layout that happens to look close.
+   (1cqw is 0.085in on paper.) */
+.flyer-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
+.flyer-stack { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+.flyer-page {
+  --flyer-brand: #b5622a;
+  --flyer-ink: #2a2018;
+  container-type: inline-size;
+  width: 100%;
+  max-width: 8.5in;
+  aspect-ratio: 8.5 / 11;
+  background: #fff;
+  color: var(--flyer-ink);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  font-family: Georgia, "Times New Roman", serif;
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.flyer-band { height: 1.2cqw; background: var(--flyer-brand); flex-shrink: 0; }
+.flyer-body { flex: 1; display: flex; flex-direction: column; padding: 4.2cqw 5.9cqw 3.6cqw; min-height: 0; }
+.flyer-head { text-align: center; }
+.flyer-logo { height: 9.5cqw; width: auto; }
+.flyer-title { font-size: 4.4cqw; letter-spacing: 0.1cqw; margin: 1cqw 0 0.9cqw; color: var(--flyer-ink); line-height: 1.15; }
+.flyer-rule { width: 8cqw; border-top: 0.25cqw solid var(--flyer-brand); margin: 0 auto; }
+.flyer-pageno { font-family: Arial, sans-serif; font-size: 1.3cqw; color: #8a7365; margin-top: 0.8cqw; }
+.flyer-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-content: start;
+  gap: 2.2cqw 2.6cqw;
+  margin-top: 3.2cqw;
+  min-height: 0;
+}
+.flyer-item { text-align: center; break-inside: avoid; min-width: 0; }
+.flyer-photo {
+  width: 100%;
+  height: 20cqw;
+  object-fit: cover;
+  border-radius: 1.4cqw;
+  display: block;
+}
+/* One or two products: bigger tiles, centred, rather than a lonely corner. */
+.flyer-grid.n1 { grid-template-columns: 44cqw; justify-content: center; }
+.flyer-grid.n1 .flyer-photo { height: 44cqw; }
+.flyer-grid.n2 { grid-template-columns: repeat(2, 36cqw); justify-content: center; }
+.flyer-grid.n2 .flyer-photo { height: 36cqw; }
+.flyer-nophoto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5cqw;
+  background: #fbf0e5;
+}
+.flyer-name {
+  font-size: 1.85cqw;
+  font-weight: bold;
+  line-height: 1.25;
+  margin-top: 0.9cqw;
+  /* Two lines at most, so a long name can't push a row off the sheet. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.flyer-price {
+  display: inline-block;
+  margin-top: 0.6cqw;
+  font-family: Arial, sans-serif;
+  font-size: 1.7cqw;
+  font-weight: bold;
+  color: #fff;
+  background: var(--flyer-brand);
+  padding: 0.35cqw 1.5cqw;
+  border-radius: 999px;
+}
+.flyer-foot {
+  border-top: 0.12cqw solid #ecdfd2;
+  padding-top: 1.3cqw;
+  text-align: center;
+  font-family: Arial, sans-serif;
+}
+.flyer-contact { font-size: 1.6cqw; font-weight: bold; color: var(--flyer-brand); }
+.flyer-contact span + span::before { content: "  ·  "; color: #c9b8a8; }
+.flyer-date { font-size: 1.2cqw; color: #8a7365; margin-top: 0.5cqw; }
+
+/* Flyers print edge to edge on their own named page, so the 18mm margin the
+   statements use is left alone. */
+@page flyer { size: letter; margin: 0; }
+
+@media print {
+  /* The app is one screen tall with its own scrolling area; on paper that
+     clips everything after the first page. Let the document flow instead. */
+  html, body, #root, .app, .main {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  /* Every sheet printed from the Flyers screen is a flyer sheet — set on the
+     whole screen, not just the flyer boxes, or the first sheet takes the
+     default (margined) page and Chrome shrinks the flyer to fit. */
+  .flyers-root, .flyers-root .flyer-stack { page: flyer; }
+  .flyer-stack { display: block; }
+  .flyer-page {
+    page: flyer;
+    width: 8.5in;
+    height: 11in;
+    max-width: none;
+    aspect-ratio: auto;
+    box-shadow: none;
+    break-after: page;
+  }
+  .flyer-page:last-child { break-after: auto; }
+}

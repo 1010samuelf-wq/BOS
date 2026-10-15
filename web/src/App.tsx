@@ -23,6 +23,7 @@ import FeedbackPage from "./pages/FeedbackPage";
 import CompanyDetail from "./pages/CompanyDetail";
 import CompanyStatement from "./pages/CompanyStatement";
 import EmailProducts from "./pages/EmailProducts";
+import Flyers from "./pages/Flyers";
 import NewOrderV2 from "./pages/NewOrderV2";
 import { useOrderFormView } from "./order/useFormView";
 import Trash from "./pages/Trash";
@@ -37,6 +38,7 @@ const NAV = [
   { to: "/inquiries", label: "Inquiries", icon: "📥", section: "orders" },
   { to: "/customers", label: "Customers", icon: "🧑‍🍳", section: "orders" },
   { to: "/email", label: "Email products", icon: "✉️", section: "orders" },
+  { to: "/flyers", label: "Flyers", icon: "🗞", section: "orders" },
   { to: "/production", label: "Production", icon: "🥐", section: "production" },
   { to: "/deliveries", label: "Deliveries", icon: "🚚", section: "deliveries" },
   { to: "/reports", label: "Reports", icon: "📊", section: "reports" },
@@ -215,6 +217,8 @@ export default function App() {
         <Route path="/settings" element={<RequireSection section="settings"><Settings /></RequireSection>} />
         <Route path="/feedback" element={<RequireAdmin><FeedbackPage /></RequireAdmin>} />
         <Route path="/email" element={<RequireSection section="orders"><EmailProducts /></RequireSection>} />
+
+        <Route path="/flyers" element={<RequireSection section="orders"><Flyers /></RequireSection>} />
         <Route path="/trash" element={<RequireAdmin><Trash /></RequireAdmin>} />
         <Route path="*" element={<Navigate to={home} replace />} />
       </Route>
