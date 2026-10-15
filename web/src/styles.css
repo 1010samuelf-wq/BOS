@@ -945,3 +945,7 @@ textarea.input { resize: vertical; font-family: inherit; }
 }
 .inbox-item select { width: 100%; }
 .inbox-filename { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Settings → Products → baker's list: roomy rows for typing on a tablet */
+.list-import td { vertical-align: middle; padding-top: 6px; padding-bottom: 6px; }
+.list-import input[type="checkbox"] { width: 20px; height: 20px; }

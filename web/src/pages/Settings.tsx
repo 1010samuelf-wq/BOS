@@ -15,6 +15,7 @@ import { resolveTab, visibleTabs } from "../settings/tabs";
 import EmployeesHours from "./EmployeesHours";
 import PhotoInbox from "../settings/PhotoInbox";
 import PriceSheetImport from "../settings/PriceSheetImport";
+import ProductListImport from "../settings/ProductListImport";
 
 // Sentinel option value; no real category can collide with it because the
 // backend strips and rejects blank names, and this isn't a plausible one.
@@ -389,6 +390,7 @@ function Products() {
   return (
     <>
       {error && <p className="error">{error}</p>}
+      <ProductListImport />
       <div className="card">
         <h2>Add product</h2>
         <div className="row" style={{ flexWrap: "wrap" }}>

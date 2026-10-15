@@ -57,6 +57,32 @@ export interface InboxPhoto {
   uploaded_by_name: string | null;
   uploaded_at: string;
 }
+export interface ProductList {
+  name: string;
+  rows: number;
+}
+export interface ProductListRow {
+  name: string;
+  baker_name: string;
+  price: string;
+  category: string | null;
+  note: string;
+  include: boolean;
+}
+export interface ProductListChange {
+  action: "add" | "update" | "unchanged" | "skip" | "excluded";
+  name: string;
+  baker_name: string;
+  product_id: number | null;
+  old_name: string | null;
+  old_price: string | null;
+  new_price: string | null;
+  reason: string;
+}
+export interface ProductListImport {
+  applied: boolean;
+  changes: ProductListChange[];
+}
 export interface PriceSheet {
   name: string;
   rows: number;

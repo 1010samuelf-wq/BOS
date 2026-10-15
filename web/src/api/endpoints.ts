@@ -12,6 +12,9 @@ import type {
   InboxPhoto,
   PriceImport,
   PriceSheet,
+  ProductList,
+  ProductListImport,
+  ProductListRow,
   Deliveries,
   AssistantReply,
   Conversation,
@@ -201,6 +204,13 @@ export const createIngredient = (body: {
 }) => api<Ingredient>("/ingredients", { method: "POST", body });
 export const updateIngredient = (id: number, body: Partial<Ingredient>) =>
   api<Ingredient>(`/ingredients/${id}`, { method: "PUT", body });
+// The baker's item list: rows come back edited (nicer names, prices) and are
+// previewed, then saved as products.
+export const listProductLists = () => api<ProductList[]>("/product-lists");
+export const getProductList = (name: string) =>
+  api<ProductListRow[]>(`/product-lists/${encodeURIComponent(name)}`);
+export const importProductList = (rows: ProductListRow[], apply: boolean) =>
+  api<ProductListImport>("/product-lists/import", { method: "POST", body: { rows, apply } });
 // Supplier price sheets shipped with the app: preview, then apply.
 export const listPriceSheets = () => api<PriceSheet[]>("/price-sheets");
 export const importPriceSheet = (name: string, apply: boolean) =>

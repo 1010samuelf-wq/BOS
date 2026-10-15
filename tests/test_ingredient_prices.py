@@ -118,6 +118,9 @@ NAME = "ingredient_prices_2026-10"
 def test_the_bundled_sheet_is_listed(client):
     sheets = client.get("/api/v1/price-sheets").json()
     assert {"name": NAME, "rows": 60} in sheets
+    # Other lists live in the same folder; they must not be offered (or read)
+    # as price sheets.
+    assert all(s["name"].startswith("ingredient_prices_") for s in sheets)
 
 
 def test_preview_through_the_api_writes_nothing(client):

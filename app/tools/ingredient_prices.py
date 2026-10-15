@@ -122,8 +122,10 @@ def read_sheet(path: Path) -> list[Row]:
 
 
 def bundled_sheets() -> list[str]:
-    """Names (file stems) of the sheets shipped in app/tools/data, newest first."""
-    return sorted((p.stem for p in SHEETS_DIR.glob("*.csv")), reverse=True)
+    """Names (file stems) of the price sheets shipped in app/tools/data, newest
+    first. Only ingredient_prices_* — the folder holds other lists too (the
+    product list), and reading one of those as a price sheet would fail."""
+    return sorted((p.stem for p in SHEETS_DIR.glob("ingredient_prices_*.csv")), reverse=True)
 
 
 def bundled_sheet(name: str) -> Path | None:
