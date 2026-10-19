@@ -16,27 +16,27 @@ def test_first_login_pin_setup_then_login(client):
     assert code  # admin gets the one-time code to hand over
 
     # login before PIN is set → 403 pin_not_set
-    r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "9999"})
+    r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "999999"})
     assert r.status_code == 403
     assert r.json()["error"]["code"] == "pin_not_set"
 
     # employee sets their own PIN with the issued code (unauthenticated by design)
     r = client.post(
         "/api/v1/auth/set-pin",
-        json={"user_id": emp["id"], "setup_code": code, "pin": "9999"},
+        json={"user_id": emp["id"], "setup_code": code, "pin": "999999"},
     )
     assert r.status_code == 204
 
     # setting again → 409 (even with a code, since a PIN now exists)
     r = client.post(
         "/api/v1/auth/set-pin",
-        json={"user_id": emp["id"], "setup_code": code, "pin": "0000"},
+        json={"user_id": emp["id"], "setup_code": code, "pin": "000000"},
     )
     assert r.status_code == 409
     assert r.json()["error"]["code"] == "pin_already_set"
 
     # now login works and returns a usable token
-    r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "9999"})
+    r = client.post("/api/v1/auth/login", json={"user_id": emp["id"], "pin": "999999"})
     assert r.status_code == 200
     body = r.json()
     assert body["token_type"] == "bearer"
@@ -91,7 +91,9 @@ def test_roster_is_public_and_minimal(client, anon_client):
     r = anon_client.get("/api/v1/auth/roster")
     assert r.status_code == 200
     entry = next(e for e in r.json() if e["name"] == "roster-bob")
-    assert set(entry.keys()) == {"id", "name", "role"}  # no pin/hash/pin_set
+    # No pin/hash/pin_set, and no real role: "staff" is a constant kept only so
+    # tablets already in the shop, which print the field, don't crash.
+    assert entry == {"id": entry["id"], "name": "roster-bob", "role": "staff"}
 
 
 def test_login_wrong_pin_is_401(client):

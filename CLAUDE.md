@@ -112,6 +112,27 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   automatically on a PIN reset and on setting a new PIN, and on demand via
   `POST /auth/sign-out-everywhere`. A token with no `tv` claim is treated as
   version 0 so deploying the check didn't sign the whole shop out.
+- **PIN login locks the employee row, and counts failures per address.**
+  `auth._find_user` does `SELECT … FOR UPDATE`; without it parallel guesses all
+  read the same failure count and the 5-try lockout is bypassed
+  (`test_sixty_concurrent_wrong_pins_check_at_most_five`, Postgres only — CI
+  runs it). The 5-try lock lives in `login_attempts` per (employee, IP), so a
+  stranger only locks themselves out; `users.failed_login_count` is a 20-try
+  ceiling across all IPs that never blocks an address that has signed in as
+  that employee before. `POST /auth/login` and `/auth/change-pin` also have a
+  per-IP limit (10/min, 50/hour) that refunds right PINs, because the whole
+  shop shares one address.
+- **Admins are not on the public roster, and the roster's `role` is fake.**
+  `/auth/roster` omits admins and sends `role: "staff"` for everyone. The
+  constant exists only because the 1.1.0 tablet bundle calls
+  `roleLabel(e.role)`, which throws on undefined — dropping the key would crash
+  the tablets' login screen. Admins sign in with "Not listed? Sign in with your
+  name" (`LoginIn.name`). Pickers inside the app use the signed-in
+  `/auth/staff`, which includes admins.
+- **Admin and manager PINs are 6+ digits.** A shorter existing PIN is still
+  verified, then refused with `pin_change_required`; `/auth/change-pin` swaps it
+  and returns a session. The error text tells older tablets to use the
+  dashboard, since they can't show the change screen.
 - **React Query must not be allowed to pause.** The dashboard sets
   `networkMode: "always"` in `web/src/main.tsx`; don't remove it. By default
   React Query pauses every query when its `onlineManager` thinks the browser is

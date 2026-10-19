@@ -7,7 +7,8 @@ dashboard is loginable out of the box, then serves the API on :8000. This
 mirrors what the test suite uses; it is NOT for production (use Postgres +
 Alembic + real PINs there — see docker-compose.yml / README).
 
-Dev login: employee "system", PIN 1234.   Docs: http://localhost:8000/docs
+Dev login: "Not listed? Sign in with your name" → "system", PIN 123456.
+(Admins aren't on the public roster, and need 6-digit PINs.)   Docs: http://localhost:8000/docs
 """
 
 import os
@@ -19,7 +20,7 @@ os.environ.setdefault("BOS_DATABASE_URL", f"sqlite:///{_DB_PATH.as_posix()}")
 
 # Dev-only convenience PIN for the seeded admin. Never used in production
 # (dev_server.py isn't the prod entrypoint; real employees set their own PIN).
-_DEV_ADMIN_PIN = "1234"
+_DEV_ADMIN_PIN = "123456"
 
 from sqlalchemy import select  # noqa: E402
 

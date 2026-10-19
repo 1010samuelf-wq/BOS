@@ -39,6 +39,21 @@ class Settings(BaseSettings):
     setup_code_ttl_hours: int = 72
     login_max_attempts: int = 5
     login_lockout_minutes: int = 15
+    # The lockout above counts per employee *and address*. This is the ceiling
+    # across every address, for guessing spread over many IPs; it never blocks
+    # an address that has logged in as that employee within the last
+    # `login_known_device_days`.
+    login_max_attempts_per_employee: int = 20
+    login_known_device_days: int = 60
+    # POST /auth/login and /auth/change-pin, per client IP. Successful logins
+    # are refunded, so a busy shop sharing one address never trips it; only
+    # wrong PINs use it up. 0 disables (the test suite does).
+    login_rate_per_minute: int = 10
+    login_rate_per_hour: int = 50
+    # Admins and managers can see the money and the staff list, so their PINs
+    # are longer. An existing shorter PIN still logs in once, then has to be
+    # changed before a session is issued.
+    privileged_pin_min_length: int = 6
 
     # Browser origins allowed to call the API (the web dashboard). CSV. The
     # tablet app is React Native and not subject to CORS. Set to the deployed

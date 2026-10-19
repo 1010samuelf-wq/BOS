@@ -18,10 +18,16 @@ export interface ApiError {
   error: { code: string; message: string };
 }
 
+/** The public login picker. Admins aren't on it, and it carries no real role
+ *  (the server sends a constant "staff" only for older builds that print it). */
 export interface RosterEntry {
   id: number;
   name: string;
-  role: Role;
+}
+/** Everyone active, admins included — signed-in pickers only. */
+export interface StaffEntry {
+  id: number;
+  name: string;
 }
 
 export interface TokenOut {

@@ -14,6 +14,7 @@ import { useState } from "react";
 import { ApiRequestError } from "../api/client";
 import { addOrderPayment, deleteOrderPayment } from "../api/endpoints";
 import type { Order, PaymentMethod } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 import { withCents } from "./money";
 
 const METHODS: { key: PaymentMethod; label: string }[] = [
@@ -70,6 +71,9 @@ export function PaymentsPanel({
     onError: fail,
   });
 
+  // Removing a payment takes money off the books, so the server only lets a
+  // manager or admin do it; a cashier doesn't get a button that can only fail.
+  const canRemove = useAuth().user?.role !== "cashier";
   const remove = useMutation({
     mutationFn: (paymentId: number) => deleteOrderPayment(order.id, paymentId),
     onSuccess: settled,
@@ -119,7 +123,7 @@ export function PaymentsPanel({
                 <td>{p.method === "etransfer" ? "E-transfer" : p.method ?? "—"}</td>
                 <td className="muted" style={{ fontSize: 12 }}>{p.note ?? ""}</td>
                 <td>
-                  <button
+                  {canRemove && <button
                     className="btn neutral sm"
                     disabled={remove.isPending}
                     title="Remove this payment — it goes to the Deleted page"
@@ -137,7 +141,7 @@ export function PaymentsPanel({
                     }}
                   >
                     Remove
-                  </button>
+                  </button>}
                 </td>
               </tr>
             ))}

@@ -285,6 +285,16 @@ def update_order(
 
     data = payload.model_dump(exclude_unset=True)
 
+    # Cancelling is not a field edit: `cancel_order` puts the stock back and
+    # stamps who cancelled. Setting the status here would skip both and leave
+    # the bakery's counts short for an order nobody is going to collect. The
+    # pipeline statuses stay editable — the Progress buttons use this path.
+    if data.get("status") == OrderStatus.cancelled:
+        raise bad_request(
+            "Use Cancel order to cancel — it puts the stock back.",
+            code="use_cancel",
+        )
+
     # Item edits re-sync stock: reverse the prior sale deltas, deduct the new
     # set. Keeps stock consistent with "orders are always editable" (spec §7),
     # and stock going negative is fine (spec §1).
@@ -316,6 +326,12 @@ def update_order(
         # Recompute total keeping current line subtotal.
         subtotal = sum((i.unit_price * i.quantity for i in order.items), Decimal(0))
         order.total = subtotal + (order.delivery_price or Decimal(0))
+
+    # The total may have moved under money already taken. A settled $50 order
+    # edited to $100 owes $50 again, and has to read "unpaid" so it shows on
+    # the unpaid list and mark_paid will take the rest.
+    db.flush()
+    _sync_paid_status(order, user, None)
 
     order.updated_at = utcnow()
     return order
@@ -493,6 +509,7 @@ def record_payment(
 
 def delete_payment(db: Session, order_id: int, payment_id: int, user: User) -> Order:
     """Remove a mis-keyed payment. Snapshotted to the trash first."""
+    from app.services import notifications as notification_service
     from app.services import trash as trash_service
 
     order = _load(db, order_id, lock=True)
@@ -510,6 +527,18 @@ def delete_payment(db: Session, order_id: int, payment_id: int, user: User) -> O
             ["id", "order_id", "amount", "method", "received_on", "note", "taken_by"],
         ),
         user=user,
+    )
+    # Taking money off the books is the step a dishonest edit would need, so
+    # it is never silent: everyone watching the feed sees who removed what.
+    notification_service.create(
+        db,
+        type="payment_deleted",
+        message=(
+            f"{user.name} removed a ${payment.amount} payment "
+            f"(received {payment.received_on:%b %d}) from order #{order.id} "
+            f"({order.client_name})."
+        ),
+        related_order_id=order.id,
     )
     order.payments.remove(payment)
     db.flush()

@@ -15,14 +15,14 @@ import { ApiRequestError } from "../../src/api/client";
 import {
   createTimeEntry,
   deleteTimeEntry,
-  fetchRoster,
+  fetchStaff,
   getHours,
   listEmployees,
   listTimeEntries,
   markTimePaid,
   updateTimeEntry,
 } from "../../src/api/endpoints";
-import type { Employee, RosterEntry, TimeEntry } from "../../src/api/types";
+import type { Employee, StaffEntry, TimeEntry } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -124,9 +124,9 @@ export default function TimeScreen() {
   const sunday = new Date(monday); sunday.setDate(sunday.getDate() + 6);
 
   const employeesQ = useQuery({ queryKey: ["employees"], queryFn: () => listEmployees(true), enabled: isAdmin });
-  const rosterQ = useQuery({ queryKey: ["roster"], queryFn: fetchRoster, enabled: isManager && !isAdmin });
+  const rosterQ = useQuery({ queryKey: ["staff"], queryFn: fetchStaff, enabled: isManager && !isAdmin });
   const employeesData: Employee[] = employeesQ.data ?? [];
-  const rosterData: RosterEntry[] = rosterQ.data ?? [];
+  const rosterData: StaffEntry[] = rosterQ.data ?? [];
   const people = isAdmin
     ? employeesData.map((e) => ({ id: e.id, name: e.name, rate: Number(e.hourly_rate) }))
     : rosterData.map((r) => ({ id: r.id, name: r.name, rate: null as number | null }));

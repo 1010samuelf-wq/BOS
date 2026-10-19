@@ -24,7 +24,7 @@ def _replay(client, ops, device_id="tablet-1-test"):
 
 
 def _admin_id(client):
-    return client.get("/api/v1/auth/roster").json()[0]["id"]
+    return client.get("/api/v1/auth/staff").json()[0]["id"]
 
 
 def test_create_order_applies_and_dedups_on_replay(client, make_product):

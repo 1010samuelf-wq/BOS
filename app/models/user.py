@@ -13,7 +13,7 @@ from decimal import Decimal
 from sqlalchemy import JSON
 from sqlalchemy import DateTime
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import Integer, Numeric, String
+from sqlalchemy import ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -61,3 +61,31 @@ class User(Base, TimestampMixin):
         default=0, server_default="0", nullable=False
     )
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LoginAttempt(Base):
+    """Failed-PIN bookkeeping per employee *per address*.
+
+    The lockout used to live on the employee alone, so anyone who could reach
+    the login page could type five wrong PINs for a name on the roster and keep
+    that person locked out all day — from the other side of the world. Counting
+    per (employee, IP) means a stranger only locks *themselves* out; the shop's
+    own connection keeps working.
+
+    `last_success_at` marks an address as a known device for that employee. The
+    employee-wide ceiling (`User.failed_login_count`, for guessing spread over
+    many addresses) never blocks a known device, so a distributed attacker can't
+    lock staff out from the shop either.
+
+    Rows are reset in place, never deleted.
+    """
+
+    __tablename__ = "login_attempts"
+    __table_args__ = (UniqueConstraint("user_id", "ip", name="uq_login_attempts_user_ip"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    ip: Mapped[str] = mapped_column(String(64), nullable=False)
+    failed_count: Mapped[int] = mapped_column(default=0, server_default="0", nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

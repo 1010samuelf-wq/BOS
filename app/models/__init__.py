@@ -38,7 +38,7 @@ from app.models.settings import AppSettings
 from app.models.stock import StockAdjustment, StockLevel
 from app.models.sync import SyncedOperation
 from app.models.trash import TrashItem
-from app.models.user import User
+from app.models.user import LoginAttempt, User
 from app.models.misc import (
     DailyReport,
     Expense,
@@ -84,6 +84,7 @@ __all__ = [
     "SyncedOperation",
     "TrashItem",
     "User",
+    "LoginAttempt",
     "DailyReport",
     "Expense",
     "Inquiry",

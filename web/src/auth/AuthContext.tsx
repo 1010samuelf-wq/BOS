@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 
 import { setAuthToken, setUnauthorizedHandler } from "../api/client";
 import * as api from "../api/endpoints";
-import type { Role } from "../api/types";
+import type { Role, TokenOut } from "../api/types";
 
 interface SessionUser {
   id: number;
@@ -17,8 +17,9 @@ interface SessionUser {
 interface AuthValue {
   user: SessionUser | null;
   ready: boolean;
-  login: (userId: number, pin: string) => Promise<void>;
-  setupPin: (userId: number, pin: string, setupCode: string) => Promise<void>;
+  login: (who: api.Who, pin: string) => Promise<void>;
+  changePin: (who: api.Who, currentPin: string, newPin: string) => Promise<void>;
+  setupPin: (who: api.Who, pin: string, setupCode: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -39,18 +40,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
-  const login = useCallback(async (userId: number, pin: string) => {
-    const out = await api.login(userId, pin);
+  const start = useCallback((out: TokenOut) => {
     const s: SessionUser = { id: out.user_id, name: out.name, role: out.role, token: out.access_token, sections: out.sections };
     setAuthToken(s.token);
     setUser(s);
     localStorage.setItem(KEY, JSON.stringify(s));
   }, []);
 
+  const login = useCallback(
+    async (who: api.Who, pin: string) => start(await api.login(who, pin)),
+    [start],
+  );
+
+  // An admin's or manager's PIN that's too short: swapping it signs them in.
+  const changePin = useCallback(
+    async (who: api.Who, currentPin: string, newPin: string) =>
+      start(await api.changePin(who, currentPin, newPin)),
+    [start],
+  );
+
   const setupPin = useCallback(
-    async (userId: number, pin: string, setupCode: string) => {
-      await api.setPin(userId, pin, setupCode); // first-login setup, then straight in
-      await login(userId, pin);
+    async (who: api.Who, pin: string, setupCode: string) => {
+      await api.setPin(who, pin, setupCode); // first-login setup, then straight in
+      await login(who, pin);
     },
     [login],
   );
@@ -69,8 +81,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logout]);
 
   const value = useMemo(
-    () => ({ user, ready, login, setupPin, logout }),
-    [user, ready, login, setupPin, logout],
+    () => ({ user, ready, login, changePin, setupPin, logout }),
+    [user, ready, login, changePin, setupPin, logout],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

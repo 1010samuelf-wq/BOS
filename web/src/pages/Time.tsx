@@ -11,7 +11,7 @@ import { ApiRequestError } from "../api/client";
 import {
   createTimeEntry,
   deleteTimeEntry,
-  fetchRoster,
+  fetchStaff,
   listEmployees,
   listTimeEntries,
   markTimePaid,
@@ -83,9 +83,9 @@ export default function Time() {
   const monday = useMemo(() => weekMonday(offset), [offset]);
   const sunday = useMemo(() => { const d = new Date(monday); d.setDate(d.getDate() + 6); return d; }, [monday]);
 
-  // People to choose from + their pay rates (admins get rates; managers use the roster).
+  // People to choose from + their pay rates (admins get rates; managers use the staff list).
   const employeesQ = useQuery({ queryKey: ["employees"], queryFn: () => listEmployees(true), enabled: isAdmin });
-  const rosterQ = useQuery({ queryKey: ["roster"], queryFn: fetchRoster, enabled: isManager && !isAdmin });
+  const rosterQ = useQuery({ queryKey: ["staff"], queryFn: fetchStaff, enabled: isManager && !isAdmin });
   const people = isAdmin
     ? (employeesQ.data ?? []).map((e) => ({ id: e.id, name: e.name, rate: Number(e.hourly_rate) }))
     : (rosterQ.data ?? []).map((r) => ({ id: r.id, name: r.name, rate: null as number | null }));

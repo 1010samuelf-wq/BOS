@@ -1,11 +1,11 @@
 // Tasks (§2J/§11): Admin/Manager create + all-staff table with overdue red;
-// checkbox toggles done. Assignee picker uses the public roster.
+// checkbox toggles done. Assignee picker uses the staff list.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { ApiRequestError } from "../api/client";
-import { createTask, fetchRoster, listTasks, toggleTaskDone } from "../api/endpoints";
+import { createTask, fetchStaff, listTasks, toggleTaskDone } from "../api/endpoints";
 import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 import { formatDate } from "../order/dates";
 
@@ -29,7 +29,7 @@ export default function Tasks() {
   const filtersActive = fEmployee !== "" || fStatus !== "" || fDate !== "";
 
   const tasks = useQuery({ queryKey: ["tasks", "all", filterParams], queryFn: () => listTasks(filterParams) });
-  const roster = useQuery({ queryKey: ["roster"], queryFn: fetchRoster });
+  const roster = useQuery({ queryKey: ["staff"], queryFn: fetchStaff });
   const nameOf = useMemo(() => {
     const m = new Map<number, string>();
     (roster.data ?? []).forEach((r) => m.set(r.id, r.name));

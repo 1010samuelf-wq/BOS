@@ -294,3 +294,69 @@ def test_a_cancelled_order_stops_counting_as_revenue(client, make_product):
     client.post(f"/api/v1/orders/{order['id']}/cancel", json={"reverse_stock": False})
 
     assert Decimal(_report(client, date.today())["revenue"]) == Decimal("0.00")
+
+
+# ---------------------------------------------------------------------------
+# editing a settled order
+# ---------------------------------------------------------------------------
+def test_adding_an_item_to_a_paid_order_makes_it_owe_again(client, make_product):
+    """A $7 order paid in cash, then a $5 cake added: $5 is owed. Before the
+    fix the order kept reading "paid", never showed on the unpaid list, and
+    mark_paid refused it — so the extra $5 could not be collected at all."""
+    p = make_product(price="3.50")
+    cake = make_product(name="Cake", price="5.00")
+    order = client.post("/api/v1/orders", json=order_payload(p["id"], "k-edit-paid")).json()
+    assert order["paid_status"] == "paid"
+    assert Decimal(order["balance_due"]) == Decimal("0")
+
+    r = client.put(
+        f"/api/v1/orders/{order['id']}",
+        json={"items": [
+            {"product_id": p["id"], "quantity": 2},
+            {"product_id": cake["id"], "quantity": 1},
+        ]},
+    )
+    assert r.status_code == 200, r.text
+    edited = r.json()
+    assert edited["paid_status"] == "unpaid"
+    assert edited["paid_at"] is None
+    assert Decimal(edited["total"]) == Decimal("12.00")
+    assert Decimal(edited["amount_paid"]) == Decimal("7.00")
+    assert Decimal(edited["balance_due"]) == Decimal("5.00")
+
+    unpaid = client.get("/api/v1/orders", params={"paid_status": "unpaid"}).json()
+    assert order["id"] in [o["id"] for o in unpaid["items"]]
+
+    r = client.post(f"/api/v1/orders/{order['id']}/mark-paid", json={"payment_method": "cash"})
+    assert r.status_code == 200, r.text
+    settled = r.json()
+    assert settled["paid_status"] == "paid"
+    assert Decimal(settled["balance_due"]) == Decimal("0")
+    # Only the missing $5 was taken, not the whole $12 again.
+    assert sorted(Decimal(x["amount"]) for x in settled["payments"]) == [
+        Decimal("5.00"), Decimal("7.00"),
+    ]
+
+
+def test_editing_a_paid_order_without_raising_the_total_keeps_it_paid(client, make_product):
+    p = make_product(price="3.50")
+    order = client.post("/api/v1/orders", json=order_payload(p["id"], "k-edit-paid-2")).json()
+    r = client.put(f"/api/v1/orders/{order['id']}", json={"client_name": "Someone Else"})
+    assert r.status_code == 200, r.text
+    assert r.json()["paid_status"] == "paid"
+    assert r.json()["paid_at"] == order["paid_at"]
+
+
+def test_cancelling_through_an_edit_is_refused(client, make_product):
+    """Cancelling has to go through the cancel flow, which puts stock back."""
+    p = make_product(price="3.50")
+    order = client.post("/api/v1/orders", json=order_payload(p["id"], "k-edit-cancel")).json()
+    r = client.put(f"/api/v1/orders/{order['id']}", json={"status": "cancelled"})
+    assert r.status_code == 400, r.text
+    assert r.json()["error"]["code"] == "use_cancel"
+    assert _get(client, order["id"])["status"] == "pending"
+
+    # The progress buttons still move an order along the pipeline.
+    r = client.put(f"/api/v1/orders/{order['id']}", json={"status": "ready"})
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ready"

@@ -3,6 +3,11 @@
 // hardening), so first-login is discovered reactively: a normal login attempt
 // that comes back `pin_not_set` flips the screen into setup mode, where the
 // employee enters the one-time code an admin gave them plus a new PIN.
+//
+// Admins aren't on the public roster (it told anyone which accounts were worth
+// guessing): they tap "Not listed?" and type their name. An admin's or
+// manager's PIN shorter than 6 digits still checks out once but comes back
+// `pin_change_required`, which goes straight to choosing a new one.
 
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -18,9 +23,7 @@ import {
 } from "react-native";
 
 import { ApiRequestError } from "../src/api/client";
-import { fetchRoster } from "../src/api/endpoints";
-import type { RosterEntry } from "../src/api/types";
-import { roleLabel } from "../src/api/types";
+import { fetchRoster, type Who } from "../src/api/endpoints";
 import { useAuth } from "../src/auth/AuthContext";
 import { colors, radius, spacing } from "../src/components/theme";
 
@@ -28,6 +31,12 @@ const MIN_PIN = 6;
 const MAX_PIN = 8;
 
 type Phase = "enter-pin" | "need-setup-code" | "choose-pin" | "confirm-pin";
+
+/** The person signing in: picked from the roster, or typed by name. */
+interface Person {
+  who: Who;
+  label: string;
+}
 
 function PinPad({
   onDigit,
@@ -73,9 +82,13 @@ function Dots({ length, max }: { length: number; max: number }) {
 
 export default function Login() {
   const roster = useQuery({ queryKey: ["roster"], queryFn: fetchRoster });
-  const { login, setupPin } = useAuth();
+  const { login, changePin, setupPin } = useAuth();
 
-  const [selected, setSelected] = useState<RosterEntry | null>(null);
+  const [selected, setSelected] = useState<Person | null>(null);
+  const [byName, setByName] = useState(false);
+  const [typedName, setTypedName] = useState("");
+  // Set when the PIN was right but too short: the new PIN replaces it.
+  const [oldPin, setOldPin] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("enter-pin");
   const [pin, setPin] = useState("");
   const [firstPin, setFirstPin] = useState("");
@@ -85,6 +98,9 @@ export default function Login() {
 
   const reset = () => {
     setSelected(null);
+    setByName(false);
+    setTypedName("");
+    setOldPin(null);
     setPhase("enter-pin");
     setPin("");
     setFirstPin("");
@@ -111,11 +127,15 @@ export default function Login() {
 
     if (phase === "enter-pin") {
       try {
-        await login(selected.id, pin);
+        await login(selected.who, pin);
         router.replace("/(main)/orders");
       } catch (e) {
         if (e instanceof ApiRequestError && e.code === "pin_not_set") {
           setPhase("need-setup-code");
+          setPin("");
+        } else if (e instanceof ApiRequestError && e.code === "pin_change_required") {
+          setOldPin(pin);
+          setPhase("choose-pin");
           setPin("");
         } else {
           setError(e instanceof ApiRequestError ? e.message : "Could not reach the server.");
@@ -145,7 +165,8 @@ export default function Login() {
         return;
       }
       try {
-        await setupPin(selected.id, pin, setupCode.trim().toUpperCase());
+        if (oldPin !== null) await changePin(selected.who, oldPin, pin);
+        else await setupPin(selected.who, pin, setupCode.trim().toUpperCase());
         router.replace("/(main)/orders");
       } catch (e) {
         setError(e instanceof ApiRequestError ? e.message : "Could not reach the server.");
@@ -160,17 +181,42 @@ export default function Login() {
 
   const subtitle = (() => {
     if (!selected) return "";
-    if (phase === "need-setup-code") return `Welcome ${selected.name} — enter your setup code`;
+    if (phase === "need-setup-code") return `Welcome ${selected.label} — enter your setup code`;
+    if (phase === "choose-pin" && oldPin !== null) {
+      return `Your PIN needs to be ${MIN_PIN}-${MAX_PIN} digits now — choose a new one`;
+    }
     if (phase === "choose-pin") return `Choose a new PIN (${MIN_PIN}-${MAX_PIN} digits)`;
     if (phase === "confirm-pin") return "Confirm your new PIN";
-    return `Hi ${selected.name} — enter your PIN`;
+    return `Hi ${selected.label} — enter your PIN`;
   })();
 
   return (
     <View style={styles.screen}>
       <Text style={styles.title}>Bakery Operations</Text>
 
-      {!selected ? (
+      {!selected && byName ? (
+        <View style={styles.card}>
+          <Text style={styles.subtitle}>Type your name as the shop has it</Text>
+          <TextInput
+            style={styles.codeInput}
+            placeholder="Your name"
+            value={typedName}
+            onChangeText={setTypedName}
+            autoCorrect={false}
+            autoFocus
+          />
+          <Pressable
+            style={[styles.continueBtn, !typedName.trim() && styles.continueBtnDisabled]}
+            disabled={!typedName.trim()}
+            onPress={() => setSelected({ who: { name: typedName.trim() }, label: typedName.trim() })}
+          >
+            <Text style={styles.continueText}>Continue</Text>
+          </Pressable>
+          <Pressable onPress={reset}>
+            <Text style={styles.back}>← back to roster</Text>
+          </Pressable>
+        </View>
+      ) : !selected ? (
         <View style={styles.card}>
           <Text style={styles.subtitle}>Who's working?</Text>
           {roster.isLoading && <ActivityIndicator />}
@@ -184,12 +230,17 @@ export default function Login() {
             columnWrapperStyle={{ gap: spacing.m }}
             contentContainerStyle={{ gap: spacing.m }}
             renderItem={({ item }) => (
-              <Pressable style={styles.person} onPress={() => setSelected(item)}>
+              <Pressable
+                style={styles.person}
+                onPress={() => setSelected({ who: { user_id: item.id }, label: item.name })}
+              >
                 <Text style={styles.personName}>{item.name}</Text>
-                <Text style={styles.personRole}>{roleLabel(item.role)}</Text>
               </Pressable>
             )}
           />
+          <Pressable onPress={() => setByName(true)}>
+            <Text style={styles.back}>Not listed? Sign in with your name</Text>
+          </Pressable>
         </View>
       ) : (
         <View style={styles.card}>
@@ -266,7 +317,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   personName: { fontSize: 17, fontWeight: "600", color: colors.text },
-  personRole: { color: colors.textMuted, marginTop: 2 },
   dots: { flexDirection: "row", justifyContent: "center", gap: spacing.s, flexWrap: "wrap" },
   dot: {
     width: 14,

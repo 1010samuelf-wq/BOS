@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import current_user, require_admin
+from app.core.auth import current_user, require_admin, require_manager
 from app.core.pagination import Page, PageParams
 from app.core.permissions import require_section
 from app.core.realtime import broadcaster
@@ -211,11 +211,14 @@ def remove_payment(
     payment_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_section("orders")),
+    _: User = Depends(require_manager),
 ):
     """Undo a mis-keyed payment. Snapshotted to the Deleted page first.
 
     This can take an order back to unpaid, which is the point — a payment
-    entered against the wrong order has to come off this one's takings.
+    entered against the wrong order has to come off this one's takings. It is
+    also the one action that makes money already taken disappear from the
+    reports, so it is manager-only and always announced (see delete_payment).
     """
     order = order_service.delete_payment(db, order_id, payment_id, user)
     db.commit()

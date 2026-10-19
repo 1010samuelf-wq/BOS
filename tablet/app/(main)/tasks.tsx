@@ -1,6 +1,6 @@
 // Tasks (§2J/§11): everyone sees their own tasks with a done checkbox (greyed
 // when done); Admin/Manager also get a create form + an all-staff table with
-// overdue rows flagged red. Assignee picker uses the public roster so managers
+// overdue rows flagged red. Assignee picker uses the staff list so managers
 // (who can't call the Admin-only /employees) can still assign.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,8 +8,8 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { ApiRequestError } from "../../src/api/client";
-import { createTask, fetchRoster, listTasks } from "../../src/api/endpoints";
-import type { RosterEntry, Task } from "../../src/api/types";
+import { createTask, fetchStaff, listTasks } from "../../src/api/endpoints";
+import type { StaffEntry, Task } from "../../src/api/types";
 import { useAuth } from "../../src/auth/AuthContext";
 import { DateField, TimeField } from "../../src/components/DateTimeField";
 import { Button, Card, ErrorText, Loading, ScreenHeader } from "../../src/components/ui";
@@ -61,10 +61,10 @@ export default function TasksScreen() {
     queryFn: () => listTasks(allFilters),
     enabled: isManager,
   });
-  const roster = useQuery({ queryKey: ["roster"], queryFn: fetchRoster, enabled: isManager });
+  const roster = useQuery({ queryKey: ["staff"], queryFn: fetchStaff, enabled: isManager });
   const nameOf = useMemo(() => {
     const m = new Map<number, string>();
-    (roster.data ?? []).forEach((r: RosterEntry) => m.set(r.id, r.name));
+    (roster.data ?? []).forEach((r: StaffEntry) => m.set(r.id, r.name));
     return (id: number) => m.get(id) ?? `#${id}`;
   }, [roster.data]);
 
@@ -134,7 +134,7 @@ export default function TasksScreen() {
               />
               <Text style={styles.label}>Assign to</Text>
               <View style={styles.assignees}>
-                {(roster.data ?? []).map((r: RosterEntry) => (
+                {(roster.data ?? []).map((r: StaffEntry) => (
                   <Pressable
                     key={r.id}
                     style={[styles.pill, assignee === r.id && styles.pillOn]}
@@ -165,7 +165,7 @@ export default function TasksScreen() {
                 >
                   <Text style={fEmployee === null ? styles.pillTextOn : styles.pillText}>Everyone</Text>
                 </Pressable>
-                {(roster.data ?? []).map((r: RosterEntry) => (
+                {(roster.data ?? []).map((r: StaffEntry) => (
                   <Pressable
                     key={r.id}
                     style={[styles.pill, fEmployee === r.id && styles.pillOn]}

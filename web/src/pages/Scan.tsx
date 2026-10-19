@@ -271,9 +271,9 @@ function TimesheetReview({ read, warnings, onAgain }: {
   read: ScannedTimesheet; warnings: string[]; onAgain: () => void;
 }) {
   const client = useQueryClient();
-  // The login roster: every active employee's name, readable by managers too
+  // Every active employee's name, readable by managers too
   // (the full staff list is admin-only).
-  const roster = useQuery({ queryKey: ["roster"], queryFn: api.fetchRoster });
+  const roster = useQuery({ queryKey: ["staff"], queryFn: api.fetchStaff });
   const [employeeId, setEmployeeId] = useState<string>(read.employee_id ? String(read.employee_id) : "");
   const [rows, setRows] = useState<ShiftRow[]>(() => read.shifts.map((sh) => ({ ...sh, include: true })));
   const [saved, setSaved] = useState<number | null>(null);

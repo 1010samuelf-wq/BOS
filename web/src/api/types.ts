@@ -25,10 +25,15 @@ export interface TokenOut {
   role: Role;
   sections: string[]; // effective sections this employee can access
 }
+/** The public login picker. Admins aren't on it, and it carries no real role. */
 export interface RosterEntry {
   id: number;
   name: string;
-  role: Role;
+}
+/** Everyone active, admins included — signed-in pickers only. */
+export interface StaffEntry {
+  id: number;
+  name: string;
 }
 
 export interface ProductPhoto {
