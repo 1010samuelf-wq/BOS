@@ -1,0 +1,198 @@
+# Nightly off-site database backup, plus a disk-space check on the Postgres
+# volume. See docs/BACKUPS.md for the setup (secrets, bucket) and for restoring.
+#
+# Why off-site: Fly's daily volume snapshots live on Fly. If the account, the
+# org or the region has a bad day, those go with it. This copy sits in a bucket
+# at a different company.
+#
+# THIS REPOSITORY IS PUBLIC, and so are these run logs. Nothing here may print
+# the dump, a row, a connection string or a password, and the dump must never be
+# uploaded as a GitHub artifact — anyone could download it.
+#
+# Failing loudly: a failed scheduled run emails the person who last changed the
+# `cron` line below (GitHub's rule), provided their notification settings send
+# Actions failures by email. docs/BACKUPS.md says which setting.
+
+name: Backup
+
+on:
+  schedule:
+    # 07:17 UTC = 3:17am in Toronto (2:17am in winter): the shop is closed.
+    # Off the hour because GitHub delays jobs queued at :00.
+    - cron: "17 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DB_APP: just-cake-bakery-db
+  DB_NAME: just_cake_bakery
+  DB_USER: bos_backup
+  KEEP_DAYS: "30"
+  # Never prune below this many copies, whatever their age — if backups stop
+  # for a month, the last good ones must still be there.
+  KEEP_AT_LEAST: "7"
+  DISK_ALERT_PERCENT: "80"
+
+jobs:
+  backup:
+    name: Dump production to off-site storage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      PGPASSWORD: ${{ secrets.BACKUP_PG_PASSWORD }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.BACKUP_S3_REGION }}
+      S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
+      S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+    steps:
+      - name: Check every secret is set
+        run: |
+          missing=""
+          for name in FLY_API_TOKEN PGPASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
+                      AWS_DEFAULT_REGION S3_ENDPOINT S3_BUCKET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Backup secrets not set:$missing (see docs/BACKUPS.md)"
+            exit 1
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # pg_dump must be at least as new as the server. 17 reads every server
+      # version Fly runs, so pin the client there rather than trusting whatever
+      # the runner image ships this month.
+      - name: Install pg_dump 17
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common >/dev/null
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-17 >/dev/null
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Open a tunnel to the database
+        run: |
+          flyctl proxy 15432:5432 -a "$DB_APP" > proxy.log 2>&1 &
+          for _ in $(seq 1 30); do
+            pg_isready -h 127.0.0.1 -p 15432 -q && exit 0
+            sleep 2
+          done
+          echo "::error::Could not reach $DB_APP through flyctl proxy"
+          cat proxy.log
+          exit 1
+
+      - name: Dump
+        run: |
+          stamp="$(date -u +%Y-%m-%dT%H%MZ)"
+          file="${DB_NAME}-${stamp}.dump"
+          # Custom format is compressed and lets pg_restore pick single tables.
+          pg_dump -h 127.0.0.1 -p 15432 -U "$DB_USER" -d "$DB_NAME" \
+            --format=custom --compress=9 --no-owner --no-privileges \
+            --file="$file"
+          echo "FILE=$file" >> "$GITHUB_ENV"
+
+      # A dump that "succeeds" but is empty is the failure that hurts, because
+      # nobody looks until they need it. Prove it has the shop's tables and data.
+      - name: Check the dump is real
+        run: |
+          size=$(stat -c %s "$FILE")
+          tables=$(pg_restore --list "$FILE" | grep -c " TABLE DATA public " || true)
+          echo "Dump: $FILE, $size bytes, $tables tables with data"
+          for t in orders order_items order_payments users products; do
+            if ! pg_restore --list "$FILE" | grep -q " TABLE DATA public $t "; then
+              echo "::error::Dump has no data section for table '$t'"
+              exit 1
+            fi
+          done
+          if [ "$size" -lt 20000 ] || [ "$tables" -lt 15 ]; then
+            echo "::error::Dump looks too small ($size bytes, $tables tables)"
+            exit 1
+          fi
+          echo "### Backup $FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo "$size bytes, $tables tables with data" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload
+        run: |
+          aws s3 cp "$FILE" "s3://$S3_BUCKET/postgres/$FILE" \
+            --endpoint-url "$S3_ENDPOINT" --only-show-errors
+          # Read it back: an upload that didn't land is not a backup.
+          remote=$(aws s3api head-object --bucket "$S3_BUCKET" --key "postgres/$FILE" \
+            --endpoint-url "$S3_ENDPOINT" --query ContentLength --output text)
+          if [ "$remote" != "$(stat -c %s "$FILE")" ]; then
+            echo "::error::Uploaded size $remote doesn't match the local dump"
+            exit 1
+          fi
+          echo "Uploaded to postgres/$FILE" >> "$GITHUB_STEP_SUMMARY"
+
+      # Only after today's copy is safely up. Keyed on the date in the file
+      # name, not the bucket's timestamps, and never below KEEP_AT_LEAST.
+      - name: Delete copies older than 30 days
+        run: |
+          aws s3api list-objects-v2 --bucket "$S3_BUCKET" --prefix postgres/ \
+            --endpoint-url "$S3_ENDPOINT" --output json > listing.json
+          python3 - <<'PY' > to_delete.txt
+          import json, os, re
+          from datetime import datetime, timedelta, timezone
+
+          raw = open("listing.json").read().strip()
+          objects = json.loads(raw).get("Contents", []) if raw else []
+          dated = []
+          for o in objects:
+              m = re.search(r"-(\d{4}-\d{2}-\d{2})T\d{4}Z\.dump$", o["Key"])
+              if m:
+                  day = datetime.strptime(m.group(1), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                  dated.append((day, o["Key"]))
+          dated.sort(reverse=True)
+          keep_at_least = int(os.environ["KEEP_AT_LEAST"])
+          cutoff = datetime.now(timezone.utc) - timedelta(days=int(os.environ["KEEP_DAYS"]))
+          for day, key in dated[keep_at_least:]:
+              if day < cutoff:
+                  print(key)
+          PY
+          count=0
+          while read -r key; do
+            [ -n "$key" ] || continue
+            aws s3 rm "s3://$S3_BUCKET/$key" --endpoint-url "$S3_ENDPOINT" --only-show-errors
+            count=$((count + 1))
+          done < to_delete.txt
+          echo "Deleted $count copies older than $KEEP_DAYS days" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the local dump
+        if: always()
+        run: rm -f ./*.dump listing.json to_delete.txt
+
+  disk:
+    name: Postgres volume under 80%
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Check free space
+        run: |
+          # /data is where Fly Postgres keeps the database and its WAL. A full
+          # volume stops every write — no orders, no clock-ins — so this warns
+          # well before that, while there's still time to extend it.
+          line=$(flyctl ssh console -a "$DB_APP" -C "df -P /data" | tr -d "\r" | awk '$NF == "/data"')
+          used=$(echo "$line" | awk '{gsub("%", "", $5); print $5}')
+          size_kb=$(echo "$line" | awk '{print $2}')
+          if ! [[ "$used" =~ ^[0-9]+$ ]]; then
+            echo "::error::Could not read disk usage from $DB_APP"
+            exit 1
+          fi
+          size_mb=$((size_kb / 1024))
+          echo "### Postgres volume: ${used}% of ${size_mb} MB used" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$used" -ge "$DISK_ALERT_PERCENT" ]; then
+            echo "::error::Postgres volume is ${used}% full (alert at ${DISK_ALERT_PERCENT}%). Extend it — see docs/BACKUPS.md, 'Disk space'."
+            exit 1
+          fi
+          echo "Postgres volume ${used}% full — fine."
