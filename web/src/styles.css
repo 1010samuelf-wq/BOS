@@ -1099,3 +1099,4 @@ textarea.input { resize: vertical; font-family: inherit; }
 .scan-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 8px; }
 .scan-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .scan-form label > span { color: var(--muted); }
+.scan-card { font-weight: 600; unicode-bidi: plaintext; }

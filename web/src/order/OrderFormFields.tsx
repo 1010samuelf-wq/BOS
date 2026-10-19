@@ -4,7 +4,7 @@
 
 import CustomerPicker from "../components/CustomerPicker";
 import { useQuery } from "@tanstack/react-query";
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 
 import { listCategories, listProductsByCategory, searchProducts } from "../api/endpoints";
 import type { Product } from "../api/types";
@@ -15,6 +15,7 @@ import {
   lineTotal,
   removeLine,
   setLineNote,
+  setLinePrice,
   setQuantity,
   type Draft,
 } from "./orderDraft";
@@ -228,11 +229,43 @@ export function OrderItemsEditor({ draft, setDraft }: { draft: Draft; setDraft: 
                 onChange={(e) => { const n = parseInt(e.target.value, 10); if (!Number.isNaN(n)) setDraft((d) => setQuantity(d, i, n)); }} />
               <button className="btn neutral sm" onClick={() => setDraft((d) => setQuantity(d, i, l.quantity + 1))}>+</button>
             </div>
+            {l.product_id === null && (
+              <LinePrice
+                price={l.unit_price}
+                needed={!!l.priceNeeded && l.unit_price === "0.00"}
+                onPrice={(v) => setDraft((d) => setLinePrice(d, i, v))}
+              />
+            )}
             <div style={{ width: 70, textAlign: "right", fontWeight: 700 }}>${lineTotal(l)}</div>
             <button className="btn neutral sm" onClick={() => setDraft((d) => removeLine(d, i))}>✕</button>
           </div>
         ))
       )}
     </div>
+  );
+}
+
+/** Each-price for a custom (not-in-catalog) line — a scanned order form often
+ *  has none written. Typing is kept locally; only a whole amount is saved. */
+function LinePrice({ price, needed, onPrice }: { price: string; needed: boolean; onPrice: (v: string) => void }) {
+  const [text, setText] = useState(needed ? "" : price);
+  useEffect(() => { if (!needed) setText(price); }, [price, needed]);
+  const ok = /^\$?\d+(\.\d{1,2})?$/.test(text.trim());
+  return (
+    <label className="muted" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+      each $
+      <input
+        className="input"
+        inputMode="decimal"
+        placeholder={needed ? "price?" : ""}
+        value={text}
+        aria-label="Price each"
+        onChange={(e) => { setText(e.target.value); onPrice(e.target.value); }}
+        style={{
+          width: 72, padding: "4px 6px", textAlign: "right",
+          borderColor: needed || (text.trim() !== "" && !ok) ? "var(--danger)" : undefined,
+        }}
+      />
+    </label>
   );
 }

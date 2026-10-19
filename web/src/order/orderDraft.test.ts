@@ -207,3 +207,23 @@ describe("deposits", () => {
     expect(buildPayload(order("")).deposit).toBeNull();
   });
 });
+
+describe("pricing a custom line by hand", () => {
+  it("stores only a whole amount, so a half-typed price can't break the totals", async () => {
+    const { addCustomItem, setLinePrice, draftTotal, emptyDraft } = await import("./orderDraft");
+    let d = addCustomItem(emptyDraft(), "minis", "0.00", false);
+    d = setLinePrice(d, 0, "4.");      // mid-typing: ignored
+    expect(d.lines[0].unit_price).toBe("0.00");
+    d = setLinePrice(d, 0, "$4.5");
+    expect(d.lines[0].unit_price).toBe("4.50");
+    expect(draftTotal(d)).toBe("4.50");
+  });
+
+  it("only blocks a $0 line that was flagged as needing a price", async () => {
+    const { addCustomItem, validateDraft, emptyDraft } = await import("./orderDraft");
+    const base = { ...addCustomItem(emptyDraft(), "free sample", "0.00", false), clientName: "A", paymentTiming: "later" as const };
+    expect(validateDraft(base)).toEqual([]);
+    const flagged = { ...base, lines: [{ ...base.lines[0], priceNeeded: true }] };
+    expect(validateDraft(flagged)).toEqual(['Set a price for "free sample".']);
+  });
+});

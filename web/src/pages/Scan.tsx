@@ -133,7 +133,13 @@ function OrderReview({ result }: { result: ScanResult }) {
         {o.customer_phone && <> · {o.customer_phone}</>}
         {o.needed_for_date && <> · for {o.needed_for_date}{o.needed_for_time && ` ${o.needed_for_time}`}</>}
         {o.fulfillment && <> · {o.fulfillment}</>}
+        {o.delivery_name && <> to <strong>{o.delivery_name}</strong></>}
+        {o.payment_method && <> · pays by {o.payment_method}</>}
       </p>
+      {o.card_message && (
+        <p style={{ margin: "0 0 8px" }}>Card: <span dir="auto" className="scan-card">{o.card_message}</span></p>
+      )}
+      {o.notes && <p className="muted" style={{ margin: "0 0 8px" }}>Notes: {o.notes}</p>}
       <table>
         <thead><tr><th>Written on the form</th><th>Matched to</th><th className="num">Qty</th></tr></thead>
         <tbody>

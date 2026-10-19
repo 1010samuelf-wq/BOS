@@ -72,7 +72,10 @@ export interface ScannedOrder {
   needed_for_date: string;
   needed_for_time: string;
   fulfillment: "pickup" | "delivery" | "";
+  delivery_name: string;
   delivery_address: string;
+  /** The ticked box on the form. Never card details — those aren't read. */
+  payment_method: "cash" | "card" | "";
   card_message: string;
   notes: string;
   items: ScannedItem[];

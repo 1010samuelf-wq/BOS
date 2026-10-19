@@ -73,7 +73,8 @@ _SCHEMA = {
             "additionalProperties": False,
             "required": [
                 "customer_name", "customer_phone", "needed_for_date", "needed_for_time",
-                "fulfillment", "delivery_address", "card_message", "notes", "items",
+                "fulfillment", "delivery_name", "delivery_address", "payment_method",
+                "card_message", "notes", "items",
             ],
             "properties": {
                 "customer_name": {"type": "string"},
@@ -81,7 +82,10 @@ _SCHEMA = {
                 "needed_for_date": {"type": "string", "description": "YYYY-MM-DD, or empty"},
                 "needed_for_time": {"type": "string", "description": "HH:MM 24h, or empty"},
                 "fulfillment": {"type": "string", "enum": ["pickup", "delivery", ""]},
+                "delivery_name": {"type": "string", "description": "who it's delivered to, if not the customer"},
                 "delivery_address": {"type": "string"},
+                "payment_method": {"type": "string", "enum": ["cash", "card", ""],
+                                   "description": "the ticked box only; never any card details"},
                 "card_message": {"type": "string"},
                 "notes": {"type": "string"},
                 "items": {
@@ -125,7 +129,9 @@ def _instructions(kinds: list[str], products: list[Product], vendors: list[Compa
         "a staff member will check before saving. Copy what is written; never invent values.",
         "Leave a field empty (\"\" or 0) when it isn't on the page or you can't read it, and",
         "say so in `warnings` in plain words (e.g. \"phone number partly unreadable\").",
-        f"Today is {today}. Dates without a year are the next such date from today.",
+        f"Today is {today} ({utc_today().strftime('%A')}). For a date written without a year,",
+        "choose the year that puts it closest to today (it may be a little in the past). If a",
+        "weekday is written too (\"Oct 16 Friday\"), choose the year where that date is that weekday.",
         "",
         f"The document may be one of: {', '.join(kinds)}. Use \"unreadable\" if it is none of them",
         "or cannot be read. Fill only the object for the kind you choose; leave the other",
@@ -136,7 +142,21 @@ def _instructions(kinds: list[str], products: list[Product], vendors: list[Compa
     if "order" in kinds:
         lines += [
             "",
-            "ORDER: a customer order form, often handwritten. One item per line ordered.",
+            "ORDER: the shop's printed ORDER FORM, filled in by hand. Its fields:",
+            "- \"Date MM/DD\" (top right) is when the order was taken — not the needed-for date; ignore it.",
+            "- \"Ready For\" box: the needed-for date (and time, if written) -> needed_for_date/_time.",
+            "- \"Customers Name\" and \"Phone Number\": copy as written (keep a 7-digit number as is).",
+            "- Table Qty / Item / Unit / Amount: one row per item. Unit is the price each -> unit_price.",
+            "  A row that is plainly not a product (e.g. just a person's name) is NOT an item: put",
+            "  it in notes and add a warning asking what it is.",
+            "- \"Cash\" / \"Visa\" boxes: payment_method = cash or card from the ticked box only.",
+            "  NEVER copy a card number, expiry date or CVV anywhere, even into notes.",
+            "- \"Pick up\" / \"Deliver To-Name\" / \"Address\": fulfillment from the ticked box; if no",
+            "  box is ticked but a deliver-to name or address is written, it's a delivery.",
+            "  The name after \"Deliver To-Name\" goes in delivery_name, the address in delivery_address.",
+            "- \"Greeting Card\" (and the line under it): the card message, copied exactly in the",
+            "  language and script it's written in (often Hebrew or Yiddish) — never translate it.",
+            "Other order forms may look different; read them the same way.",
             "Match each item to the catalog below by meaning (abbreviations and the baker's",
             "shorthand are common); put its id in product_id, or 0 when no product clearly",
             "matches. Always keep the words as written in written_as. quantity defaults to 1.",
@@ -210,9 +230,23 @@ def _hhmm(text: str) -> str:
     return f"{int(m.group(1)):02d}:{m.group(2)}"
 
 
+# 12–19 digits, allowing spaces or dashes between groups: a payment card
+# number. The prompt says never to copy one; this makes sure, because the form
+# has a box for it and a draft can end up in notes that staff read and keep.
+_CARD = re.compile(r"(?<!\d)(?:\d[ -]?){11,18}\d(?!\d)")
+
+
+def _no_card_numbers(text: str) -> str:
+    return _CARD.sub("[card number removed]", text)
+
+
+def _text(value, limit: int) -> str:
+    return _no_card_numbers(str(value or ""))[:limit]
+
+
 def _clean(raw: dict, kinds: list[str], products: dict[int, Product], vendors: dict[int, Company]) -> dict:
     kind = raw.get("kind")
-    warnings = [str(w)[:300] for w in (raw.get("warnings") or [])][:20]
+    warnings = [_text(w, 300) for w in (raw.get("warnings") or [])][:20]
     if kind not in kinds:
         # "unreadable", or a kind this person can't use.
         return {"kind": "unreadable", "order": None, "vendor_invoice": None, "warnings": warnings}
@@ -228,20 +262,22 @@ def _clean(raw: dict, kinds: list[str], products: dict[int, Product], vendors: d
                 "product_id": product.id if product else None,
                 "product_name": product.name if product else None,
                 "catalog_price": str(product.price) if product else None,
-                "written_as": str(it.get("written_as") or "")[:200],
+                "written_as": _text(it.get("written_as"), 200),
                 "quantity": max(1, min(int(qty), 9999)),
                 "unit_price": _money(str(it.get("unit_price") or "")),
-                "note": str(it.get("note") or "")[:500],
+                "note": _text(it.get("note"), 500),
             })
         order = {
-            "customer_name": str(o.get("customer_name") or "")[:200],
+            "customer_name": _text(o.get("customer_name"), 200),
             "customer_phone": str(o.get("customer_phone") or "")[:50],
             "needed_for_date": _iso_date(o.get("needed_for_date", "")),
             "needed_for_time": _hhmm(o.get("needed_for_time", "")),
             "fulfillment": o.get("fulfillment") if o.get("fulfillment") in ("pickup", "delivery") else "",
-            "delivery_address": str(o.get("delivery_address") or "")[:500],
-            "card_message": str(o.get("card_message") or "")[:500],
-            "notes": str(o.get("notes") or "")[:2000],
+            "delivery_name": _text(o.get("delivery_name"), 200),
+            "delivery_address": _text(o.get("delivery_address"), 500),
+            "payment_method": o.get("payment_method") if o.get("payment_method") in ("cash", "card") else "",
+            "card_message": _text(o.get("card_message"), 500),
+            "notes": _text(o.get("notes"), 2000),
             "items": items,
         }
         return {"kind": "order", "order": order, "vendor_invoice": None, "warnings": warnings}

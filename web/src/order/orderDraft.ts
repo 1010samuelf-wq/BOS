@@ -32,6 +32,10 @@ export interface DraftLine {
   quantity: number;
   note: string;
   saveAsProduct?: boolean; // only meaningful when product_id is null
+  /** No price was known when the line was made (a scanned order form with
+   *  nothing in the price column). It goes in at 0.00 so the totals work, and
+   *  the order can't be submitted until someone gives it a real price. */
+  priceNeeded?: boolean;
 }
 export interface Draft {
   clientName: string;
@@ -111,6 +115,14 @@ export function setQuantity(d: Draft, i: number, q: number): Draft {
 export function setLineNote(d: Draft, i: number, note: string): Draft {
   return { ...d, lines: d.lines.map((l, idx) => (idx === i ? { ...l, note } : l)) };
 }
+/** Set a custom line's price. Only a whole money value is stored — the box
+ *  keeps whatever is being typed — because totals parse every line's price and
+ *  a half-typed "4." would take the screen down with it. */
+export function setLinePrice(d: Draft, i: number, price: string): Draft {
+  const text = price.trim().replace(/^\$/, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return d;
+  return { ...d, lines: d.lines.map((l, idx) => (idx === i ? { ...l, unit_price: fromCents(toCents(text)) } : l)) };
+}
 export function removeLine(d: Draft, i: number): Draft {
   return { ...d, lines: d.lines.filter((_, idx) => idx !== i) };
 }
@@ -154,6 +166,9 @@ export function validateDraft(d: Draft): string[] {
   const p: string[] = [];
   if (!d.clientName.trim()) p.push("Client name is required.");
   if (d.lines.length === 0) p.push("Add at least one item.");
+  for (const l of d.lines) {
+    if (l.priceNeeded && toCents(l.unit_price) === 0) p.push(`Set a price for "${l.product_name}".`);
+  }
   if (d.fulfillment === "delivery" && !d.deliveryAddress.trim())
     p.push("Delivery address is required for delivery orders.");
   if (d.paymentTiming === "now" && !d.paymentMethod) p.push("Choose a payment method.");

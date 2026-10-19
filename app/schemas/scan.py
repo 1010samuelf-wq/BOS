@@ -17,7 +17,9 @@ class ScannedOrder(BaseModel):
     needed_for_date: str
     needed_for_time: str
     fulfillment: str
+    delivery_name: str
     delivery_address: str
+    payment_method: str  # cash | card | ""
     card_message: str
     notes: str
     items: list[ScannedItem]

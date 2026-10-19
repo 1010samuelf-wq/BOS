@@ -31,7 +31,8 @@ class FakeAI:
 
 def _empty_order():
     return {"customer_name": "", "customer_phone": "", "needed_for_date": "", "needed_for_time": "",
-            "fulfillment": "", "delivery_address": "", "card_message": "", "notes": "", "items": []}
+            "fulfillment": "", "delivery_name": "", "delivery_address": "", "payment_method": "",
+            "card_message": "", "notes": "", "items": []}
 
 
 def _empty_invoice():
@@ -169,3 +170,34 @@ def test_without_an_api_key_it_says_so(client, monkeypatch):
     monkeypatch.setattr(get_settings(), "anthropic_api_key", "")
     assert _scan(client).status_code == 503
     assert client.get("/api/v1/scan").json()["enabled"] is False
+
+
+def test_the_shops_form_fields_come_through(client, ai):
+    """The printed ORDER FORM: Ready For, Deliver To-Name, Cash/Visa, a Hebrew card."""
+    fake = ai({"kind": "order", "vendor_invoice": _empty_invoice(), "warnings": ["What is \"Englander\"?"],
+               "order": {**_empty_order(), "customer_name": "Fleischman", "customer_phone": "662-6184",
+                         "needed_for_date": "2026-10-16", "fulfillment": "delivery", "delivery_name": "Brull",
+                         "payment_method": "card", "card_message": "מזל טוב!", "notes": "Englander",
+                         "items": [{"product_id": 0, "written_as": "minis", "quantity": 12, "unit_price": "", "note": ""}]}})
+    o = _scan(client).json()["order"]
+    assert (o["delivery_name"], o["payment_method"], o["card_message"], o["customer_phone"]) == (
+        "Brull", "card", "מזל טוב!", "662-6184")
+    system = fake.calls[0]["system"]
+    assert "NEVER copy a card number" in system
+    assert "Ready For" in system and "never translate" in system
+    # The weekday rule: today's weekday is given so "Oct 16 Friday" resolves.
+    from app.models.base import utc_today
+    assert utc_today().strftime("%A") in system
+
+
+def test_card_numbers_are_removed_even_if_the_ai_copies_one(client, ai):
+    ai({"kind": "order", "vendor_invoice": _empty_invoice(),
+        "warnings": ["Visa 4111 1111 1111 1111 written in the box"],
+        "order": {**_empty_order(), "customer_name": "Cohen", "customer_phone": "514-555-0100",
+                  "notes": "card 4111-1111-1111-1111 exp 12/27", "payment_method": "bitcoin"}})
+    body = _scan(client).json()
+    o = body["order"]
+    assert "4111" not in o["notes"] and "[card number removed]" in o["notes"]
+    assert "4111" not in body["warnings"][0]
+    assert o["customer_phone"] == "514-555-0100"  # a phone number is not a card number
+    assert o["payment_method"] == ""  # only cash / card
