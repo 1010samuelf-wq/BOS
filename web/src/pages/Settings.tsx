@@ -16,6 +16,7 @@ import EmployeesHours from "./EmployeesHours";
 import PhotoInbox from "../settings/PhotoInbox";
 import PriceSheetImport from "../settings/PriceSheetImport";
 import ProductListImport from "../settings/ProductListImport";
+import { catalogView, type CatalogSort } from "../settings/catalogView";
 
 // Sentinel option value; no real category can collide with it because the
 // backend strips and rejects blank names, and this isn't a plausible one.
@@ -332,6 +333,9 @@ function PhotoManager({
   );
 }
 
+/** Remembers A–Z vs by-category per browser. */
+const SORT_KEY = "bos.settings.catalogSort";
+
 function Products() {
   const client = useQueryClient();
   const { error, onErr } = useErr();
@@ -356,6 +360,24 @@ function Products() {
   // "type a new category" mode returns to the dropdown — where the category
   // just created is now waiting.
   const [formKey, setFormKey] = useState(0);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<CatalogSort>(() => {
+    // A per-browser preference; the page works the same without it.
+    try {
+      return localStorage.getItem(SORT_KEY) === "category" ? "category" : "name";
+    } catch {
+      return "name";
+    }
+  });
+  const chooseSort = (next: CatalogSort) => {
+    setSort(next);
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {
+      /* private window: just don't remember it */
+    }
+  };
+  const groups = catalogView(products.data ?? [], search, sort);
 
   const create = useMutation({
     mutationFn: () => api.createProduct({ name: name.trim(), price: price.trim(), category: category.trim() || null }),
@@ -409,11 +431,42 @@ function Products() {
           What the shop sells. Turn one off and it moves to the Deleted page — it
           stays there, out of search and new orders, until you put it back.
         </p>
-        {products.isLoading ? <Loading /> : products.isError ? <p className="error">Admin access required.</p> : (
+        <div className="row" style={{ flexWrap: "wrap", marginBottom: 12 }}>
+          <input
+            className="input"
+            type="search"
+            placeholder="Search products or categories"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ flex: 2, minWidth: 200 }}
+          />
+          <div className="row" role="group" aria-label="Sort" style={{ gap: 6 }}>
+            <span className="muted" style={{ fontSize: 13 }}>Sort</span>
+            <button className={`btn sm ${sort === "name" ? "primary" : "neutral"}`} aria-pressed={sort === "name"} onClick={() => chooseSort("name")}>
+              A–Z
+            </button>
+            <button className={`btn sm ${sort === "category" ? "primary" : "neutral"}`} aria-pressed={sort === "category"} onClick={() => chooseSort("category")}>
+              By category
+            </button>
+          </div>
+        </div>
+        {products.isLoading ? <Loading /> : products.isError ? <p className="error">Admin access required.</p> : groups.length === 0 ? (
+          <p className="muted">
+            {search.trim() ? <>Nothing matches "{search.trim()}".</> : "No products yet."}
+          </p>
+        ) : (
           <table>
             <thead><tr><th>Photo</th><th>Name</th><th>Category</th><th className="num">Price</th><th>Website</th><th>Actions</th></tr></thead>
-            <tbody>
-              {(products.data ?? []).map((p) => (
+            {groups.map((g) => (
+            <tbody key={g.category ?? "__none__"}>
+              {sort === "category" && (
+                <tr className="catalog-group">
+                  <th colSpan={6} style={{ textAlign: "left", paddingTop: 14 }}>
+                    {g.category ?? "No category"} <span className="muted" style={{ fontWeight: 400 }}>· {g.products.length}</span>
+                  </th>
+                </tr>
+              )}
+              {g.products.map((p) => (
                 <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
                   onToggleActive={(x) => toggleActive.mutate(x)}
                   onToggleMenu={(x) => toggleMenu.mutate(x)}
@@ -431,6 +484,7 @@ function Products() {
                 />
               ))}
             </tbody>
+            ))}
           </table>
         )}
       </div>
