@@ -7,8 +7,7 @@ dashboard is loginable out of the box, then serves the API on :8000. This
 mirrors what the test suite uses; it is NOT for production (use Postgres +
 Alembic + real PINs there — see docker-compose.yml / README).
 
-Dev login: "Not listed? Sign in with your name" → "system", PIN 123456.
-(Admins aren't on the public roster, and need 6-digit PINs.)   Docs: http://localhost:8000/docs
+Dev login: employee "system", PIN 123456 (admins need 6 digits).   Docs: http://localhost:8000/docs
 """
 
 import os

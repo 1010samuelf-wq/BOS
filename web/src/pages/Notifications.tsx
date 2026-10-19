@@ -8,7 +8,7 @@ import { listNotifications, markAllNotificationsRead, markNotificationRead } fro
 import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
 import { formatDateTime } from "../order/dates";
 
-const ICON: Record<string, string> = { low_stock: "📦", overdue_order: "⏰", overdue_task: "✅", payment_deleted: "💸" };
+const ICON: Record<string, string> = { low_stock: "📦", overdue_order: "⏰", overdue_task: "✅", payment_deleted: "💸", pin_security: "🔑", login_attack: "🚨" };
 
 export default function Notifications() {
   const client = useQueryClient();

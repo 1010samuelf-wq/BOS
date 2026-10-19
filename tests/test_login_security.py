@@ -3,6 +3,7 @@ limit, the public roster, longer PINs for admins/managers, and who may take a
 payment back off an order."""
 
 import threading
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -12,6 +13,7 @@ from app.config import get_settings
 from app.core.ratelimit import login_limiter
 from app.database import SessionLocal, engine
 from app.models import Notification, User
+from app.models.base import utcnow
 from app.schemas.auth import LoginIn
 from app.services import auth as auth_service
 from tests.conftest import ADMIN_PIN, order_payload
@@ -193,13 +195,12 @@ def test_login_is_limited_per_hour(client, make_user, login_limits):
 # ---------------------------------------------------------------------------
 # 4. the public roster
 # ---------------------------------------------------------------------------
-def test_roster_hides_admins_and_roles(client, anon_client, make_user):
+def test_roster_lists_everyone_but_no_roles(client, anon_client, make_user):
     make_user("manny", "manager", pin="123456")
     make_user("cass", "cashier", pin="1234")
     roster = anon_client.get("/api/v1/auth/roster").json()
-    names = {e["name"] for e in roster}
-    assert "admin" not in names
-    assert {"manny", "cass"} <= names
+    assert {"admin", "manny", "cass"} <= {e["name"] for e in roster}
+    # No real role: the list doesn't say which accounts are worth guessing.
     assert {e["role"] for e in roster} == {"staff"}
 
 
@@ -285,3 +286,105 @@ def test_only_a_manager_can_delete_a_payment_and_it_is_announced(client, make_pr
     assert len(notes) == 1
     assert notes[0].related_order_id == order["id"]
     assert "boss" in notes[0].message and "$7.00" in notes[0].message
+
+
+# ---------------------------------------------------------------------------
+# PIN changes and attacks are announced
+# ---------------------------------------------------------------------------
+def _notes(kind):
+    with SessionLocal() as db:
+        return [n.message for n in db.scalars(
+            select(Notification).where(Notification.type == kind).order_by(Notification.id)
+        )]
+
+
+def test_an_admin_changing_their_pin_is_announced_with_the_address(client):
+    admin_id = _admin_id()
+    r = client.post(
+        "/api/v1/auth/change-pin",
+        json={"user_id": admin_id, "current_pin": ADMIN_PIN, "new_pin": "135792"},
+        headers={"fly-client-ip": "203.0.113.44"},
+    )
+    assert r.status_code == 200, r.text
+    assert _notes("pin_security") == ["admin changed their PIN, from 203.0.113.44."]
+
+
+def test_a_cashier_changing_their_pin_is_not_announced(client, make_user):
+    uid, _, _ = make_user("baker", "cashier", pin="1234")
+    r = client.post(
+        "/api/v1/auth/change-pin",
+        json={"user_id": uid, "current_pin": "1234", "new_pin": "5678"},
+    )
+    assert r.status_code == 200, r.text
+    assert _notes("pin_security") == []
+
+
+def test_a_manager_reset_and_new_pin_are_both_announced(client, make_user):
+    uid, _, _ = make_user("manny", "manager", pin="123456")
+    r = client.post(f"/api/v1/employees/{uid}/reset-pin", headers={"fly-client-ip": "198.51.100.1"})
+    assert r.status_code == 200, r.text
+    r = client.post(
+        "/api/v1/auth/set-pin",
+        json={"user_id": uid, "setup_code": r.json()["setup_code"], "pin": "654321"},
+        headers={"fly-client-ip": "203.0.113.7"},
+    )
+    assert r.status_code == 204, r.text
+    assert _notes("pin_security") == [
+        "admin reset manny's PIN, from 198.51.100.1.",
+        "manny set a new PIN with a reset code, from 203.0.113.7.",
+    ]
+
+
+def test_tripping_the_employee_wide_cap_is_announced(client, make_user):
+    uid, _, _ = make_user("esti", "cashier", pin="1234")
+    ceiling = get_settings().login_max_attempts_per_employee
+    for n in range(ceiling - 1):
+        _login(client, f"203.0.113.{n // 4}", "0000", user_id=uid)
+    assert _notes("login_attack") == []
+    _login(client, "192.0.2.1", "0000", user_id=uid)
+    [note] = _notes("login_attack")
+    assert "esti" in note and "192.0.2.1" in note
+
+
+def test_a_right_pin_from_one_address_doesnt_reset_the_cap_for_others(client, make_user):
+    """19 guesses from strangers, then the real person signs in at the shop:
+    before, that wiped the count and the strangers got another 20."""
+    uid, _, _ = make_user("esti", "cashier", pin="1234")
+    ceiling = get_settings().login_max_attempts_per_employee
+    for n in range(ceiling - 1):
+        assert _login(client, f"203.0.113.{n // 4}", "0000", user_id=uid).status_code == 401
+    assert _login(client, "198.51.100.1", "1234", user_id=uid).status_code == 200
+    assert _login(client, "192.0.2.1", "0000", user_id=uid).status_code == 401
+
+    r = _login(client, "192.0.2.2", "1234", user_id=uid)
+    assert r.status_code == 403
+    assert r.json()["error"]["code"] == "account_locked"
+    assert _login(client, "198.51.100.1", "1234", user_id=uid).status_code == 200
+
+
+def test_the_cap_counts_over_a_day_not_forever(client, make_user):
+    uid, _, _ = make_user("esti", "cashier", pin="1234")
+    ceiling = get_settings().login_max_attempts_per_employee
+    for n in range(ceiling - 1):
+        _login(client, f"203.0.113.{n // 4}", "0000", user_id=uid)
+    with SessionLocal() as db:
+        u = db.get(User, uid)
+        u.failed_login_window_start = utcnow() - timedelta(hours=25)
+        db.commit()
+    # Yesterday's typos have aged out, so this is one, not the twentieth.
+    assert _login(client, "192.0.2.1", "0000", user_id=uid).status_code == 401
+    assert _login(client, "192.0.2.2", "1234", user_id=uid).status_code == 200
+    assert _notes("login_attack") == []
+
+
+def test_a_refused_short_pin_does_not_make_the_address_known(client, make_user):
+    """No session was issued, so the address mustn't earn the known-device pass
+    on the employee-wide cap."""
+    uid, _, _ = make_user("manny", "manager", pin="1234")
+    r = _login(client, "192.0.2.9", "1234", user_id=uid)
+    assert r.json()["error"]["code"] == "pin_change_required"
+    ceiling = get_settings().login_max_attempts_per_employee
+    for n in range(ceiling):
+        _login(client, f"203.0.113.{n // 4}", "0000", user_id=uid)
+    r = _login(client, "192.0.2.9", "1234", user_id=uid)
+    assert r.json()["error"]["code"] == "account_locked"

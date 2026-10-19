@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     # an address that has logged in as that employee within the last
     # `login_known_device_days`.
     login_max_attempts_per_employee: int = 20
+    login_employee_window_hours: int = 24
     login_known_device_days: int = 60
     # POST /auth/login and /auth/change-pin, per client IP. Successful logins
     # are refunded, so a busy shop sharing one address never trips it; only

@@ -19,8 +19,8 @@ def _validate_pin(v: str) -> str:
 
 
 class _WhoIn(BaseModel):
-    """Who is signing in: the roster id, or — for admins, who are not on the
-    public roster — the name typed in. One of the two is required."""
+    """Who is signing in: the roster id, or the name typed in. One of the two
+    is required."""
 
     user_id: int | None = None
     name: str | None = Field(default=None, max_length=120)

@@ -4,10 +4,8 @@
 // that comes back `pin_not_set` flips the screen into setup mode, where the
 // employee enters the one-time code an admin gave them plus a new PIN.
 //
-// Admins aren't on the public roster (it told anyone which accounts were worth
-// guessing): they tap "Not listed?" and type their name. An admin's or
-// manager's PIN shorter than 6 digits still checks out once but comes back
-// `pin_change_required`, which goes straight to choosing a new one.
+// An admin's or manager's PIN shorter than 6 digits still checks out once but
+// comes back `pin_change_required`, which goes straight to choosing a new one.
 
 import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
@@ -32,7 +30,7 @@ const MAX_PIN = 8;
 
 type Phase = "enter-pin" | "need-setup-code" | "choose-pin" | "confirm-pin";
 
-/** The person signing in: picked from the roster, or typed by name. */
+/** The person signing in, picked from the roster. */
 interface Person {
   who: Who;
   label: string;
@@ -85,8 +83,6 @@ export default function Login() {
   const { login, changePin, setupPin } = useAuth();
 
   const [selected, setSelected] = useState<Person | null>(null);
-  const [byName, setByName] = useState(false);
-  const [typedName, setTypedName] = useState("");
   // Set when the PIN was right but too short: the new PIN replaces it.
   const [oldPin, setOldPin] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("enter-pin");
@@ -98,8 +94,6 @@ export default function Login() {
 
   const reset = () => {
     setSelected(null);
-    setByName(false);
-    setTypedName("");
     setOldPin(null);
     setPhase("enter-pin");
     setPin("");
@@ -194,29 +188,7 @@ export default function Login() {
     <View style={styles.screen}>
       <Text style={styles.title}>Bakery Operations</Text>
 
-      {!selected && byName ? (
-        <View style={styles.card}>
-          <Text style={styles.subtitle}>Type your name as the shop has it</Text>
-          <TextInput
-            style={styles.codeInput}
-            placeholder="Your name"
-            value={typedName}
-            onChangeText={setTypedName}
-            autoCorrect={false}
-            autoFocus
-          />
-          <Pressable
-            style={[styles.continueBtn, !typedName.trim() && styles.continueBtnDisabled]}
-            disabled={!typedName.trim()}
-            onPress={() => setSelected({ who: { name: typedName.trim() }, label: typedName.trim() })}
-          >
-            <Text style={styles.continueText}>Continue</Text>
-          </Pressable>
-          <Pressable onPress={reset}>
-            <Text style={styles.back}>← back to roster</Text>
-          </Pressable>
-        </View>
-      ) : !selected ? (
+      {!selected ? (
         <View style={styles.card}>
           <Text style={styles.subtitle}>Who's working?</Text>
           {roster.isLoading && <ActivityIndicator />}
@@ -238,9 +210,6 @@ export default function Login() {
               </Pressable>
             )}
           />
-          <Pressable onPress={() => setByName(true)}>
-            <Text style={styles.back}>Not listed? Sign in with your name</Text>
-          </Pressable>
         </View>
       ) : (
         <View style={styles.card}>

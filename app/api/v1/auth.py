@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.auth import current_user
 from app.database import get_db
 from app.core.errors import APIError
-from app.core.ratelimit import login_limiter
-from app.models import User, UserRole
+from app.core.ratelimit import client_key, login_limiter
+from app.models import User
 from app.schemas.auth import ChangePinIn, LoginIn, RosterEntry, SetPinIn, StaffEntry, TokenOut
 from app.services import auth as auth_service
 
@@ -16,15 +16,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.get("/roster", response_model=list[RosterEntry])
 def roster(db: Session = Depends(get_db)):
     """Active employees for the shared-device login picker (unauthenticated —
-    no token exists before login). Minimal fields only; no PIN/hash exposed.
-
-    Admins are left off: this list is public, and it was telling anyone which
-    accounts were worth guessing. They sign in by typing their name instead.
+    no token exists before login). Names only; no PIN/hash and no role, so the
+    list doesn't say which accounts are the ones worth guessing.
     """
     users = db.execute(
-        select(User)
-        .where(User.active.is_(True), User.role != UserRole.admin)
-        .order_by(User.name)
+        select(User).where(User.active.is_(True)).order_by(User.name)
     ).scalars().all()
     # Built by hand: reading the ORM row would pick up the real `role`.
     return [RosterEntry(id=u.id, name=u.name) for u in users]
@@ -40,10 +36,10 @@ def staff(db: Session = Depends(get_db), _: User = Depends(current_user)):
 
 
 @router.post("/set-pin", status_code=204)
-def set_pin(payload: SetPinIn, db: Session = Depends(get_db)):
+def set_pin(payload: SetPinIn, request: Request, db: Session = Depends(get_db)):
     """First-login PIN setup. Unauthenticated by design — a newly created
     employee has no token yet — but only works while no PIN is set (spec §2E)."""
-    auth_service.set_pin(db, payload)
+    auth_service.set_pin(db, payload, client_key(request))
     db.commit()
 
 

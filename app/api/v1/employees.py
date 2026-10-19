@@ -7,12 +7,13 @@ historical orders/time entries keep their references. Kept admin-only on purpose
 managing who-can-do-what is the one privilege-escalation surface we don't grant.
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin
 from app.core.errors import bad_request, conflict, not_found
+from app.core.ratelimit import client_key
 from app.core.permissions import GRANTABLE_SECTIONS, effective_sections
 from app.database import get_db
 from app.models import (
@@ -115,8 +116,9 @@ def update_employee(
 @router.post("/{employee_id}/reset-pin", response_model=EmployeeOut)
 def reset_pin(
     employee_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    actor: User = Depends(require_admin),
 ):
     """Clear the employee's PIN and return them to first-login state, issuing a
     fresh one-time setup code to hand over (spec §2E).
@@ -131,7 +133,7 @@ def reset_pin(
         raise bad_request(
             "An admin's PIN can't be reset from the app.", code="cannot_reset_admin_pin"
         )
-    employee, code = auth_service.reset_pin(db, employee_id)
+    employee, code = auth_service.reset_pin(db, employee_id, actor, client_key(request))
     db.commit()
     db.refresh(employee)
     return _out(employee, setup_code=code)

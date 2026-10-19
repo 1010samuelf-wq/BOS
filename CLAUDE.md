@@ -117,22 +117,28 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   read the same failure count and the 5-try lockout is bypassed
   (`test_sixty_concurrent_wrong_pins_check_at_most_five`, Postgres only — CI
   runs it). The 5-try lock lives in `login_attempts` per (employee, IP), so a
-  stranger only locks themselves out; `users.failed_login_count` is a 20-try
-  ceiling across all IPs that never blocks an address that has signed in as
-  that employee before. `POST /auth/login` and `/auth/change-pin` also have a
-  per-IP limit (10/min, 50/hour) that refunds right PINs, because the whole
-  shop shares one address.
-- **Admins are not on the public roster, and the roster's `role` is fake.**
-  `/auth/roster` omits admins and sends `role: "staff"` for everyone. The
-  constant exists only because the 1.1.0 tablet bundle calls
-  `roleLabel(e.role)`, which throws on undefined — dropping the key would crash
-  the tablets' login screen. Admins sign in with "Not listed? Sign in with your
-  name" (`LoginIn.name`). Pickers inside the app use the signed-in
-  `/auth/staff`, which includes admins.
+  stranger only locks themselves out. `users.failed_login_count` is a 20-try
+  ceiling across all IPs within 24h (`failed_login_window_start`); it never
+  blocks an address that has had a real sign-in as that employee, and a right
+  PIN must **not** reset it — that let one address wipe what the others piled
+  up. Only a sign-in that issues a session marks an address known
+  (`_signed_in`), not a refused short PIN. Tripping it posts a `login_attack`
+  notification. `POST /auth/login` and `/auth/change-pin` also have a per-IP
+  limit (10/min, 50/hour) that refunds right PINs, because the whole shop
+  shares one address.
+- **The public roster has every name but no roles.** `/auth/roster` sends
+  `role: "staff"` for everyone so it doesn't point at the accounts worth
+  guessing. The constant (rather than dropping the key) exists only because the
+  1.1.0 tablet bundle calls `roleLabel(e.role)`, which throws on undefined —
+  dropping it would crash the tablets' login screen. Pickers inside the app use
+  the signed-in `/auth/staff`.
 - **Admin and manager PINs are 6+ digits.** A shorter existing PIN is still
   verified, then refused with `pin_change_required`; `/auth/change-pin` swaps it
   and returns a session. The error text tells older tablets to use the
-  dashboard, since they can't show the change screen.
+  dashboard, since they can't show the change screen. Every admin/manager PIN
+  change, set or reset posts a `pin_security` notification naming who and the
+  address. By the owner's choice there is **no** known-device requirement on
+  that change: whoever has the old short PIN can set the new one.
 - **React Query must not be allowed to pause.** The dashboard sets
   `networkMode: "always"` in `web/src/main.tsx`; don't remove it. By default
   React Query pauses every query when its `onlineManager` thinks the browser is

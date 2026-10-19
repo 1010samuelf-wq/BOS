@@ -3,9 +3,7 @@
 // we switch to setup mode, where the employee enters the one-time code an admin
 // gave them plus a new PIN.
 //
-// Admins aren't on the public roster at all (it told anyone which accounts were
-// worth guessing), so they choose "Sign in with your name" and type it. And an
-// admin's or manager's PIN shorter than 6 digits still checks out once, but
+// An admin's or manager's PIN shorter than 6 digits still checks out once, but
 // comes back `pin_change_required`: we switch to change mode and the new PIN
 // signs them straight in.
 
@@ -21,7 +19,7 @@ const MIN_PIN = 6;
 
 type Mode = "login" | "first-login" | "change-pin";
 
-/** The person signing in: picked from the roster, or typed by name. */
+/** The person signing in, picked from the roster. */
 interface Person {
   who: Who;
   label: string;
@@ -33,8 +31,6 @@ export default function Login() {
   const navigate = useNavigate();
 
   const [selected, setSelected] = useState<Person | null>(null);
-  const [byName, setByName] = useState(false);
-  const [typedName, setTypedName] = useState("");
   const [mode, setMode] = useState<Mode>("login");
   const [pin, setPin] = useState("");
   const [oldPin, setOldPin] = useState("");
@@ -45,8 +41,6 @@ export default function Login() {
 
   const reset = () => {
     setSelected(null);
-    setByName(false);
-    setTypedName("");
     setMode("login");
     setPin("");
     setOldPin("");
@@ -108,19 +102,13 @@ export default function Login() {
     }
   };
 
-  const chooseName = (e: FormEvent) => {
-    e.preventDefault();
-    const name = typedName.trim();
-    if (name) setSelected({ who: { name }, label: name });
-  };
-
   const settingPin = mode !== "login";
 
   return (
     <div className="login">
       <div className="box">
         <img src="/logo.png" alt="Just Cake" className="login-logo" />
-        {!selected && !byName ? (
+        {!selected ? (
           <>
             <p className="muted">Who's working?</p>
             {roster.isError && <p className="error">Server unreachable.</p>}
@@ -131,26 +119,7 @@ export default function Login() {
                 </button>
               ))}
             </div>
-            <button type="button" className="btn neutral" style={{ marginTop: 16 }} onClick={() => setByName(true)}>
-              Not listed? Sign in with your name
-            </button>
           </>
-        ) : !selected ? (
-          <form onSubmit={chooseName}>
-            <p>Type your name as the shop has it</p>
-            <input
-              className="input"
-              autoFocus
-              autoComplete="username"
-              placeholder="Your name"
-              value={typedName}
-              onChange={(e) => setTypedName(e.target.value)}
-            />
-            <div className="row" style={{ marginTop: 16 }}>
-              <button type="button" className="btn neutral" onClick={reset}>Back</button>
-              <button type="submit" className="btn primary" disabled={!typedName.trim()}>Next</button>
-            </div>
-          </form>
         ) : (
           <form onSubmit={submit}>
             <p>

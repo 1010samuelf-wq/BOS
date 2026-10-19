@@ -7,6 +7,7 @@ PIN), and repeated failed logins lock an account for a cooldown.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select, update
@@ -44,7 +45,7 @@ def issue_setup_code(user: User) -> str:
     return code
 
 
-def set_pin(db: Session, payload: SetPinIn) -> User:
+def set_pin(db: Session, payload: SetPinIn, ip: str) -> User:
     """First-login PIN setup. Allowed only while the employee hasn't set one AND
     the caller presents the valid, unexpired setup code the admin issued."""
     user = _find_user(db, payload)
@@ -77,10 +78,13 @@ def set_pin(db: Session, payload: SetPinIn) -> User:
     user.setup_code_hash = None
     user.setup_code_expires_at = None
     user.failed_login_count = 0
+    user.failed_login_window_start = None
     user.locked_until = None
     _clear_attempts(db, user)
     # A new PIN retires every session that was opened under the old one.
     user.token_version += 1
+    if _is_privileged(user):
+        _notify(db, "pin_security", f"{user.name} set a new PIN with a reset code, from {ip}.")
     return user
 
 
@@ -94,7 +98,7 @@ def _clear_attempts(db: Session, user: User) -> None:
     )
 
 
-def reset_pin(db: Session, user_id: int) -> tuple[User, str]:
+def reset_pin(db: Session, user_id: int, actor: User, ip: str) -> tuple[User, str]:
     """Admin action: clear an employee's PIN, return them to first-login state,
     and issue a fresh setup code (returned so the admin can hand it over)."""
     user = db.get(User, user_id)
@@ -103,12 +107,15 @@ def reset_pin(db: Session, user_id: int) -> tuple[User, str]:
     user.pin_hash = None
     user.pin_set = False
     user.failed_login_count = 0
+    user.failed_login_window_start = None
     user.locked_until = None
     _clear_attempts(db, user)
     # The point of a reset is usually that a device went missing, so cut every
     # session this employee currently has rather than waiting for expiry.
     user.token_version += 1
     code = issue_setup_code(user)
+    if _is_privileged(user):
+        _notify(db, "pin_security", f"{actor.name} reset {user.name}'s PIN, from {ip}.")
     return user, code
 
 
@@ -150,14 +157,33 @@ def _attempts_for(db: Session, user: User, ip: str) -> LoginAttempt:
     return row
 
 
-def _check_pin(db: Session, who: _WhoIn, pin: str, ip: str) -> User:
+@dataclass
+class _Checked:
+    """A PIN that checked out, and the address row it was checked against."""
+
+    user: User
+    attempts: LoginAttempt
+
+
+def _notify(db: Session, kind: str, message: str) -> None:
+    from app.services import notifications as notification_service
+
+    notification_service.create(db, type=kind, message=message)
+
+
+def _check_pin(db: Session, who: _WhoIn, pin: str, ip: str) -> _Checked:
     """Verify a PIN under the lockout rules; return the employee or raise.
 
     Two counters. Per (employee, address): five wrong PINs lock that address
     out for that employee — a stranger only locks themselves out. Per employee
-    across all addresses: a higher ceiling for guessing spread over many IPs,
-    which never applies to an address that has signed in as this employee
-    before, so the shop's own devices keep working through an attack.
+    across all addresses, over a rolling window: a higher ceiling for guessing
+    spread over many IPs, which never applies to an address that has signed in
+    as this employee before, so the shop's own devices keep working through an
+    attack. A right PIN clears its own address's count but never the
+    employee-wide one, or any address could wipe what the others piled up.
+
+    Does not mark the address as known: only a sign-in that actually issues a
+    session does that (`_signed_in`).
     """
     settings = get_settings()
     # Uniform 401 whether the user is missing or the PIN is wrong, so the
@@ -193,21 +219,40 @@ def _check_pin(db: Session, who: _WhoIn, pin: str, ip: str) -> User:
         if attempts.failed_count >= settings.login_max_attempts:
             attempts.locked_until = now + lock_for
             attempts.failed_count = 0
+
+        window = timedelta(hours=settings.login_employee_window_hours)
+        start = user.failed_login_window_start
+        if start is None or now - _aware(start) >= window:
+            user.failed_login_count = 0
+            user.failed_login_window_start = now
         user.failed_login_count = (user.failed_login_count or 0) + 1
         if user.failed_login_count >= settings.login_max_attempts_per_employee:
             user.locked_until = now + lock_for
             user.failed_login_count = 0
+            user.failed_login_window_start = None
+            _notify(
+                db, "login_attack",
+                f"{settings.login_max_attempts_per_employee} wrong PINs were tried for "
+                f"{user.name} within {settings.login_employee_window_hours} hours, latest "
+                f"from {ip}. New devices can't sign in as {user.name} for "
+                f"{settings.login_lockout_minutes} minutes; devices they already use still work.",
+            )
         db.commit()
         raise invalid
 
-    # Right PIN: this address is now a known device for this employee, and any
-    # failure/lock state is cleared.
+    # Right PIN: this address's own count is cleared. Not the employee-wide one.
     attempts.failed_count = 0
     attempts.locked_until = None
-    attempts.last_success_at = now
-    user.failed_login_count = 0
-    user.locked_until = None
-    return user
+    return _Checked(user=user, attempts=attempts)
+
+
+def _signed_in(checked: _Checked) -> None:
+    """A session is being issued: from now on this address is a known device."""
+    checked.attempts.last_success_at = utcnow()
+
+
+def _is_privileged(user: User) -> bool:
+    return user.role in (UserRole.admin, UserRole.manager)
 
 
 def _min_pin_length(user: User) -> int:
@@ -231,11 +276,12 @@ def _token_for(user: User) -> TokenOut:
 
 
 def login(db: Session, payload: LoginIn, ip: str) -> TokenOut:
-    user = _check_pin(db, payload, payload.pin, ip)
+    checked = _check_pin(db, payload, payload.pin, ip)
+    user = checked.user
     # The PIN was right, but an admin's or manager's that predates the 6-digit
-    # rule doesn't get a session until it's changed. Committed first so the
-    # successful check still clears the failure count. The message is written
-    # for tablets that can't yet show the change-PIN screen: they print it.
+    # rule doesn't get a session until it's changed. No session, so this
+    # address isn't marked as known. The message is written for tablets that
+    # can't yet show the change-PIN screen: they print it.
     if len(payload.pin) < _min_pin_length(user):
         db.commit()
         raise APIError(
@@ -243,13 +289,17 @@ def login(db: Session, payload: LoginIn, ip: str) -> TokenOut:
             f"Your PIN needs to be at least {_min_pin_length(user)} digits now. "
             "Choose a new one on the dashboard sign-in page, then use it here.",
         )
+    _signed_in(checked)
     db.commit()
     return _token_for(user)
 
 
 def change_pin(db: Session, payload: ChangePinIn, ip: str) -> TokenOut:
-    """Replace a PIN, proving the current one. Signs in with the new PIN."""
-    user = _check_pin(db, payload, payload.current_pin, ip)
+    """Replace a PIN, proving the current one. Signs in with the new PIN.
+    An admin's or manager's change is announced in the notification feed with
+    the address it came from, so a change nobody expected gets noticed."""
+    checked = _check_pin(db, payload, payload.current_pin, ip)
+    user = checked.user
     if len(payload.new_pin) < _min_pin_length(user):
         db.commit()
         raise bad_request(
@@ -262,5 +312,8 @@ def change_pin(db: Session, payload: ChangePinIn, ip: str) -> TokenOut:
     user.pin_hash = hash_pin(payload.new_pin)
     # A new PIN retires every session that was opened under the old one.
     user.token_version += 1
+    if _is_privileged(user):
+        _notify(db, "pin_security", f"{user.name} changed their PIN, from {ip}.")
+    _signed_in(checked)
     db.commit()
     return _token_for(user)

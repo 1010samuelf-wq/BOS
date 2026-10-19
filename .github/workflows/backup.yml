@@ -65,7 +65,7 @@ jobs:
             exit 1
           fi
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
 
       # pg_dump must be at least as new as the server. 17 reads every server
       # version Fly runs, so pin the client there rather than trusting whatever
@@ -176,7 +176,7 @@ jobs:
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
     steps:
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
       - name: Check free space
         run: |
           # /data is where Fly Postgres keeps the database and its WAL. A full

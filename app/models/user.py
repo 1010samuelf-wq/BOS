@@ -61,6 +61,12 @@ class User(Base, TimestampMixin):
         default=0, server_default="0", nullable=False
     )
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Start of the window `failed_login_count` is counting in (the employee-wide
+    # ceiling). A right PIN does not reset that count — it would let one
+    # address wipe what others had piled up — so it ages out instead.
+    failed_login_window_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
 
 class LoginAttempt(Base):
