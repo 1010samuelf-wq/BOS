@@ -18,7 +18,7 @@ router = APIRouter(prefix="/scan", tags=["scan"])
 
 
 @router.get("", response_model=ScanKindsOut)
-def scan_options(user: User = Depends(require_any_section("orders", "bookkeeping"))):
+def scan_options(user: User = Depends(require_any_section("orders", "bookkeeping", "time"))):
     """What this person can scan, and whether reading is switched on at all."""
     return ScanKindsOut(kinds=doc_scan.allowed_kinds(user),
                         enabled=bool(get_settings().anthropic_api_key))
@@ -29,7 +29,7 @@ async def scan_document(
     file: UploadFile,
     hint: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    user: User = Depends(require_any_section("orders", "bookkeeping")),
+    user: User = Depends(require_any_section("orders", "bookkeeping", "time")),
 ):
     data = await file.read()
     return doc_scan.scan(db, user, data=data, content_type=file.content_type or "", hint=hint)

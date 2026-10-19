@@ -36,7 +36,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.core.errors import APIError, bad_request
 from app.core.permissions import effective_sections
-from app.models import Company, Product, User
+from app.models import Company, Product, User, UserRole
 from app.models.base import utc_today
 from app.models.enums import CompanyType
 
@@ -54,20 +54,25 @@ _MEDIA = {
 }
 MAX_BYTES = 15 * 1024 * 1024
 
-KIND_SECTIONS = {"order": "orders", "vendor_invoice": "bookkeeping"}
+KIND_SECTIONS = {"order": "orders", "vendor_invoice": "bookkeeping", "timesheet": "time"}
 
 
 def allowed_kinds(user: User) -> list[str]:
     sections = effective_sections(user)
-    return [k for k, s in KIND_SECTIONS.items() if s in sections]
+    kinds = [k for k, s in KIND_SECTIONS.items() if s in sections]
+    # Entering someone's hours is a manager's job — the same rule as adding a
+    # missed punch by hand (POST /time/entries).
+    if user.role not in (UserRole.manager, UserRole.admin):
+        kinds = [k for k in kinds if k != "timesheet"]
+    return kinds
 
 
 _SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["kind", "order", "vendor_invoice", "warnings"],
+    "required": ["kind", "order", "vendor_invoice", "timesheet", "warnings"],
     "properties": {
-        "kind": {"type": "string", "enum": ["order", "vendor_invoice", "unreadable"]},
+        "kind": {"type": "string", "enum": ["order", "vendor_invoice", "timesheet", "unreadable"]},
         "order": {
             "type": "object",
             "additionalProperties": False,
@@ -117,12 +122,36 @@ _SCHEMA = {
                 "total": {"type": "string", "description": "grand total incl. taxes, digits and dot only, or empty"},
             },
         },
+        "timesheet": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["employee_id", "employee_name", "week_start", "shifts"],
+            "properties": {
+                "employee_id": {"type": "integer", "description": "employee id from the list, or 0"},
+                "employee_name": {"type": "string"},
+                "week_start": {"type": "string", "description": "the Sunday starting the week, YYYY-MM-DD, or empty"},
+                "shifts": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["date", "time_in", "time_out"],
+                        "properties": {
+                            "date": {"type": "string", "description": "YYYY-MM-DD"},
+                            "time_in": {"type": "string", "description": "HH:MM 24h"},
+                            "time_out": {"type": "string", "description": "HH:MM 24h, or empty if not written"},
+                        },
+                    },
+                },
+            },
+        },
         "warnings": {"type": "array", "items": {"type": "string"}},
     },
 }
 
 
-def _instructions(kinds: list[str], products: list[Product], vendors: list[Company], hint: str | None) -> str:
+def _instructions(kinds: list[str], products: list[Product], vendors: list[Company], hint: str | None,
+                  employees: list[User] | None = None) -> str:
     today = utc_today().isoformat()
     lines = [
         "You read scanned documents for Just Cake, a kosher bakery, and fill in a draft that",
@@ -171,6 +200,20 @@ def _instructions(kinds: list[str], products: list[Product], vendors: list[Compa
             "list by name; vendor_id 0 when it isn't there, with the name as printed.",
             "Vendors (id | name):",
             *[f"{v.id} | {v.name}" for v in vendors],
+        ]
+    if "timesheet" in kinds:
+        lines += [
+            "",
+            "TIMESHEET: the shop's WEEKLY TIMESHEET — one employee, a week starting Sunday, a row",
+            "per day (Sunday to Friday) with Time in / Time out and an optional 2nd time in / out",
+            "for a split shift. Make one shift per in/out pair that has a time in. Work out each",
+            "row's date from the date written on it or, failing that, from \"Week starting Sunday\"",
+            "plus the weekday. Times are written with AM/PM; give them as 24h HH:MM. If AM/PM is",
+            "missing, choose what makes a sensible shift (out after in) and add a warning. Leave",
+            "time_out empty if it isn't written. Ignore the Hours / Total columns — the system",
+            "works hours out itself. Match the name to the employee list; 0 if no clear match.",
+            "Employees (id | name):",
+            *[f"{e.id} | {e.name}" for e in employees or []],
         ]
     return "\n".join(lines)
 
@@ -244,12 +287,13 @@ def _text(value, limit: int) -> str:
     return _no_card_numbers(str(value or ""))[:limit]
 
 
-def _clean(raw: dict, kinds: list[str], products: dict[int, Product], vendors: dict[int, Company]) -> dict:
+def _clean(raw: dict, kinds: list[str], products: dict[int, Product], vendors: dict[int, Company],
+           employees: dict[int, User] | None = None) -> dict:
     kind = raw.get("kind")
     warnings = [_text(w, 300) for w in (raw.get("warnings") or [])][:20]
     if kind not in kinds:
         # "unreadable", or a kind this person can't use.
-        return {"kind": "unreadable", "order": None, "vendor_invoice": None, "warnings": warnings}
+        return {"kind": "unreadable", "order": None, "vendor_invoice": None, "timesheet": None, "warnings": warnings}
 
     if kind == "order":
         o = raw.get("order") or {}
@@ -280,7 +324,26 @@ def _clean(raw: dict, kinds: list[str], products: dict[int, Product], vendors: d
             "notes": _text(o.get("notes"), 2000),
             "items": items,
         }
-        return {"kind": "order", "order": order, "vendor_invoice": None, "warnings": warnings}
+        return {"kind": "order", "order": order, "vendor_invoice": None, "timesheet": None, "warnings": warnings}
+
+    if kind == "timesheet":
+        t = raw.get("timesheet") or {}
+        employee = employees.get(t.get("employee_id") or 0) if employees else None
+        shifts = []
+        for sh in (t.get("shifts") or [])[:30]:
+            day, t_in = _iso_date(sh.get("date", "")), _hhmm(sh.get("time_in", ""))
+            if not day or not t_in:
+                continue  # a shift needs at least a day and a start
+            shifts.append({"date": day, "time_in": t_in, "time_out": _hhmm(sh.get("time_out", ""))})
+        shifts.sort(key=lambda x: (x["date"], x["time_in"]))
+        sheet = {
+            "employee_id": employee.id if employee else None,
+            "employee_name": employee.name if employee else _text(t.get("employee_name"), 200),
+            "week_start": _iso_date(t.get("week_start", "")),
+            "shifts": shifts,
+        }
+        return {"kind": "timesheet", "order": None, "vendor_invoice": None, "timesheet": sheet,
+                "warnings": warnings}
 
     v = raw.get("vendor_invoice") or {}
     vendor = vendors.get(v.get("vendor_id") or 0)
@@ -291,14 +354,14 @@ def _clean(raw: dict, kinds: list[str], products: dict[int, Product], vendors: d
         "date": _iso_date(v.get("date", "")),
         "total": _money(str(v.get("total") or "")),
     }
-    return {"kind": "vendor_invoice", "order": None, "vendor_invoice": invoice, "warnings": warnings}
+    return {"kind": "vendor_invoice", "order": None, "vendor_invoice": invoice, "timesheet": None, "warnings": warnings}
 
 
 def scan(db: Session, user: User, *, data: bytes, content_type: str, hint: str | None = None,
          client=None) -> dict:
     kinds = allowed_kinds(user)
     if not kinds:
-        raise APIError(403, "forbidden", "Scanning needs access to Orders or Bookkeeping.")
+        raise APIError(403, "forbidden", "Scanning needs access to Orders, Bookkeeping, or (for managers) Time.")
     block_type = _MEDIA.get(content_type)
     if block_type is None:
         raise bad_request(
@@ -319,6 +382,10 @@ def scan(db: Session, user: User, *, data: bytes, content_type: str, hint: str |
         .order_by(Company.name)
     ).scalars()) if "vendor_invoice" in kinds else []
 
+    employees = list(db.execute(
+        select(User).where(User.active.is_(True)).order_by(User.name)
+    ).scalars()) if "timesheet" in kinds else []
+
     source = {"type": "base64", "media_type": content_type,
               "data": base64.standard_b64encode(data).decode("ascii")}
     settings = get_settings()
@@ -327,7 +394,7 @@ def scan(db: Session, user: User, *, data: bytes, content_type: str, hint: str |
         response = client.beta.messages.create(
             model=settings.scan_model,
             max_tokens=16000,
-            system=_instructions(kinds, products, vendors, hint),
+            system=_instructions(kinds, products, vendors, hint, employees),
             messages=[{"role": "user", "content": [
                 {"type": block_type, "source": source},
                 {"type": "text", "text": "Read this document into the draft."},
@@ -347,10 +414,10 @@ def scan(db: Session, user: User, *, data: bytes, content_type: str, hint: str |
         raise _upstream_error(exc) from exc
 
     if response.stop_reason == "refusal":
-        return {"kind": "unreadable", "order": None, "vendor_invoice": None,
+        return {"kind": "unreadable", "order": None, "vendor_invoice": None, "timesheet": None,
                 "warnings": ["The AI wouldn't read this document. Enter it by hand."]}
     if response.stop_reason == "max_tokens":
-        return {"kind": "unreadable", "order": None, "vendor_invoice": None,
+        return {"kind": "unreadable", "order": None, "vendor_invoice": None, "timesheet": None,
                 "warnings": ["The document was too long to read in one go. Try one page at a time."]}
 
     text = next((b.text for b in response.content if b.type == "text"), "")
@@ -358,7 +425,8 @@ def scan(db: Session, user: User, *, data: bytes, content_type: str, hint: str |
         raw = json.loads(text)
     except (json.JSONDecodeError, TypeError):
         logger.warning("scan_bad_json")
-        return {"kind": "unreadable", "order": None, "vendor_invoice": None,
+        return {"kind": "unreadable", "order": None, "vendor_invoice": None, "timesheet": None,
                 "warnings": ["The AI's answer couldn't be understood. Try again."]}
 
-    return _clean(raw, kinds, {p.id: p for p in products}, {v.id: v for v in vendors})
+    return _clean(raw, kinds, {p.id: p for p in products}, {v.id: v for v in vendors},
+                  {e.id: e for e in employees})

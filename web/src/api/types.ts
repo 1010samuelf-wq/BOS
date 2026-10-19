@@ -87,13 +87,25 @@ export interface ScannedVendorInvoice {
   date: string;
   total: string;
 }
+export interface ScannedShift {
+  date: string;      // YYYY-MM-DD
+  time_in: string;   // HH:MM, shop's local time
+  time_out: string;  // HH:MM or "" if not written
+}
+export interface ScannedTimesheet {
+  employee_id: number | null;
+  employee_name: string;
+  week_start: string;
+  shifts: ScannedShift[];
+}
 export interface ScanResult {
-  kind: "order" | "vendor_invoice" | "unreadable";
+  kind: "order" | "vendor_invoice" | "timesheet" | "unreadable";
   order: ScannedOrder | null;
   vendor_invoice: ScannedVendorInvoice | null;
+  timesheet?: ScannedTimesheet | null;
   warnings: string[];
 }
-export type ScanKind = "order" | "vendor_invoice";
+export type ScanKind = "order" | "vendor_invoice" | "timesheet";
 /** What the public website shows: active AND switched on for the website. */
 export interface PublicProduct {
   id: number;

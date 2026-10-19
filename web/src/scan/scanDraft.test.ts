@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { ScannedOrder } from "../api/types";
 import { draftTotal, validateDraft } from "../order/orderDraft";
-import { draftFromScan, unmatchedCount, validTotal } from "./scanDraft";
+import type { TimeEntry } from "../api/types";
+import { draftFromScan, overlapsExisting, shiftHours, shiftProblem, shiftToEntry, unmatchedCount, validTotal } from "./scanDraft";
 
 const order = (over: Partial<ScannedOrder> = {}): ScannedOrder => ({
   customer_name: "Mrs. Cohen", customer_phone: "514-555-0100",
@@ -76,5 +77,36 @@ describe("an invoice total", () => {
     expect(validTotal("")).toBe(false);
     expect(validTotal("0")).toBe(false);
     expect(validTotal("1,234")).toBe(false);
+  });
+});
+
+
+describe("scanned timesheet shifts", () => {
+  const shift = (date: string, time_in: string, time_out: string) => ({ date, time_in, time_out });
+
+  it("turns the shop's wall-clock times into the instants the Time screen would", () => {
+    const e = shiftToEntry(shift("2026-10-13", "08:30", "16:15"));
+    expect(e.clock_in).toBe(new Date("2026-10-13T08:30").toISOString());
+    expect(e.clock_out).toBe(new Date("2026-10-13T16:15").toISOString());
+    expect(shiftToEntry(shift("2026-10-13", "08:30", "")).clock_out).toBeNull();
+  });
+
+  it("refuses a shift that ends before it starts (an AM/PM slip)", () => {
+    expect(shiftProblem(shift("2026-10-13", "08:00", "04:00"))).toMatch(/AM\/PM/);
+    expect(shiftProblem(shift("", "08:00", "12:00"))).toBe("needs a date");
+    expect(shiftProblem(shift("2026-10-13", "08:00", "12:00"))).toBeNull();
+  });
+
+  it("spots a shift that's already in the system", () => {
+    const existing = [{ id: 1, user_id: 2, paid: false,
+      clock_in: new Date("2026-10-13T08:00").toISOString(), clock_out: new Date("2026-10-13T12:00").toISOString() }] as TimeEntry[];
+    expect(overlapsExisting(shift("2026-10-13", "11:00", "15:00"), existing)).toBe(true);
+    expect(overlapsExisting(shift("2026-10-13", "12:00", "15:00"), existing)).toBe(false);
+    expect(overlapsExisting(shift("2026-10-14", "08:00", "12:00"), existing)).toBe(false);
+  });
+
+  it("works out the hours for the check", () => {
+    expect(shiftHours(shift("2026-10-13", "08:30", "16:15"))).toBe("7.75");
+    expect(shiftHours(shift("2026-10-13", "08:30", ""))).toBe("");
   });
 });

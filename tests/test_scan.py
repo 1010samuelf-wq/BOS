@@ -35,6 +35,10 @@ def _empty_order():
             "card_message": "", "notes": "", "items": []}
 
 
+def _empty_sheet():
+    return {"employee_id": 0, "employee_name": "", "week_start": "", "shifts": []}
+
+
 def _empty_invoice():
     return {"vendor_id": 0, "vendor_name": "", "invoice_number": "", "date": "", "total": ""}
 
@@ -201,3 +205,48 @@ def test_card_numbers_are_removed_even_if_the_ai_copies_one(client, ai):
     assert "4111" not in body["warnings"][0]
     assert o["customer_phone"] == "514-555-0100"  # a phone number is not a card number
     assert o["payment_method"] == ""  # only cash / card
+
+
+def test_a_timesheet_becomes_shifts_for_a_real_employee(client, ai, make_user):
+    uid, _, _ = make_user("Rivky", "cashier")
+    fake = ai({"kind": "timesheet", "order": _empty_order(), "vendor_invoice": _empty_invoice(), "warnings": [],
+               "timesheet": {"employee_id": uid, "employee_name": "RIVKY", "week_start": "2026-10-11",
+                             "shifts": [
+                                 {"date": "2026-10-13", "time_in": "8:30", "time_out": "16:15"},
+                                 {"date": "2026-10-11", "time_in": "07:00", "time_out": ""},
+                                 {"date": "2026-10-12", "time_in": "", "time_out": "12:00"},   # no start: dropped
+                                 {"date": "Tuesday", "time_in": "09:00", "time_out": "10:00"},  # no date: dropped
+                             ]}})
+    body = _scan(client, hint="timesheet").json()
+    assert body["kind"] == "timesheet"
+    t = body["timesheet"]
+    assert (t["employee_id"], t["employee_name"], t["week_start"]) == (uid, "Rivky", "2026-10-11")
+    assert t["shifts"] == [
+        {"date": "2026-10-11", "time_in": "07:00", "time_out": ""},
+        {"date": "2026-10-13", "time_in": "08:30", "time_out": "16:15"},
+    ]
+    system = fake.calls[0]["system"]
+    assert f"{uid} | Rivky" in system and "WEEKLY TIMESHEET" in system
+    # Scanning saves nothing: no shifts were created.
+    assert client.get("/api/v1/time/entries", params={"employee_id": uid}).json() == []
+
+
+def test_an_unknown_employee_keeps_the_written_name(client, ai):
+    ai({"kind": "timesheet", "order": _empty_order(), "vendor_invoice": _empty_invoice(), "warnings": [],
+        "timesheet": {"employee_id": 4242, "employee_name": "Someone New", "week_start": "", "shifts": []}})
+    t = _scan(client).json()["timesheet"]
+    assert (t["employee_id"], t["employee_name"]) == (None, "Someone New")
+
+
+def test_only_managers_can_scan_timesheets(make_user, ai):
+    _, _, cashier = make_user("Cashier Cass", "cashier")
+    fake = ai({"kind": "timesheet", "order": _empty_order(), "vendor_invoice": _empty_invoice(), "warnings": [],
+               "timesheet": {**_empty_sheet(), "employee_name": "Cass",
+                             "shifts": [{"date": "2026-10-13", "time_in": "08:00", "time_out": "12:00"}]}})
+    body = _scan(cashier).json()
+    assert body["kind"] == "unreadable" and body["timesheet"] is None
+    assert "TIMESHEET" not in fake.calls[0]["system"]
+    assert "timesheet" not in cashier.get("/api/v1/scan").json()["kinds"]
+
+    _, _, manager = make_user("Manager Mo", "manager")
+    assert "timesheet" in manager.get("/api/v1/scan").json()["kinds"]

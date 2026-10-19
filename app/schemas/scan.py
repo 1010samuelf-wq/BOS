@@ -33,10 +33,24 @@ class ScannedVendorInvoice(BaseModel):
     total: str
 
 
+class ScannedShift(BaseModel):
+    date: str
+    time_in: str
+    time_out: str
+
+
+class ScannedTimesheet(BaseModel):
+    employee_id: int | None
+    employee_name: str
+    week_start: str
+    shifts: list[ScannedShift]
+
+
 class ScanOut(BaseModel):
-    kind: str  # order | vendor_invoice | unreadable
+    kind: str  # order | vendor_invoice | timesheet | unreadable
     order: ScannedOrder | None
     vendor_invoice: ScannedVendorInvoice | None
+    timesheet: ScannedTimesheet | None = None
     warnings: list[str]
 
 

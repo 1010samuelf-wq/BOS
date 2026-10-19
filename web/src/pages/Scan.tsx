@@ -11,11 +11,19 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
-import type { ScanKind, ScanResult, ScannedVendorInvoice } from "../api/types";
+import type { ScanKind, ScanResult, ScannedTimesheet, ScannedVendorInvoice } from "../api/types";
 import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
-import { draftFromScan, unmatchedCount, validTotal } from "../scan/scanDraft";
+import {
+  draftFromScan, overlapsExisting, shiftHours, shiftProblem, shiftToEntry, unmatchedCount, validTotal,
+  type ShiftRow,
+} from "../scan/scanDraft";
 
-const KIND_LABEL: Record<ScanKind, string> = { order: "Order form", vendor_invoice: "Vendor invoice" };
+const KIND_LABEL: Record<ScanKind, string> = {
+  order: "Order form", vendor_invoice: "Vendor invoice", timesheet: "Timesheet",
+};
+const KIND_PHRASE: Record<ScanKind, string> = {
+  order: "an order form", vendor_invoice: "a vendor invoice", timesheet: "a weekly timesheet",
+};
 
 export default function Scan() {
   const options = useQuery({ queryKey: ["scan-options"], queryFn: api.scanOptions });
@@ -58,7 +66,7 @@ export default function Scan() {
 
       <div className="card">
         <p className="muted" style={{ marginTop: 0 }}>
-          Take a photo or choose a PDF of {kinds.map((k) => (k === "order" ? "an order form" : "a vendor invoice")).join(" or ")}.
+          Take a photo or choose a PDF of {kinds.map((k) => KIND_PHRASE[k]).join(", or ")}.
           The AI reads it into a draft — you check it before anything is saved.
         </p>
         <input
@@ -109,13 +117,16 @@ function Warnings({ items }: { items: string[] }) {
 
 function ScanReview({ result, onAgain }: { result: ScanResult; onAgain: () => void }) {
   if (result.kind === "order" && result.order) return <OrderReview result={result} />;
+  if (result.kind === "timesheet" && result.timesheet) {
+    return <TimesheetReview read={result.timesheet} warnings={result.warnings} onAgain={onAgain} />;
+  }
   if (result.kind === "vendor_invoice" && result.vendor_invoice) {
     return <InvoiceReview read={result.vendor_invoice} warnings={result.warnings} onAgain={onAgain} />;
   }
   return (
     <div className="card">
       <h2>Couldn't read this one</h2>
-      <Warnings items={result.warnings.length ? result.warnings : ["It didn't look like an order form or a vendor invoice."]} />
+      <Warnings items={result.warnings.length ? result.warnings : ["It didn't look like a document this screen reads."]} />
       <button className="btn neutral" onClick={onAgain}>Try another photo</button>
     </div>
   );
@@ -252,6 +263,115 @@ function InvoiceReview({ read, warnings, onAgain }: {
       <button className="btn primary" disabled={!canSave || save.isPending} onClick={() => save.mutate()}>
         Save to Bookkeeping
       </button>
+    </div>
+  );
+}
+
+function TimesheetReview({ read, warnings, onAgain }: {
+  read: ScannedTimesheet; warnings: string[]; onAgain: () => void;
+}) {
+  const client = useQueryClient();
+  // The login roster: every active employee's name, readable by managers too
+  // (the full staff list is admin-only).
+  const roster = useQuery({ queryKey: ["roster"], queryFn: api.fetchRoster });
+  const [employeeId, setEmployeeId] = useState<string>(read.employee_id ? String(read.employee_id) : "");
+  const [rows, setRows] = useState<ShiftRow[]>(() => read.shifts.map((sh) => ({ ...sh, include: true })));
+  const [saved, setSaved] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const dates = rows.map((r) => r.date).filter(Boolean).sort();
+  const existing = useQuery({
+    queryKey: ["time-entries", employeeId, dates[0], dates[dates.length - 1]],
+    queryFn: () => api.listTimeEntries({ employee_id: Number(employeeId), from: dates[0], to: dates[dates.length - 1] }),
+    enabled: !!employeeId && dates.length > 0,
+  });
+  const already = (r: ShiftRow) => overlapsExisting(r, existing.data ?? []);
+
+  // A shift that's already in the system starts unticked, so scanning the same
+  // sheet twice doesn't double the week.
+  useEffect(() => {
+    if (!existing.data) return;
+    setRows((rs) => rs.map((r) => (overlapsExisting(r, existing.data!) ? { ...r, include: false } : r)));
+  }, [existing.data]);
+
+  const edit = (i: number, patch: Partial<ShiftRow>) =>
+    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const toSave = rows.filter((r) => r.include && !shiftProblem(r));
+  const blocked = rows.some((r) => r.include && shiftProblem(r));
+
+  const save = useMutation({
+    mutationFn: async () => {
+      for (const r of toSave) {
+        await api.createTimeEntry({ user_id: Number(employeeId), ...shiftToEntry(r) });
+      }
+      return toSave.length;
+    },
+    onSuccess: (n) => {
+      setSaved(n);
+      client.invalidateQueries({ queryKey: ["time-entries"] });
+      client.invalidateQueries({ queryKey: ["hours"] });
+    },
+    onError: (e) => setError(e instanceof ApiRequestError ? e.message : "Couldn't save the shifts."),
+  });
+
+  const who = roster.data?.find((e) => String(e.id) === employeeId)?.name ?? read.employee_name;
+  if (saved !== null) {
+    return (
+      <div className="card">
+        <h2>Saved</h2>
+        <p>{saved} shift{saved === 1 ? "" : "s"} added for <strong>{who}</strong>. They show under <Link to="/time">My time</Link> → {who}.</p>
+        <button className="btn neutral" onClick={onAgain}>Scan another</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card">
+      <h2>Timesheet</h2>
+      <div className="scan-form" style={{ maxWidth: 420 }}>
+        <label>
+          <span>Employee{!read.employee_id && read.employee_name ? ` (sheet says "${read.employee_name}")` : ""}</span>
+          <select className="input" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+            <option value="">Choose…</option>
+            {(roster.data ?? []).map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </label>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Date</th><th>In</th><th>Out</th><th className="num">Hours</th><th></th></tr></thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const problem = shiftProblem(r);
+            return (
+              <tr key={i} style={{ opacity: r.include ? 1 : 0.5 }}>
+                <td><input type="checkbox" checked={r.include} aria-label="Include this shift"
+                  onChange={(e) => edit(i, { include: e.target.checked })} /></td>
+                <td><input className="input" type="date" value={r.date} onChange={(e) => edit(i, { date: e.target.value })} /></td>
+                <td><input className="input" type="time" value={r.time_in} onChange={(e) => edit(i, { time_in: e.target.value })} /></td>
+                <td><input className="input" type="time" value={r.time_out} onChange={(e) => edit(i, { time_out: e.target.value })} /></td>
+                <td className="num">{shiftHours(r)}</td>
+                <td style={{ fontSize: 12 }}>
+                  {problem ? <span className="error">{problem}</span>
+                    : already(r) ? <span className="muted">Already entered</span>
+                    : !r.time_out ? <span className="muted">No time out — saved as still clocked in</span> : null}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <button className="btn neutral sm" style={{ marginTop: 8 }}
+        onClick={() => setRows((rs) => [...rs, { date: rs[rs.length - 1]?.date ?? "", time_in: "", time_out: "", include: true }])}>
+        + Add a shift
+      </button>
+      <Warnings items={warnings} />
+      {error && <p className="error">{error}</p>}
+      <button className="btn primary" style={{ marginTop: 8 }}
+        disabled={!employeeId || toSave.length === 0 || blocked || save.isPending}
+        onClick={() => save.mutate()}>
+        {save.isPending ? "Saving…" : `Save ${toSave.length} shift${toSave.length === 1 ? "" : "s"}`}
+      </button>
+      {blocked && <span className="error" style={{ marginLeft: 10, fontSize: 13 }}>Fix or untick the rows marked in red.</span>}
     </div>
   );
 }
