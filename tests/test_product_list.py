@@ -56,8 +56,10 @@ def test_new_products_are_sellable_but_kept_off_the_website(client):
 
 
 def test_an_existing_product_under_the_bakers_name_is_renamed_not_duplicated(client, make_product):
-    old = make_product(name="rum BALLS", price="40.00")
+    # Rows from before the product was typed in: once it exists the list
+    # stops offering that row, but a browser can still send it.
     rows = [r for r in _rows(client) if r["baker_name"] == "Rum balls"]
+    old = make_product(name="rum BALLS", price="40.00")
 
     body = _import(client, rows)
     assert [(c["action"], c["product_id"], c["old_name"]) for c in body["changes"]] == [
@@ -109,3 +111,53 @@ def test_importing_needs_the_settings_section(make_user, client):
     _, _, cashier = make_user("Cashier Cass", "cashier")
     assert cashier.get(URL).status_code == 403
     assert cashier.post(f"{URL}/import", json={"rows": rows, "apply": True}).status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# the list shrinks as rows become products
+# ---------------------------------------------------------------------------
+def _count(client):
+    return next(l["rows"] for l in client.get(URL).json() if l["name"] == LIST)
+
+
+def test_a_saved_row_leaves_the_list_even_under_a_nicer_name(client):
+    rows = _rows(client)
+    rum = next(r for r in rows if r["baker_name"] == "Rum balls")
+    rum["name"] = "Grandma's Rum Truffles"  # nothing like the baker's name or the suggestion
+    _import(client, [rum], apply=True)
+
+    left = _rows(client)
+    assert len(left) == 44 and _count(client) == 44
+    assert "Rum balls" not in {r["baker_name"] for r in left}
+    assert "Grandma's Rum Truffles" in _products(client)
+
+
+def test_saving_everything_empties_the_list(client):
+    _import(client, _rows(client), apply=True)
+    assert _rows(client) == [] and _count(client) == 0
+
+
+def test_a_product_typed_in_by_hand_takes_its_row_off_the_list(client, make_product):
+    make_product(name="rum BALLS", price="40.00")
+    assert "Rum balls" not in {r["baker_name"] for r in _rows(client)}
+
+
+def test_a_retired_product_still_counts_as_done(client):
+    rum = next(r for r in _rows(client) if r["baker_name"] == "Rum balls")
+    _import(client, [rum], apply=True)
+    pid = _products(client)[rum["name"]]["id"]
+    assert client.put(f"/api/v1/products/{pid}", json={"active": False}).status_code == 200
+    assert "Rum balls" not in {r["baker_name"] for r in _rows(client)}
+
+
+def test_resending_a_row_saved_under_a_nicer_name_updates_it_not_a_duplicate(client):
+    """An old browser draft can still send a row that's already a product: it
+    must find that product through the baker's name it was saved from."""
+    rum = next(r for r in _rows(client) if r["baker_name"] == "Rum balls")
+    rum["name"] = "Grandma's Rum Truffles"
+    _import(client, [rum], apply=True)
+
+    rum["name"] = "Grandma's Famous Rum Truffles"
+    body = _import(client, [rum], apply=True)
+    assert [c["action"] for c in body["changes"]] == ["update"]
+    assert list(_products(client)) == ["Grandma's Famous Rum Truffles"]

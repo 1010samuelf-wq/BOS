@@ -5,8 +5,9 @@ The CSV in app/tools/data is only the starting point: Settings → Products show
 every row with an editable name and price, and what gets saved is what the
 person sent back. So `plan` and `apply` work on rows passed in, not on the file.
 
-A row matches an existing product by either its new name or the baker's name
-(ignoring case and spacing). A match is renamed/re-priced rather than added
+A row matches an existing product by its new name, by the baker's name the
+product was saved from (`Product.baker_name`), or by a product typed in under
+the baker's name (all ignoring case and spacing). A match is renamed/re-priced rather than added
 again, so importing twice — or after typing the baker's name in by hand — never
 makes duplicates. New products are sellable at once (active) but kept off the
 public website (show_on_menu False) until someone has looked at them and added
@@ -87,10 +88,43 @@ def _price(text: str) -> Decimal | None:
     return value.quantize(Decimal("0.01"))
 
 
-def plan(db: Session, rows: list[Row]) -> list[Change]:
-    by_name: dict[str, list[Product]] = {}
+@dataclass
+class _Catalog:
+    by_name: dict[str, list[Product]]
+    by_baker: dict[str, list[Product]]
+
+    def match(self, row: Row) -> list[Product]:
+        """The products a row already is. The new name wins if it's in the
+        catalog; otherwise the baker's name finds one saved from this list
+        under a nicer name, or one typed in by hand before it had one."""
+        baker = normalise(row.baker_name) if row.baker_name else ""
+        return (
+            self.by_name.get(normalise(row.name.strip()))
+            or (self.by_baker.get(baker) if baker else None)
+            or (self.by_name.get(baker) if baker else None)
+            or []
+        )
+
+
+def _catalog(db: Session) -> _Catalog:
+    cat = _Catalog({}, {})
     for p in db.execute(select(Product)).scalars():
-        by_name.setdefault(normalise(p.name), []).append(p)
+        cat.by_name.setdefault(normalise(p.name), []).append(p)
+        if p.baker_name:
+            cat.by_baker.setdefault(normalise(p.baker_name), []).append(p)
+    return cat
+
+
+def remaining(db: Session, rows: list[Row]) -> list[Row]:
+    """The rows not in the catalog yet — what Settings still needs to offer.
+    Retired products count as in the catalog: they were dealt with, and are
+    brought back from the Deleted page, not re-imported."""
+    cat = _catalog(db)
+    return [r for r in rows if not cat.match(r)]
+
+
+def plan(db: Session, rows: list[Row]) -> list[Change]:
+    cat = _catalog(db)
 
     # Two rows given the same name would save as two identical-looking
     # products; flag every one of them rather than silently picking one.
@@ -119,11 +153,7 @@ def plan(db: Session, rows: list[Row]) -> list[Change]:
             changes.append(Change("skip", row, reason="two rows have this name"))
             continue
 
-        # The new name wins if it's already in the catalog; otherwise the
-        # baker's name finds a product typed in before it had a nicer one.
-        matches = by_name.get(normalise(name)) or (
-            by_name.get(normalise(row.baker_name)) if row.baker_name else None
-        ) or []
+        matches = cat.match(row)
         if len(matches) > 1:
             changes.append(Change("skip", row, reason=f"{len(matches)} products already share this name"))
             continue
@@ -148,9 +178,12 @@ def apply(db: Session, changes: list[Change]) -> None:
                 category=c.row.category,
                 active=True,
                 show_on_menu=False,
+                baker_name=c.row.baker_name or None,
             ))
         elif c.action == "update":
             p = db.get(Product, c.product_id)
             p.name = c.row.name.strip()
             p.price = c.new_price
+            if c.row.baker_name:
+                p.baker_name = c.row.baker_name
     db.flush()

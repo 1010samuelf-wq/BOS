@@ -34,25 +34,30 @@ export function clearDraft(list: string): void {
   }
 }
 
-/** The rows to show: a saved draft if it still matches the list (same items in
- *  the same order), otherwise the list as shipped. A list that changed under a
- *  draft would put edited names on the wrong items, so the draft is dropped. */
+/** The rows to show: the server's list (only what isn't in the catalog yet),
+ *  with this browser's edits laid over it row by row, matched on the baker's
+ *  name. The list shrinks as rows are saved — here or on another device — so
+ *  matching by position would put edited names on the wrong items. */
 export function startingRows(base: ProductListRow[], draft: ProductListRow[] | null): ProductListRow[] {
-  if (
-    draft &&
-    draft.length === base.length &&
-    draft.every((d, i) => d.baker_name === base[i].baker_name)
-  ) {
-    return draft;
-  }
-  return base;
+  if (!draft) return base;
+  const edits = new Map(draft.map((d) => [d.baker_name, d]));
+  return base.map((b) => {
+    const d = edits.get(b.baker_name);
+    return d ? { ...b, name: d.name, price: d.price, include: d.include } : b;
+  });
+}
+
+/** Edits are compared against what the list suggests for each row. */
+function suggestionFor(base: ProductListRow[], row: ProductListRow): ProductListRow | undefined {
+  return base.find((b) => b.baker_name === row.baker_name);
 }
 
 /** How many rows the person has changed from the list as shipped. */
 export function editedCount(base: ProductListRow[], rows: ProductListRow[]): number {
-  return rows.filter(
-    (r, i) => base[i] && (r.name !== base[i].name || r.price !== base[i].price || r.include !== base[i].include),
-  ).length;
+  return rows.filter((r) => {
+    const b = suggestionFor(base, r);
+    return b && (r.name !== b.name || r.price !== b.price || r.include !== b.include);
+  }).length;
 }
 
 export interface ListSummary {
@@ -70,4 +75,14 @@ export function summarize(changes: ProductListChange[]): ListSummary {
   for (const c of changes) s[c.action] += 1;
   s.writes = s.add + s.update;
   return s;
+}
+
+/** The rows still to do after a save: everything except what is now a product
+ *  (added, renamed, or already there). Unticked rows and ones that couldn't be
+ *  saved stay, with their typing. */
+export function leftAfterSave(rows: ProductListRow[], changes: ProductListChange[]): ProductListRow[] {
+  return rows.filter((_, i) => {
+    const action = changes[i]?.action;
+    return action !== "add" && action !== "update" && action !== "unchanged";
+  });
 }

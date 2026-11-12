@@ -26,16 +26,27 @@ router = APIRouter(prefix="/product-lists", tags=["catalog"])
 
 
 @router.get("", response_model=list[ProductListOut])
-def list_product_lists(_: User = Depends(require_section("settings"))):
-    return [ProductListOut(name=n, rows=len(pl.read_list(pl.list_path(n)))) for n in pl.lists()]
+def list_product_lists(
+    db: Session = Depends(get_db), _: User = Depends(require_section("settings"))
+):
+    """Each list with how many of its rows are still to be added."""
+    return [
+        ProductListOut(name=n, rows=len(pl.remaining(db, pl.read_list(pl.list_path(n)))))
+        for n in pl.lists()
+    ]
 
 
 @router.get("/{name}", response_model=list[ProductListRow])
-def get_product_list(name: str, _: User = Depends(require_section("settings"))):
+def get_product_list(
+    name: str, db: Session = Depends(get_db), _: User = Depends(require_section("settings"))
+):
+    """The rows not yet in the catalog. Once a row is saved as a product (or a
+    product by that name already exists) it drops off, so the list shrinks to
+    what's left to do."""
     path = pl.list_path(name)
     if path is None:
         raise not_found(f"Product list {name!r} not found")
-    return [ProductListRow(**r.__dict__) for r in pl.read_list(path)]
+    return [ProductListRow(**r.__dict__) for r in pl.remaining(db, pl.read_list(path))]
 
 
 @router.post("/import", response_model=ProductListImportOut)

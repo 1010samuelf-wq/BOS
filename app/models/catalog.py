@@ -41,6 +41,10 @@ class Product(Base, TimestampMixin):
     # runtime that can no longer be updated over the air — changing the shape
     # of the payload would break them with no way to fix it remotely.
     photo_url: Mapped[str | None] = mapped_column(String(500))
+    # The name on the baker's item list this product was saved from, if any.
+    # It's what ties a product saved under a nicer name back to its row, so the
+    # list in Settings stops offering it once it's in the catalog.
+    baker_name: Mapped[str | None] = mapped_column(String(300))
 
     photos: Mapped[list["ProductPhoto"]] = relationship(
         back_populates="product",

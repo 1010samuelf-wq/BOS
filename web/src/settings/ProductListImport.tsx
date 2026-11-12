@@ -3,7 +3,8 @@
 // The baker's item list, one row per item, with the new name and price
 // editable before anything is saved. Typing is remembered in this browser, so
 // names can be worked on over several sittings. Preview shows what Save would
-// do; Save is only offered for exactly what was previewed.
+// do; Save is only offered for exactly what was previewed. The server only
+// sends rows that aren't products yet, so saved ones drop off the list.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -11,7 +12,7 @@ import { useEffect, useState } from "react";
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { ProductListImport as ImportResult, ProductListRow } from "../api/types";
-import { clearDraft, editedCount, loadDraft, saveDraft, startingRows, summarize } from "./productListDraft";
+import { clearDraft, editedCount, leftAfterSave, loadDraft, saveDraft, startingRows, summarize } from "./productListDraft";
 
 const STATUS: Record<string, string> = {
   add: "New",
@@ -50,7 +51,15 @@ export default function ProductListImport() {
       setStale(false);
       if (r.applied) {
         setSaved(summarize(r.changes).writes);
-        clearDraft(listName);
+        // What's now in the catalog leaves the list straight away (the server
+        // agrees on the next read); the typing on the rest is kept.
+        const left = leftAfterSave(rows ?? [], r.changes);
+        saveDraft(listName, left);
+        setRows(left);
+        setResult(null);
+        setStale(true);
+        client.invalidateQueries({ queryKey: ["product-lists"] });
+        client.invalidateQueries({ queryKey: ["product-list", listName] });
         client.invalidateQueries({ queryKey: ["products"] });
         client.invalidateQueries({ queryKey: ["product-categories"] });
       }
@@ -60,6 +69,20 @@ export default function ProductListImport() {
 
   // Optional card: nothing shipped, or the list didn't load — stay out of the way.
   if (!listName || !base.data || !rows) return null;
+  // Everything on the list is in the catalog. Say so once, right after the
+  // save that finished it; after that the card has nothing left to offer.
+  if (rows.length === 0) {
+    if (saved === null) return null;
+    return (
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Add products from the baker's list</h2>
+        <p style={{ marginBottom: 0 }}>
+          <strong>Saved {saved} product{saved === 1 ? "" : "s"}.</strong> Everything on the baker's
+          list is in the catalog now.
+        </p>
+      </div>
+    );
+  }
 
   const edit = (i: number, patch: Partial<ProductListRow>) => {
     const next = rows.map((r, j) => (j === i ? { ...r, ...patch } : r));
@@ -155,7 +178,10 @@ export default function ProductListImport() {
 
           {error && <p className="error">{error}</p>}
           {saved !== null && (
-            <p><strong>Saved {saved} product{saved === 1 ? "" : "s"}.</strong> They're in the catalog below.</p>
+            <p>
+              <strong>Saved {saved} product{saved === 1 ? "" : "s"}.</strong> They're in the catalog below
+              and off this list; {rows.length} left to do.
+            </p>
           )}
           {summary && !stale && saved === null && (
             <p style={{ margin: "10px 0 6px" }}>
