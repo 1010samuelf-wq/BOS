@@ -1,0 +1,9 @@
+# Just Cake Easy, served by nginx. Same prebuilt dist/ as the dashboard (one
+# `npm run build` makes both pages) — build it first, exactly as for the
+# dashboard:
+#   VITE_API_URL=https://just-cake-bakery.fly.dev npm run build
+FROM nginx:alpine
+COPY dist /usr/share/nginx/html
+COPY nginx.easy.conf /etc/nginx/conf.d/default.conf
+COPY security-headers.easy.conf /etc/nginx/security-headers.conf
+EXPOSE 80

@@ -1,0 +1,141 @@
+/* Just Cake Easy. Big, bright, finger-sized: nothing tappable under 64px tall,
+   text no smaller than 18px. Light only — it's a shop-floor tablet. */
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+body {
+  font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 20px;
+  color: #2a2420;
+  background: #fff7ef;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+button { font: inherit; cursor: pointer; border: none; touch-action: manipulation; }
+button:disabled { opacity: 0.45; cursor: default; }
+input { font: inherit; }
+
+.easy { min-height: 100%; }
+.easy-screen { display: flex; flex-direction: column; height: 100dvh; }
+
+.easy-top { display: flex; align-items: center; gap: 16px; padding: 14px 20px; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+.easy-top h1 { margin: 0; font-size: 30px; }
+.easy-back { background: #f1e7dd; border-radius: 18px; padding: 14px 22px; font-size: 22px; font-weight: 700; min-height: 64px; }
+
+.easy-link { background: none; color: #6b5d52; text-decoration: underline; font-size: 20px; padding: 12px; }
+.easy-error { color: #b3261e; font-weight: 700; margin: 10px 20px; }
+.easy-wait { color: #6b5d52; text-align: center; font-size: 22px; margin: 24px; }
+
+.easy-btn { color: #fff; border-radius: 20px; padding: 18px 28px; font-size: 24px; font-weight: 800; min-height: 72px; box-shadow: 0 4px 0 rgba(0,0,0,.15); }
+.easy-btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.15); }
+.easy-btn.go { background: #2bb673; }
+.easy-btn.small { font-size: 20px; padding: 14px 18px; min-height: 64px; flex: 1; }
+/* Glow, don't grow: a button that changes size under the finger is a worse
+   target for the second tap it's asking for. */
+.easy-btn.armed { animation: easy-glow .6s ease-in-out infinite alternate; }
+@keyframes easy-glow { to { box-shadow: 0 0 0 8px rgba(255, 176, 32, .7); } }
+@keyframes easy-pulse { to { transform: scale(1.04); } }
+.easy-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* sign in */
+.easy-signin { padding: 28px; display: flex; flex-direction: column; align-items: center; }
+.easy-hello { font-size: 40px; margin: 10px 0 24px; text-align: center; }
+.easy-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; width: 100%; max-width: 1100px; }
+.easy-person { color: #fff; border-radius: 28px; padding: 24px 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; font-size: 24px; font-weight: 800; min-height: 170px; box-shadow: 0 6px 0 rgba(0,0,0,.15); }
+.easy-initial { width: 84px; height: 84px; border-radius: 50%; background: rgba(255,255,255,.3); display: flex; align-items: center; justify-content: center; font-size: 44px; }
+.easy-dots { display: flex; gap: 16px; margin-bottom: 18px; }
+.easy-dots span { width: 26px; height: 26px; border-radius: 50%; border: 3px solid #b9a99b; }
+.easy-dots span.on { border-color: transparent; }
+.easy-pad { display: grid; grid-template-columns: repeat(3, 120px); gap: 16px; }
+.easy-pad button { height: 100px; border-radius: 24px; background: #fff; font-size: 40px; font-weight: 800; box-shadow: 0 4px 0 #e6d8cb; }
+.easy-pad button.go { background: #2bb673; color: #fff; }
+.easy-pad button.erase { background: #f1e7dd; }
+
+/* home */
+.easy-home { padding: 28px; min-height: 100dvh; display: flex; flex-direction: column; }
+.easy-greet { display: flex; justify-content: space-between; align-items: flex-start; }
+.easy-greet h1 { font-size: 44px; margin: 0; }
+.easy-greet p { margin: 4px 0 0; font-size: 24px; color: #6b5d52; }
+.easy-tiles { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; margin-top: 28px; }
+.easy-tile { color: #fff; border-radius: 36px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-size: 34px; font-weight: 900; min-height: 220px; box-shadow: 0 8px 0 rgba(0,0,0,.15); }
+.easy-tile:active { transform: translateY(5px); box-shadow: 0 3px 0 rgba(0,0,0,.15); }
+.easy-tile-icon { font-size: 90px; line-height: 1; }
+
+/* choices (category chips, today/tomorrow, paid…) */
+.easy-cats, .easy-choice { display: flex; gap: 12px; flex-wrap: wrap; }
+.easy-cats { padding: 14px 20px; overflow-x: auto; flex-wrap: nowrap; flex-shrink: 0; }
+.easy-choice-btn { background: #fff; border: 3px solid #e6d8cb; border-radius: 20px; padding: 14px 22px; font-size: 22px; font-weight: 700; min-height: 64px; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.easy-choice-btn.on { background: #ff7a59; border-color: #ff7a59; color: #fff; }
+.easy-choice-btn input[type="date"] { font-size: 18px; border: none; background: transparent; color: inherit; }
+
+/* products */
+.easy-products { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; padding: 6px 20px 20px; align-content: start; }
+.easy-product { background: #fff; border-radius: 24px; border: 4px solid transparent; box-shadow: 0 4px 0 #ecdccd; display: flex; flex-direction: column; overflow: hidden; }
+.easy-product.picked { border-color: #2bb673; }
+.easy-product-main { background: none; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; }
+.easy-photo { border-radius: 18px; object-fit: cover; display: flex; align-items: center; justify-content: center; background: #fff0e3; }
+.easy-product-name { font-size: 20px; font-weight: 800; text-align: center; line-height: 1.2; }
+.easy-price { font-size: 20px; color: #fff; background: #ff7a59; border-radius: 999px; padding: 4px 14px; font-weight: 800; }
+.easy-qty { display: flex; align-items: center; justify-content: space-between; background: #e9f8f0; padding: 6px; }
+.easy-qty button { width: 64px; height: 56px; border-radius: 16px; background: #2bb673; color: #fff; font-size: 34px; font-weight: 900; }
+.easy-qty b { font-size: 30px; }
+
+.easy-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,.08); font-size: 24px; flex-wrap: wrap; }
+
+/* customer form */
+.easy-form { flex: 1; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 14px; max-width: 900px; width: 100%; margin: 0 auto; }
+.easy-form label { display: flex; flex-direction: column; font-weight: 800; font-size: 22px; gap: 6px; }
+.easy-form input:not([type="date"]) { font-size: 26px; padding: 16px 18px; border-radius: 18px; border: 3px solid #e6d8cb; background: #fff; }
+.easy-form input:focus { outline: none; border-color: #ff7a59; }
+.easy-label { font-weight: 800; font-size: 22px; margin-top: 6px; }
+
+.easy-done { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 24px; }
+.easy-big-icon { font-size: 120px; }
+.easy-done h1 { font-size: 44px; margin: 0; }
+.easy-done p { font-size: 26px; color: #6b5d52; margin: 0 0 20px; }
+
+/* orders */
+.easy-orders { flex: 1; overflow-y: auto; padding: 14px 20px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 18px; align-content: start; }
+.easy-order { background: #fff; border-radius: 24px; border: 4px solid; overflow: hidden; display: flex; flex-direction: column; }
+.easy-order-head { color: #fff; display: flex; justify-content: space-between; padding: 12px 16px; font-weight: 800; font-size: 22px; gap: 8px; }
+.easy-order ul { margin: 10px 0; padding: 0 18px; list-style: none; font-size: 21px; line-height: 1.5; }
+.easy-order-foot { display: flex; justify-content: space-between; padding: 0 16px 10px; font-weight: 700; }
+.easy-owes { color: #b3261e; }
+.easy-paid { color: #1f8a55; }
+.easy-order .easy-row { padding: 0 12px 12px; }
+
+/* clock */
+.easy-clock { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+.easy-clock-state { font-size: 32px; font-weight: 800; margin: 0; }
+.easy-clock-btn { width: 320px; height: 320px; border-radius: 50%; color: #fff; font-size: 44px; font-weight: 900; box-shadow: 0 10px 0 rgba(0,0,0,.18); }
+.easy-clock-btn:active { transform: translateY(6px); box-shadow: 0 4px 0 rgba(0,0,0,.18); }
+
+/* ask */
+.easy-chat { flex: 1; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.easy-starters { display: flex; flex-direction: column; gap: 12px; max-width: 760px; margin: 0 auto; width: 100%; }
+.easy-starters p { font-size: 22px; color: #6b5d52; text-align: center; }
+.easy-starter { background: #fff; border: 3px solid #e3d4ff; border-radius: 22px; padding: 20px; font-size: 24px; font-weight: 700; text-align: left; }
+.easy-msg { max-width: 80%; padding: 14px 18px; border-radius: 22px; font-size: 22px; line-height: 1.45; }
+.easy-msg.me { align-self: flex-end; background: #a35cff; color: #fff; }
+.easy-msg.ai { align-self: flex-start; background: #fff; box-shadow: 0 2px 0 #ecdccd; }
+.easy-msg.ai.wait { color: #6b5d52; font-style: italic; }
+.easy-msg.done { align-self: center; background: #e9f8f0; font-weight: 700; }
+.easy-md p { margin: 0 0 8px; }
+.easy-md p:last-child { margin-bottom: 0; }
+.easy-md table { border-collapse: collapse; font-size: 19px; }
+.easy-md th, .easy-md td { border: 1px solid #ecdccd; padding: 4px 8px; text-align: left; }
+.easy-proposal { align-self: stretch; background: #fff8e1; border: 3px solid #ffb020; border-radius: 22px; padding: 16px; }
+.easy-proposal p { margin: 0 0 12px; font-size: 22px; font-weight: 700; }
+.easy-say { display: flex; gap: 12px; padding: 14px 20px; background: #fff; box-shadow: 0 -2px 10px rgba(0,0,0,.08); }
+.easy-say input { flex: 1; font-size: 24px; padding: 14px 18px; border-radius: 18px; border: 3px solid #e6d8cb; min-width: 0; }
+.easy-mic { width: 72px; min-height: 72px; border-radius: 50%; background: #f1e7dd; font-size: 34px; }
+.easy-mic.on { background: #e5484d; animation: easy-pulse .6s ease-in-out infinite alternate; }
+
+/* A phone held upright: one column of tiles. */
+@media (max-width: 700px) {
+  .easy-tiles { grid-template-columns: 1fr; }
+  .easy-tile { min-height: 150px; }
+  .easy-pad { grid-template-columns: repeat(3, 90px); }
+  .easy-pad button { height: 80px; }
+  .easy-clock-btn { width: 240px; height: 240px; }
+}

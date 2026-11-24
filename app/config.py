@@ -12,6 +12,10 @@ ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 INSECURE_JWT_SECRET = "dev-only-insecure-secret-change-me-in-production"
 
 
+# Front ends this project deploys itself; always allowed by CORS.
+FIRST_PARTY_ORIGINS = ("https://just-cake-easy.fly.dev",)
+
+
 class Settings(BaseSettings):
     """Runtime configuration, read from environment / .env (prefix ``BOS_``)."""
 
@@ -97,7 +101,12 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        listed = [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        # The shop's own Fly-hosted front ends, allowed in code so adding one
+        # doesn't mean rewriting the BOS_CORS_ORIGINS secret (whose current
+        # value can't be read back — see CLAUDE.md). https only, so the
+        # production check below is unaffected.
+        return listed + [o for o in FIRST_PARTY_ORIGINS if o not in listed]
 
 
 @lru_cache

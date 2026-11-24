@@ -595,3 +595,14 @@ export interface EmailTemplate {
   created_at: string;
   updated_at: string;
 }
+
+/** One item from the problem checker (GET /problems). */
+export interface Problem {
+  kind: string;
+  severity: "high" | "medium" | "low";
+  title: string;
+  detail: string;
+  count: number;
+  order_ids: number[];
+  screen: string;
+}

@@ -21,6 +21,7 @@ import { useNavigate } from "react-router-dom";
 
 import { listOrders } from "../api/endpoints";
 import type { Order, OrderStatus } from "../api/types";
+import NeedsAttention from "../components/NeedsAttention";
 import { LoadFailed, Loading, PageHead, Tabs, isStalled } from "../components/ui";
 import { asDate, formatNeeded, neededDeadline } from "../order/dates";
 
@@ -322,6 +323,7 @@ export default function Orders() {
         </div>
         <button className="btn primary" onClick={() => navigate("/orders/new")}>＋ New order</button>
       </PageHead>
+      <NeedsAttention />
 
       {tab === "date" ? <DateOrdersView /> : <OrdersList />}
     </div>

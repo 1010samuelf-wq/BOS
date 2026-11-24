@@ -15,6 +15,8 @@ app/          FastAPI backend — models, schemas, services, api/v1 routers
 alembic/      migrations
 tests/        pytest suite (SQLite in-memory by default)
 web/          admin dashboard (React + Vite + TanStack Query)  -> just-cake-dashboard.fly.dev
+              + Just Cake Easy, the big-button tablet layout (web/easy.html,
+                web/src/easy/)                                -> just-cake-easy.fly.dev
 tablet/       tablet POS (Expo / React Native, expo-router)     -> EAS OTA channel "production"
 menu/         public ordering site (React + Vite)               -> justcakeskosher.com
 docs/         spec, deployment, backups, permissions, in-flight handoffs
@@ -46,6 +48,7 @@ preview harness; there isn't one.
 |---|---|---|
 | Backend | `just-cake-bakery` | `flyctl deploy --remote-only --depot=false` from repo root |
 | Dashboard | `just-cake-dashboard` | build `dist/` first (below), then same flyctl command from `web/` |
+| Easy (tablet layout) | `just-cake-easy` | same build as the dashboard, then `flyctl deploy --remote-only --config fly.easy.toml` from `web/` |
 | Menu | `just-cake-menu` | same pattern from `menu/` |
 | Tablet (JS only) | EAS | `npx eas-cli update --branch production --platform android -m "..."` |
 | Tablet (native dep added) | EAS | full `eas build` — an OTA **cannot** add a native module |
@@ -139,6 +142,21 @@ These are all real bugs that were shipped or nearly shipped. Read before editing
   change, set or reset posts a `pin_security` notification naming who and the
   address. By the owner's choice there is **no** known-device requirement on
   that change: whoever has the old short PIN can set the new one.
+- **Just Cake Easy is a second page of the dashboard, not a separate app.**
+  `vite.config.ts` builds `index.html` and `easy.html` together; the easy Fly
+  app serves the same `dist/` with `nginx.easy.conf` (every route →
+  `easy.html`) and its own `security-headers.easy.conf`, which allows the
+  microphone for the 🎤 button — the dashboard's headers block it, so don't
+  "unify" them. Its origin is allowed by CORS in code
+  (`FIRST_PARTY_ORIGINS` in `app/config.py`), not via the `BOS_CORS_ORIGINS`
+  secret. It deliberately has no reports, settings or problem list (the
+  owner's call: it would confuse the people it's for).
+- **The problem checker (`app/services/problems.py`) is read in two places:**
+  `GET /problems` → the dashboard's "Needs attention" card (managers and
+  admins only), and the assistant's `find_problems` tool. Each check is gated
+  on a section, so add new ones to `_CHECKS` with the section that owns the
+  data. Product stock going negative is *not* a problem (stock is advisory and
+  every order deducts it); only ingredients under their threshold are.
 - **React Query must not be allowed to pause.** The dashboard sets
   `networkMode: "always"` in `web/src/main.tsx`; don't remove it. By default
   React Query pauses every query when its `onlineManager` thinks the browser is

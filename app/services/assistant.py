@@ -38,6 +38,7 @@ from app.models import (
     Company,
     Customer,
     Expense,
+    Ingredient,
     Order,
     Product,
     Task,
@@ -47,6 +48,7 @@ from app.models.base import utc_today, utcnow
 from app.models.enums import (
     CompanyType,
     FulfillmentType,
+    ItemType,
     LedgerEntryType,
     NoteType,
     OrderStatus,
@@ -386,7 +388,101 @@ def describe(db: Session, action: str, args: dict) -> str:
         if not text:
             return f"Clear who order #{o.id} ({o.client_name}) was for."
         return f'Record order #{o.id} ({o.client_name}) as being for "{text}".'
+    if action == "record_payment":
+        o = _order_or_404(db, args.get("order_id"))
+        amount = _positive_amount(args.get("amount"))
+        if amount > o.balance_due:
+            raise APIError(
+                400, "bad_action",
+                f"That's more than the ${o.balance_due} still owing on order #{o.id}.",
+            )
+        method = args.get("payment_method")
+        if method is not None and method not in {m.value for m in PaymentMethod}:
+            raise APIError(400, "bad_action", "That is not a payment method.")
+        when = _entry_date(args.get("received_on"))
+        how = f" by {method}" if method else ""
+        left = o.balance_due - amount
+        return (
+            f"Record ${amount}{how} against order #{o.id} ({o.client_name}), received "
+            f"{_format_needed(datetime(when.year, when.month, when.day))}. "
+            + (f"${left} will still be owing." if left > 0 else "That settles it.")
+        )
+    if action == "update_product":
+        p = _product_or_404(db, args.get("product_id"))
+        changes = _product_changes(args)
+        if not changes:
+            raise APIError(400, "bad_action", "Nothing to change on that product.")
+        words = []
+        if "name" in changes:
+            words.append(f'rename it to "{changes["name"]}"')
+        if "price" in changes:
+            words.append(f"price ${p.price} → ${changes['price']}")
+        if "show_on_menu" in changes:
+            words.append("show it on the website" if changes["show_on_menu"] else "take it off the website")
+        if "active" in changes:
+            words.append("sell it again" if changes["active"] else "stop selling it (retire it)")
+        return f'Change "{p.name}": ' + "; ".join(words) + "."
+    if action == "adjust_stock":
+        item_type, item = _stock_item_or_404(db, args)
+        change = _stock_change(args.get("change"))
+        reason = " ".join(str(args.get("reason", "")).split())
+        if not reason:
+            raise APIError(400, "bad_action", "Say why the stock is changing.")
+        unit = f" {item.unit}" if item_type == ItemType.ingredient else ""
+        verb = "Add" if change > 0 else "Take away"
+        return f"{verb} {abs(change).normalize():f}{unit} of {item.name} in stock — {reason}."
     raise APIError(400, "bad_action", "That is not an action the assistant can take.")
+
+
+def _product_or_404(db: Session, product_id: Any) -> Product:
+    try:
+        pid = int(product_id)
+    except (TypeError, ValueError):
+        raise APIError(400, "bad_action", "That product number isn't valid.")
+    product = db.get(Product, pid)
+    if product is None:
+        raise APIError(404, "not_found", f"Product {pid} was not found.")
+    return product
+
+
+def _product_changes(args: dict) -> dict:
+    """Only the fields the proposal actually sets, validated."""
+    changes: dict = {}
+    if args.get("name") is not None:
+        name = " ".join(str(args["name"]).split())
+        if not name or len(name) > 200:
+            raise APIError(400, "bad_action", "A product name needs 1 to 200 characters.")
+        changes["name"] = name
+    if args.get("price") is not None:
+        changes["price"] = _amount(args["price"])
+    for flag in ("show_on_menu", "active"):
+        if args.get(flag) is not None:
+            if not isinstance(args[flag], bool):
+                raise APIError(400, "bad_action", f"{flag} must be true or false.")
+            changes[flag] = args[flag]
+    return changes
+
+
+def _stock_item_or_404(db: Session, args: dict):
+    try:
+        item_type = ItemType(str(args.get("item_type")))
+        item_id = int(args.get("item_id"))
+    except (TypeError, ValueError):
+        raise APIError(400, "bad_action", "That stock item isn't valid.")
+    item = db.get(Ingredient if item_type == ItemType.ingredient else Product, item_id)
+    if item is None:
+        raise APIError(404, "not_found", f"That {item_type.value} was not found.")
+    return item_type, item
+
+
+def _stock_change(raw: Any) -> Decimal:
+    try:
+        change = Decimal(str(raw).strip())
+    except (InvalidOperation, TypeError):
+        raise APIError(400, "bad_action", "That stock change isn't a valid number.")
+    if not change.is_finite() or change == 0 or abs(change) >= Decimal("1000000"):
+        raise APIError(400, "bad_action", "A stock change must be a non-zero number.")
+    return change.quantize(Decimal("0.001"))
 
 
 def _customer_or_404(db: Session, customer_id: Any) -> Customer:
@@ -618,6 +714,32 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
             OrderUpdate(for_whom=" ".join(str(args.get("for_whom", "")).split()) or None),
             user,
         )
+    elif action == "record_payment":
+        method = args.get("payment_method")
+        order_service.record_payment(
+            db,
+            int(args["order_id"]),
+            user,
+            amount=_positive_amount(args.get("amount")),
+            method=PaymentMethod(method) if method else None,
+            received_on=_entry_date(args.get("received_on")),
+        )
+    elif action == "update_product":
+        product = _product_or_404(db, args.get("product_id"))
+        for field, value in _product_changes(args).items():
+            setattr(product, field, value)
+    elif action == "adjust_stock":
+        from app.services import stock as stock_service
+
+        item_type, item = _stock_item_or_404(db, args)
+        stock_service.apply_delta(
+            db,
+            item_type=item_type,
+            item_id=item.id,
+            delta=_stock_change(args.get("change")),
+            reason=" ".join(str(args.get("reason", "")).split())[:255],
+            user_id=user.id,
+        )
     else:  # pragma: no cover - guarded by the registry check above
         raise APIError(400, "bad_action", "That is not an action the assistant can take.")
 
@@ -628,8 +750,12 @@ def execute(db: Session, user: User, action: str, args: dict) -> str:
     if action in {"create_order", "delete_order", "cancel_order"}:
         broadcaster.publish({"type": "orders_changed"})
         broadcaster.publish({"type": "stock_changed"})
-    elif action in {"mark_order_paid", "fulfill_order", "set_order_status", "add_order_note"}:
+    elif action in {
+        "mark_order_paid", "fulfill_order", "set_order_status", "add_order_note", "record_payment",
+    }:
         broadcaster.publish({"type": "orders_changed"})
+    elif action == "adjust_stock":
+        broadcaster.publish({"type": "stock_changed"})
     logger.info(
         "assistant_action",
         extra={"assistant_action": action, "assistant_actor": user.name},

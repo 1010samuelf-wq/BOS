@@ -1,0 +1,24 @@
+# Fly.io config for Just Cake Easy — the big-button tablet layout. Built from
+# this same web/ folder (easy.html) and served as its own app, so it has its
+# own address. Talks to the backend cross-origin; the backend allows this
+# origin in code (FIRST_PARTY_ORIGINS in app/config.py).
+#   flyctl deploy --remote-only --config fly.easy.toml
+app = "just-cake-easy"
+primary_region = "yyz"  # Toronto
+
+[build]
+  dockerfile = "Dockerfile.easy"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0  # static site cold-starts in ~1s; no need to idle-burn
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/"

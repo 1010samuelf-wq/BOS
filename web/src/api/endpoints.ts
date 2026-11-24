@@ -38,6 +38,7 @@ import type {
   Product,
   ProductionReport,
   Recipe,
+  Problem,
   RosterEntry,
   StaffEntry,
   SalesReport,
@@ -355,3 +356,5 @@ export const mergeCustomers = (keepId: number, sourceId: number) =>
     method: "POST",
     body: { source_id: sourceId },
   });
+
+export const listProblems = () => api<Problem[]>("/problems");

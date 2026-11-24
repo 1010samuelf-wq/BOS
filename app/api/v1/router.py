@@ -16,6 +16,7 @@ from app.api.v1 import (
     orders,
     photo_inbox,
     price_sheets,
+    problems,
     product_lists,
     reports,
     scan,
@@ -38,6 +39,7 @@ api_router.include_router(catalog.router)
 api_router.include_router(photo_inbox.router)
 api_router.include_router(price_sheets.router)
 api_router.include_router(product_lists.router)
+api_router.include_router(problems.router)
 api_router.include_router(scan.router)
 api_router.include_router(employees.router)
 api_router.include_router(time.router)

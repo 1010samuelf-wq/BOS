@@ -767,6 +767,109 @@ _register(Tool(
 ))
 
 
+# ---------------------------------------------------------------------------
+# seeing problems, and the wider set of actions
+# ---------------------------------------------------------------------------
+def _run_find_problems(db: Session, user: User, args: dict) -> str:
+    from app.services import problems as problem_service
+
+    return problem_service.as_text(problem_service.find(db, user))
+
+
+_register(Tool(
+    "find_problems",
+    "Check the shop for things that need attention: orders past their date "
+    "or due today and not ready, money still owed on orders already handed "
+    "over, unanswered website requests, low ingredients, shifts never clocked "
+    "out, overdue tasks, old unpaid vendor invoices, website products with no "
+    "photo. Call this for 'is anything wrong', 'what should I look at', "
+    "'what needs doing' or at the start of a day. Offer to fix what you find "
+    "with the other tools, one proposal at a time.",
+    _obj({}),
+    "orders",
+    run=_run_find_problems,
+))
+
+
+def _run_find_ingredients(db: Session, user: User, args: dict) -> str:
+    from app.models import Ingredient, StockLevel
+    from app.models.enums import ItemType
+
+    q = str(args.get("query", "")).strip()
+    stmt = db.query(Ingredient, StockLevel.quantity).outerjoin(
+        StockLevel,
+        (StockLevel.item_type == ItemType.ingredient) & (StockLevel.item_id == Ingredient.id),
+    )
+    if q:
+        stmt = stmt.filter(Ingredient.name.ilike(f"%{q}%"))
+    rows = stmt.order_by(Ingredient.name).limit(40).all()
+    if not rows:
+        return "No matching ingredients."
+    return "\n".join(
+        f"id {i.id}: {i.name} - in stock {(qty or 0).normalize():f} {i.unit}, "
+        f"low at {i.low_stock_threshold.normalize():f}, {_money(i.cost_per_unit)} per {i.unit}"
+        for i, qty in rows
+    )
+
+
+_register(Tool(
+    "find_ingredients",
+    "Search ingredients and get their ids, stock on hand and low-stock level. "
+    "Call this before proposing a stock change for an ingredient.",
+    _obj({"query": {"type": "string", "description": "Part of an ingredient name."}}),
+    "stock",
+    run=_run_find_ingredients,
+))
+
+_register(Tool(
+    "record_payment",
+    "Propose recording money taken against an order - a deposit or part of "
+    "the balance. For the whole remaining balance use mark_order_paid "
+    "instead. Does not take effect until the person confirms it on screen.",
+    _obj({
+        "order_id": {"type": "integer"},
+        "amount": {"type": "string", "description": "Dollars, e.g. \"50\" or \"12.50\"."},
+        "payment_method": {"type": "string", "enum": ["cash", "card", "etransfer"]},
+        "received_on": _DATE,
+    }, ["order_id", "amount"]),
+    "orders",
+    writes=True,
+))
+
+_register(Tool(
+    "update_product",
+    "Propose changing a product: its name, its price, whether it shows on the "
+    "website, or whether it is sold at all (active false retires it). Call "
+    "find_products first for the id. Only include what changes. Does not take "
+    "effect until the person confirms it on screen.",
+    _obj({
+        "product_id": {"type": "integer"},
+        "name": {"type": "string"},
+        "price": {"type": "string", "description": "Dollars, e.g. \"48\"."},
+        "show_on_menu": {"type": "boolean"},
+        "active": {"type": "boolean"},
+    }, ["product_id"]),
+    "settings",
+    writes=True,
+))
+
+_register(Tool(
+    "adjust_stock",
+    "Propose changing what is in stock: a delivery arrived (positive), "
+    "something was used, spoiled or miscounted (negative). Call "
+    "find_ingredients or find_products first for the id. Does not take effect "
+    "until the person confirms it on screen.",
+    _obj({
+        "item_type": {"type": "string", "enum": ["ingredient", "product"]},
+        "item_id": {"type": "integer"},
+        "change": {"type": "string", "description": "Signed amount, e.g. \"25\" or \"-3.5\", in the item's unit."},
+        "reason": {"type": "string", "description": "Short reason, e.g. \"Delivery from Costco\"."},
+    }, ["item_type", "item_id", "change", "reason"]),
+    "stock",
+    writes=True,
+))
+
+
 def tools_for(user: User, sections: set[str]) -> list[Tool]:
     """The subset of tools this employee may use.
 

@@ -21,6 +21,7 @@ on:
         options:
           - backend
           - dashboard
+          - easy
           - menu
           - all
 
@@ -112,6 +113,50 @@ jobs:
           fi
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only --app just-cake-dashboard
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  easy:
+    name: Just Cake Easy (just-cake-easy)
+    needs: test
+    if: contains(fromJSON('["easy","all"]'), github.event.inputs.target)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      # The big-button tablet layout is a second page of the dashboard's
+      # build, so the dashboard's tests gate it too.
+      - name: Tests
+        run: npm test
+      - name: Build (runs tsc)
+        run: npm run build
+        env:
+          VITE_API_URL: https://just-cake-bakery.fly.dev
+      - name: Fail if the API base didn't get baked in
+        run: |
+          if grep -rq "localhost:8000" dist/; then
+            echo "dist/ still points at localhost:8000 - VITE_API_URL was not applied"
+            exit 1
+          fi
+          test -f dist/easy.html
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # First run only: the app has to exist before it can be deployed to.
+      # Needs a token that may create apps (an org token); a deploy token for
+      # one app fails here, which says so plainly instead of half-deploying.
+      - name: Create the Fly app if it doesn't exist yet
+        run: |
+          if ! flyctl status --app just-cake-easy >/dev/null 2>&1; then
+            flyctl apps create just-cake-easy --org personal
+          fi
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - run: flyctl deploy --remote-only --config fly.easy.toml --app just-cake-easy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
