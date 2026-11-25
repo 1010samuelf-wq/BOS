@@ -16,6 +16,7 @@ import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
 import type { AssistantProposal, Order, Product, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
 import { stablePrefix } from "../assistant/partial";
+import { matchesSearch } from "../settings/catalogView";
 import { streamChat } from "../assistant/stream";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -32,10 +33,11 @@ import {
   type Customer,
 } from "./cart";
 import { parseAmount, unpaidBills, vendorsByOwed } from "./books";
+import { blankForm, changes, formOf, formProblem, toCreate, type ProductForm } from "./products";
 import { orderFromScan, type OrderStart } from "./scanned";
 import { dayLabel, groupByDay, timeOf } from "./upcoming";
 
-type Screen = "home" | "order" | "today" | "books" | "scan" | "ask";
+type Screen = "home" | "order" | "today" | "books" | "scan" | "products" | "ask";
 
 /** A PIN this long signs in without pressing ✓ (admin and manager PINs are 6). */
 const AUTO_PIN = 6;
@@ -63,6 +65,7 @@ export default function EasyApp() {
       {screen === "order" && <NewOrder onDone={back} start={start} />}
       {screen === "today" && <Today onBack={back} />}
       {screen === "books" && <Books onBack={back} />}
+      {screen === "products" && <Products onBack={back} />}
       {screen === "scan" && <Scan onBack={back} onOrder={(st) => { setStart(st); setScreen("order"); }} />}
       {screen === "ask" && <Ask onBack={back} />}
     </div>
@@ -183,6 +186,7 @@ function Home({ go }: { go: (s: Screen) => void }) {
     { screen: "today", icon: "📋", label: "Orders", color: "#4f8cff", show: sections.includes("orders") },
     { screen: "books", icon: "📒", label: "Bookkeeping", color: "#2bb673", show: sections.includes("bookkeeping") },
     { screen: "scan", icon: "📷", label: "Scan a photo", color: "#14b8c4", show: !!scanning.data?.enabled },
+    { screen: "products", icon: "🧁", label: "Products", color: "#ff5c8a", show: sections.includes("settings") },
     { screen: "ask", icon: "💬", label: "Ask Claude", color: "#a35cff", show: !!ai.data?.enabled },
   ];
 
@@ -852,6 +856,166 @@ function ScannedBill({ bill, onDone }: { bill: ScannedVendorInvoice; onDone: () 
         ✓ Save bill
       </button>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// products: see, add and change what the shop sells
+// ---------------------------------------------------------------------------
+function Products({ onBack }: { onBack: () => void }) {
+  const products = useQuery({ queryKey: ["products", true], queryFn: () => api.listProducts(true) });
+  const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
+
+  if (editing) {
+    return <ProductEditor start={editing === "new" ? null : editing} onBack={() => setEditing(null)} />;
+  }
+  const all = products.data ?? [];
+  const categories = [...new Set(all.map((p) => p.category ?? "Other"))].sort();
+  const shown = all
+    .filter((p) => (!category || (p.category ?? "Other") === category) && matchesSearch(p, search))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <div className="easy-screen">
+      <TopBar title="Products" onBack={onBack} />
+      <div className="easy-search">
+        <button className="easy-btn go" onClick={() => setEditing("new")}>➕ New product</button>
+        <input type="search" value={search} placeholder="🔎 Find a product" onChange={(e) => setSearch(e.target.value)} />
+      </div>
+      <div className="easy-cats">
+        <Choice on={category === null} onClick={() => setCategory(null)}>⭐ Everything</Choice>
+        {categories.map((c) => (
+          <Choice key={c} on={category === c} onClick={() => setCategory(c)}>{emojiFor(c)} {c}</Choice>
+        ))}
+      </div>
+      {products.isError && <p className="easy-error">{errorText(products.error)}</p>}
+      {products.isLoading && <p className="easy-wait">Loading…</p>}
+      {products.data && shown.length === 0 && <p className="easy-wait">Nothing found.</p>}
+      <div className="easy-products">
+        {shown.map((p) => (
+          <button key={p.id} className="easy-product easy-product-main" onClick={() => setEditing(p)}>
+            <ProductPicture p={p} size={110} />
+            <span className="easy-product-name">{p.name}</span>
+            <span className="easy-price">${p.price}</span>
+            <span className="easy-badge">{p.show_on_menu ? "🌐 On website" : "🏪 Shop only"}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductEditor({ start, onBack }: { start: Product | null; onBack: () => void }) {
+  const client = useQueryClient();
+  const known = useQuery({ queryKey: ["product-categories"], queryFn: api.listCategories });
+  const [product, setProduct] = useState<Product | null>(start);
+  const [form, setForm] = useState<ProductForm>(() => (start ? formOf(start) : blankForm()));
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [typing, setTyping] = useState(false);
+  const camera = useRef<HTMLInputElement>(null);
+  const library = useRef<HTMLInputElement>(null);
+  const set = (patch: Partial<ProductForm>) => { setForm((f) => ({ ...f, ...patch })); setSaved(null); };
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ["products"] });
+    client.invalidateQueries({ queryKey: ["product-categories"] });
+  };
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!product) return api.createProduct(toCreate(form));
+      const diff = changes(product, form);
+      return Object.keys(diff).length ? api.updateProduct(product.id, diff) : product;
+    },
+    onSuccess: (p) => {
+      const isNew = !product;
+      setProduct(p);
+      setForm(formOf(p));
+      // A category typed in is a normal choice now: show it as one.
+      setTyping(false);
+      setProblem(null);
+      setSaved(isNew ? "Saved! Now add a photo 📷" : "Saved ✓");
+      refresh();
+    },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  const photo = useMutation({
+    mutationFn: (file: File) => api.uploadProductPhoto(product!.id, file),
+    onSuccess: (p) => { setProduct(p); setSaved("Photo added ✓"); refresh(); },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) photo.mutate(file);
+  };
+
+  const categories = [...new Set([...(known.data ?? []), ...(form.category ? [form.category] : [])])];
+  return (
+    <div className="easy-screen">
+      <TopBar title={product ? product.name : "New product"} onBack={onBack} sub />
+      <div className="easy-form">
+        <div className="easy-photo-row">
+          {product ? <ProductPicture p={product} size={150} /> : <span className="easy-photo easy-emoji" style={{ width: 150, height: 150, fontSize: 80 }}>🧁</span>}
+          {product ? (
+            <div className="easy-col">
+              <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
+              <input ref={library} type="file" accept="image/*" hidden onChange={pick} />
+              <button className="easy-btn" style={{ background: "#14b8c4" }} disabled={photo.isPending} onClick={() => camera.current?.click()}>
+                {photo.isPending ? "Uploading…" : "📷 Take a photo"}
+              </button>
+              <button className="easy-btn" style={{ background: "#8a6b4f" }} disabled={photo.isPending} onClick={() => library.current?.click()}>
+                🖼 Choose a photo
+              </button>
+            </div>
+          ) : (
+            <p className="easy-wait" style={{ margin: 0 }}>Save it first, then add a photo.</p>
+          )}
+        </div>
+        {saved && <p className="easy-saved">✅ {saved}</p>}
+        <label>Name<input value={form.name} onChange={(e) => set({ name: e.target.value })} autoFocus={!product} /></label>
+        <label>Price<input value={form.price} inputMode="decimal" placeholder="$" onChange={(e) => set({ price: e.target.value })} /></label>
+
+        <div className="easy-label">Category</div>
+        <div className="easy-choice">
+          {categories.map((c) => (
+            <Choice key={c} on={!typing && form.category === c} onClick={() => { setTyping(false); set({ category: c }); }}>
+              {emojiFor(c)} {c}
+            </Choice>
+          ))}
+          <Choice on={typing} onClick={() => { setTyping(true); set({ category: "" }); }}>➕ New category</Choice>
+        </div>
+        {typing && <label>New category<input value={form.category} onChange={(e) => set({ category: e.target.value })} autoFocus /></label>}
+
+        <div className="easy-toggles">
+          <Toggle on={form.onWebsite} onChange={(v) => set({ onWebsite: v })} yes="🌐 On the website" no="🏪 Shop only — not on the website" />
+          <Toggle on={form.selling} onChange={(v) => set({ selling: v })} yes="✅ Selling it" no="⛔ Not selling it any more" />
+        </div>
+        {!form.selling && product?.active && (
+          <p className="easy-note" style={{ margin: 0 }}>After saving, it leaves this list. It can be put back from the dashboard's Deleted page.</p>
+        )}
+        {problem && <p className="easy-error">{problem}</p>}
+        <button className="easy-btn go" disabled={save.isPending}
+          onClick={() => {
+            const why = formProblem(form);
+            if (why) setProblem(why);
+            else save.mutate();
+          }}>
+          {save.isPending ? "Saving…" : product ? "✓ Save changes" : "✓ Save new product"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** A big on/off switch that says in words which way it is. */
+function Toggle({ on, onChange, yes, no }: { on: boolean; onChange: (v: boolean) => void; yes: string; no: string }) {
+  return (
+    <button className={`easy-toggle${on ? " on" : ""}`} role="switch" aria-checked={on} onClick={() => onChange(!on)}>
+      <span className="easy-knob" />
+      <span>{on ? yes : no}</span>
+    </button>
   );
 }
 
