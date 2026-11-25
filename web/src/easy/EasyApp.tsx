@@ -14,7 +14,7 @@ import remarkGfm from "remark-gfm";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
-import type { AssistantProposal, Order, Product } from "../api/types";
+import type { AssistantProposal, Order, Product, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
 import { stablePrefix } from "../assistant/partial";
 import { streamChat } from "../assistant/stream";
 import { useAuth } from "../auth/AuthContext";
@@ -32,9 +32,10 @@ import {
   type Customer,
 } from "./cart";
 import { parseAmount, unpaidBills, vendorsByOwed } from "./books";
+import { orderFromScan, type OrderStart } from "./scanned";
 import { dayLabel, groupByDay, timeOf } from "./upcoming";
 
-type Screen = "home" | "order" | "today" | "books" | "ask";
+type Screen = "home" | "order" | "today" | "books" | "scan" | "ask";
 
 /** A PIN this long signs in without pressing ✓ (admin and manager PINs are 6). */
 const AUTO_PIN = 6;
@@ -46,19 +47,23 @@ const errorText = (e: unknown) => (e instanceof ApiRequestError ? e.message : "C
 export default function EasyApp() {
   const { user } = useAuth();
   const [screen, setScreen] = useState<Screen>("home");
+  // A scanned order form, handed to New order to check and save.
+  const [start, setStart] = useState<OrderStart | null>(null);
   // A new person starts at home, not on whatever the last one left open.
   useEffect(() => {
     setScreen("home");
+    setStart(null);
   }, [user?.id]);
 
   if (!user) return <SignIn />;
-  const back = () => setScreen("home");
+  const back = () => { setStart(null); setScreen("home"); };
   return (
     <div className="easy">
       {screen === "home" && <Home go={setScreen} />}
-      {screen === "order" && <NewOrder onDone={back} />}
+      {screen === "order" && <NewOrder onDone={back} start={start} />}
       {screen === "today" && <Today onBack={back} />}
       {screen === "books" && <Books onBack={back} />}
+      {screen === "scan" && <Scan onBack={back} onOrder={(st) => { setStart(st); setScreen("order"); }} />}
       {screen === "ask" && <Ask onBack={back} />}
     </div>
   );
@@ -164,12 +169,20 @@ function Home({ go }: { go: (s: Screen) => void }) {
   const { user, logout } = useAuth();
   const sections = user?.sections ?? [];
   const ai = useQuery({ queryKey: ["assistant-status"], queryFn: api.assistantStatus });
+  // Order forms need Orders, vendor bills need Bookkeeping; the server says
+  // whether reading photos is switched on at all.
+  const scanning = useQuery({
+    queryKey: ["scan-options"],
+    queryFn: api.scanOptions,
+    enabled: sections.includes("orders") || sections.includes("bookkeeping"),
+  });
 
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   const tiles: { screen: Screen; icon: string; label: string; color: string; show: boolean }[] = [
     { screen: "order", icon: "🛒", label: "New order", color: "#ff7a59", show: sections.includes("orders") },
     { screen: "today", icon: "📋", label: "Orders", color: "#4f8cff", show: sections.includes("orders") },
     { screen: "books", icon: "📒", label: "Bookkeeping", color: "#2bb673", show: sections.includes("bookkeeping") },
+    { screen: "scan", icon: "📷", label: "Scan a photo", color: "#14b8c4", show: !!scanning.data?.enabled },
     { screen: "ask", icon: "💬", label: "Ask Claude", color: "#a35cff", show: !!ai.data?.enabled },
   ];
 
@@ -182,7 +195,7 @@ function Home({ go }: { go: (s: Screen) => void }) {
         </div>
         <button className="easy-link" onClick={logout}>Sign out</button>
       </div>
-      <div className="easy-tiles">
+      <div className={`easy-tiles${tiles.filter((t) => t.show).length > 4 ? " three" : ""}`}>
         {tiles.filter((t) => t.show).map((t) => (
           <button key={t.screen} className="easy-tile" style={{ background: t.color }} onClick={() => go(t.screen)}>
             <span className="easy-tile-icon">{t.icon}</span>
@@ -211,13 +224,14 @@ const blankCustomer = (): Customer => ({
   name: "", phone: "", when: "today", delivery: false, address: "", paying: "later", expect: null,
 });
 
-function NewOrder({ onDone }: { onDone: () => void }) {
+function NewOrder({ onDone, start }: { onDone: () => void; start?: OrderStart | null }) {
   const client = useQueryClient();
   const products = useQuery({ queryKey: ["products", true], queryFn: () => api.listProducts(true) });
   const [step, setStep] = useState<"pick" | "who" | "saved">("pick");
-  const [cart, setCart] = useState<Cart>([]);
+  const [cart, setCart] = useState<Cart>(() => start?.cart ?? []);
   const [category, setCategory] = useState<string | null>(null);
-  const [customer, setCustomer] = useState<Customer>(blankCustomer);
+  const [customer, setCustomer] = useState<Customer>(() => start?.customer ?? blankCustomer());
+  const [unmatched, setUnmatched] = useState<string[]>(() => start?.unmatched ?? []);
   const [problem, setProblem] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<number | null>(null);
   // One key per order attempt: a double tap or a retry after bad wifi can't
@@ -247,6 +261,7 @@ function NewOrder({ onDone }: { onDone: () => void }) {
     setCategory(null);
     setProblem(null);
     setSavedId(null);
+    setUnmatched([]);
     key.current = `easy-${crypto.randomUUID()}`;
     setStep("pick");
   };
@@ -331,6 +346,12 @@ function NewOrder({ onDone }: { onDone: () => void }) {
   return (
     <div className="easy-screen">
       <TopBar title="What are they ordering?" onBack={onDone} />
+      {start && (
+        <div className="easy-note">
+          📷 Read from a photo — check it, then press Next.
+          {unmatched.length > 0 && <> Not found, add by hand: <b>{unmatched.join(", ")}</b></>}
+        </div>
+      )}
       <div className="easy-cats">
         <Choice on={category === null} onClick={() => setCategory(null)}>⭐ Everything</Choice>
         {categories.map((c) => (
@@ -675,6 +696,161 @@ function AddExpense({ onBack }: { onBack: () => void }) {
           {save.isPending ? "Saving…" : "✓ Save expense"}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// scan a photo: an order form or a vendor bill
+// ---------------------------------------------------------------------------
+function Scan({ onBack, onOrder }: { onBack: () => void; onOrder: (start: OrderStart) => void }) {
+  const products = useQuery({ queryKey: ["products", true], queryFn: () => api.listProducts(true) });
+  const [result, setResult] = useState<ScanResult | null>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const library = useRef<HTMLInputElement>(null);
+  const read = useMutation({
+    mutationFn: (file: File) => api.scanDocument(file),
+    onSuccess: setResult,
+  });
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // the same photo can be picked again after a retry
+    if (file) { setResult(null); read.mutate(file); }
+  };
+  const again = () => { setResult(null); read.reset(); };
+
+  return (
+    <div className="easy-screen">
+      <TopBar title="Scan a photo" onBack={onBack} />
+      <div className="easy-scroll">
+        <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
+        <input ref={library} type="file" accept="image/*,application/pdf" hidden onChange={pick} />
+
+        {!result && !read.isPending && (
+          <>
+            <p className="easy-total">Take a photo of an <b>order form</b> or a <b>bill from a vendor</b>.</p>
+            <button className="easy-btn huge" style={{ background: "#14b8c4" }} onClick={() => camera.current?.click()}>
+              📷 Take a photo
+            </button>
+            <button className="easy-btn wide" style={{ background: "#8a6b4f" }} onClick={() => library.current?.click()}>
+              🖼 Choose a photo
+            </button>
+            {read.isError && <p className="easy-error">{errorText(read.error)}</p>}
+          </>
+        )}
+        {read.isPending && <p className="easy-total">🔎 Reading the photo… this takes a few seconds.</p>}
+
+        {result && result.warnings.length > 0 && (
+          <div className="easy-note">⚠️ {result.warnings.join(" ")}</div>
+        )}
+        {result?.kind === "order" && result.order && (
+          <ScannedOrderCard
+            order={result.order}
+            onUse={() => onOrder(orderFromScan(result.order!, products.data ?? []))}
+            ready={!!products.data}
+          />
+        )}
+        {result?.kind === "vendor_invoice" && result.vendor_invoice && (
+          <ScannedBill bill={result.vendor_invoice} onDone={again} />
+        )}
+        {result && (result.kind === "unreadable" || result.kind === "timesheet") && (
+          <p className="easy-total">
+            {result.kind === "timesheet"
+              ? "That's a timesheet — save those on the dashboard's Scan page."
+              : "I couldn't read that. Try a straighter, brighter photo."}
+          </p>
+        )}
+        {result && (
+          <button className="easy-btn wide" style={{ background: "#8a8f98" }} onClick={again}>📷 Scan another</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ScannedOrderCard({ order, onUse, ready }: { order: ScannedOrder; onUse: () => void; ready: boolean }) {
+  return (
+    <div className="easy-order" style={{ borderColor: "#ff7a59" }}>
+      <div className="easy-order-head" style={{ background: "#ff7a59" }}>
+        <span>🛒 Order for {order.customer_name || "?"}</span>
+        <span>{order.needed_for_date ? dayLabel(order.needed_for_date) : "No date"}</span>
+      </div>
+      <ul>
+        {order.items.map((i, n) => (
+          <li key={n}><b>{i.quantity}×</b> {i.product_name ?? <i>{i.written_as} (not found)</i>}</li>
+        ))}
+      </ul>
+      <div className="easy-row" style={{ padding: "0 12px 12px" }}>
+        <button className="easy-btn go" style={{ flex: 1 }} disabled={!ready} onClick={onUse}>✓ Make this order</button>
+      </div>
+    </div>
+  );
+}
+
+function ScannedBill({ bill, onDone }: { bill: ScannedVendorInvoice; onDone: () => void }) {
+  const client = useQueryClient();
+  const companies = useQuery({ queryKey: ["companies"], queryFn: () => api.listCompanies() });
+  const [vendorId, setVendorId] = useState<number | null>(bill.vendor_id);
+  const [amount, setAmount] = useState(bill.total);
+  const [invoice, setInvoice] = useState(bill.invoice_number);
+  const [day, setDay] = useState(/^\d{4}-\d{2}-\d{2}$/.test(bill.date) ? bill.date : dayOf("today"));
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const vendors = vendorsByOwed(companies.data ?? []);
+  const known = vendorId != null && vendors.some((v) => v.id === vendorId);
+
+  const addVendor = useMutation({
+    mutationFn: () => api.createCompany({ name: bill.vendor_name.trim(), type: "payable" }),
+    onSuccess: (c) => { setVendorId(c.id); client.invalidateQueries({ queryKey: ["companies"] }); },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  const save = useMutation({
+    mutationFn: (amt: string) =>
+      api.addLedgerEntry(vendorId!, { entry_date: day, type: "charge", amount: amt, invoice_number: invoice.trim() || null }),
+    onSuccess: () => {
+      setSaved(true);
+      client.invalidateQueries({ queryKey: ["companies"] });
+      client.invalidateQueries({ queryKey: ["company"] });
+    },
+    onError: (e) => setProblem(errorText(e)),
+  });
+
+  if (saved) {
+    return (
+      <div className="easy-done" style={{ minHeight: 0 }}>
+        <div className="easy-big-icon">✅</div>
+        <h1>Bill saved</h1>
+        <p>{vendors.find((v) => v.id === vendorId)?.name} · ${parseAmount(amount)}</p>
+        <button className="easy-btn" style={{ background: "#14b8c4" }} onClick={onDone}>📷 Scan another</button>
+      </div>
+    );
+  }
+  return (
+    <div className="easy-form inline">
+      <div className="easy-label">🧾 A bill from {bill.vendor_name || "a vendor"}</div>
+      <div className="easy-choice">
+        {vendors.map((v) => (
+          <Choice key={v.id} on={vendorId === v.id} onClick={() => setVendorId(v.id)}>🏭 {v.name}</Choice>
+        ))}
+        {!bill.vendor_id && bill.vendor_name.trim() && !vendors.some((v) => v.name === bill.vendor_name.trim()) && (
+          <button className="easy-choice-btn" disabled={addVendor.isPending} onClick={() => addVendor.mutate()}>
+            ➕ Add “{bill.vendor_name.trim()}” as a vendor
+          </button>
+        )}
+      </div>
+      <label>Amount<input value={amount} inputMode="decimal" onChange={(e) => setAmount(e.target.value)} /></label>
+      <label>Invoice number<input value={invoice} onChange={(e) => setInvoice(e.target.value)} /></label>
+      <label>Date on the bill<input type="date" value={day} onChange={(e) => setDay(e.target.value || dayOf("today"))} /></label>
+      {problem && <p className="easy-error">{problem}</p>}
+      <button className="easy-btn go" disabled={save.isPending}
+        onClick={() => {
+          const amt = parseAmount(amount);
+          if (!known) setProblem("Tap which vendor it's from.");
+          else if (!amt) setProblem("Type the amount, like 120 or 45.50.");
+          else { setProblem(null); save.mutate(amt); }
+        }}>
+        ✓ Save bill
+      </button>
     </div>
   );
 }
