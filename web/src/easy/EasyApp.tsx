@@ -1016,7 +1016,7 @@ function Products({ onBack }: { onBack: () => void }) {
   const categories = [...new Set(all.map((p) => p.category ?? "Other"))].sort();
   const shown = all
     .filter((p) => (!category || (p.category ?? "Other") === category) && matchesSearch(p, search))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   return (
     <div className="easy-screen">
       <TopBar title="Products" onBack={onBack} />

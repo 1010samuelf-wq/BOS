@@ -3,6 +3,13 @@
 
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; height: 100%; }
+
+/* Card grids: every row as tall as its cards, never shorter. The cards clip
+   (overflow: hidden), which lets a grid in a fixed-height, scrolling box
+   shrink "auto" rows to almost nothing to fit — with a real catalog every
+   product collapsed to a 36px strip. Rows sized to content make the box
+   scroll instead. */
+.easy-products, .easy-orders, .easy-vendors { grid-auto-rows: max-content; }
 body {
   font-family: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 20px;
