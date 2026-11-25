@@ -42,7 +42,7 @@ keeps a second copy somewhere else:
 | Schedule | Every night at 07:17 UTC; also runnable by hand (Actions → Backup → Run workflow) |
 | Retention | **30 days**, never fewer than the 7 newest copies |
 | Checks | The dump must contain data for `orders`, `order_items`, `order_payments`, `users` and `products`, and the uploaded size must match |
-| Failure | The run goes red and GitHub emails you (see step 6 below) |
+| Failure | The run goes red and GitHub emails you (see step 6 below). Until any backup secret is set, the dump is **skipped** (green, with a "not set up yet" note) rather than failing every night; set up halfway still fails. |
 
 The same workflow also checks the **Postgres volume is under 80% full** and
 fails (so emails) when it isn't — see "Disk space" below.

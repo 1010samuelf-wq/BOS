@@ -53,24 +53,41 @@ jobs:
       S3_ENDPOINT: ${{ secrets.BACKUP_S3_ENDPOINT }}
       S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
     steps:
-      - name: Check every secret is set
+      # Not set up at all (no backup secret of any kind): skip with a notice
+      # rather than fail. A red run every night until someone creates the
+      # bucket only teaches people to ignore the email - and then a real
+      # failure later goes unread too. Fly's own daily snapshots still run.
+      # Set up halfway (some secrets missing) is a mistake, and fails loudly.
+      - name: Check the off-site backup is set up
+        id: check
         run: |
-          missing=""
-          for name in FLY_API_TOKEN PGPASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY \
-                      AWS_DEFAULT_REGION S3_ENDPOINT S3_BUCKET; do
-            [ -n "${!name}" ] || missing="$missing $name"
+          backup_secrets="PGPASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION S3_ENDPOINT S3_BUCKET"
+          missing=""; present=""
+          for name in FLY_API_TOKEN $backup_secrets; do
+            if [ -n "${!name}" ]; then present="$present $name"; else missing="$missing $name"; fi
           done
+          any_backup=""
+          for name in $backup_secrets; do [ -n "${!name}" ] && any_backup=yes; done
+          if [ -z "$any_backup" ]; then
+            echo "::notice::Off-site backup isn't set up yet, so it was skipped. See docs/BACKUPS.md, 'One-time setup'."
+            echo "### Off-site backup skipped - not set up yet (see docs/BACKUPS.md)" >> "$GITHUB_STEP_SUMMARY"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ -n "$missing" ]; then
             echo "::error::Backup secrets not set:$missing (see docs/BACKUPS.md)"
             exit 1
           fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+        if: steps.check.outputs.configured == 'true'
 
       # pg_dump must be at least as new as the server. 17 reads every server
       # version Fly runs, so pin the client there rather than trusting whatever
       # the runner image ships this month.
       - name: Install pg_dump 17
+        if: steps.check.outputs.configured == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-common >/dev/null
@@ -79,6 +96,7 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       - name: Open a tunnel to the database
+        if: steps.check.outputs.configured == 'true'
         run: |
           flyctl proxy 15432:5432 -a "$DB_APP" > proxy.log 2>&1 &
           for _ in $(seq 1 30); do
@@ -90,6 +108,7 @@ jobs:
           exit 1
 
       - name: Dump
+        if: steps.check.outputs.configured == 'true'
         run: |
           stamp="$(date -u +%Y-%m-%dT%H%MZ)"
           file="${DB_NAME}-${stamp}.dump"
@@ -102,6 +121,7 @@ jobs:
       # A dump that "succeeds" but is empty is the failure that hurts, because
       # nobody looks until they need it. Prove it has the shop's tables and data.
       - name: Check the dump is real
+        if: steps.check.outputs.configured == 'true'
         run: |
           size=$(stat -c %s "$FILE")
           tables=$(pg_restore --list "$FILE" | grep -c " TABLE DATA public " || true)
@@ -120,6 +140,7 @@ jobs:
           echo "$size bytes, $tables tables with data" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload
+        if: steps.check.outputs.configured == 'true'
         run: |
           aws s3 cp "$FILE" "s3://$S3_BUCKET/postgres/$FILE" \
             --endpoint-url "$S3_ENDPOINT" --only-show-errors
@@ -135,6 +156,7 @@ jobs:
       # Only after today's copy is safely up. Keyed on the date in the file
       # name, not the bucket's timestamps, and never below KEEP_AT_LEAST.
       - name: Delete copies older than 30 days
+        if: steps.check.outputs.configured == 'true'
         run: |
           aws s3api list-objects-v2 --bucket "$S3_BUCKET" --prefix postgres/ \
             --endpoint-url "$S3_ENDPOINT" --output json > listing.json
