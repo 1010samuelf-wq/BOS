@@ -55,8 +55,11 @@ that way.
 
 Set these up once, then do the first run by hand.
 
-**1. A read-only database user for backups.** Better than giving GitHub the
-superuser password: if it ever leaked, it can read but not change anything.
+**1. (Optional) A read-only database user for backups.** Skip this and the
+backup reads the database's own login off the database machine each night,
+through the same Fly token the disk check uses — so only the bucket (steps
+2, 3 and 5) is needed. Doing it anyway means the nightly job signs in with a
+user that can read but not change anything.
 
 ```bash
 flyctl postgres connect -a just-cake-bakery-db -d just_cake_bakery
@@ -113,7 +116,7 @@ Secrets and variables → Actions → *New repository secret*, one at a time:
 
 | Secret | Value |
 |---|---|
-| `BACKUP_PG_PASSWORD` | the `bos_backup` password from step 1 |
+| `BACKUP_PG_PASSWORD` | *optional* — the `bos_backup` password, only if you did step 1 |
 | `BACKUP_S3_BUCKET` | `justcake-db-backups` (the name only, no `s3://`) |
 | `BACKUP_S3_ENDPOINT` | B2: `https://s3.us-east-005.backblazeb2.com` · R2: `https://<ACCOUNT_ID>.r2.cloudflarestorage.com` |
 | `BACKUP_S3_REGION` | B2: `us-east-005` (from the endpoint) · R2: `auto` |

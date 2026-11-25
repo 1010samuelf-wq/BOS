@@ -32,7 +32,6 @@ permissions:
 env:
   DB_APP: just-cake-bakery-db
   DB_NAME: just_cake_bakery
-  DB_USER: bos_backup
   KEEP_DAYS: "30"
   # Never prune below this many copies, whatever their age — if backups stop
   # for a month, the last good ones must still be there.
@@ -46,7 +45,9 @@ jobs:
     timeout-minutes: 30
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-      PGPASSWORD: ${{ secrets.BACKUP_PG_PASSWORD }}
+      # Optional: a read-only `bos_backup` role's password. Without it the job
+      # reads the database's own password from the database machine (below).
+      BACKUP_PG_PASSWORD: ${{ secrets.BACKUP_PG_PASSWORD }}
       AWS_ACCESS_KEY_ID: ${{ secrets.BACKUP_S3_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_S3_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: ${{ secrets.BACKUP_S3_REGION }}
@@ -61,7 +62,7 @@ jobs:
       - name: Check the off-site backup is set up
         id: check
         run: |
-          backup_secrets="PGPASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION S3_ENDPOINT S3_BUCKET"
+          backup_secrets="AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION S3_ENDPOINT S3_BUCKET"
           missing=""; present=""
           for name in FLY_API_TOKEN $backup_secrets; do
             if [ -n "${!name}" ]; then present="$present $name"; else missing="$missing $name"; fi
@@ -82,6 +83,30 @@ jobs:
 
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
         if: steps.check.outputs.configured == 'true'
+
+      # Who pg_dump signs in as. With the optional BACKUP_PG_PASSWORD secret,
+      # the read-only bos_backup role. Without it, the database's own
+      # "postgres" login, read off the database machine over flyctl ssh (the
+      # disk check below connects the same way) - so setting up the backup
+      # needs only the bucket. The password is masked before anything could
+      # print it and only ever goes into $GITHUB_ENV, a file: this repository
+      # and its logs are public.
+      - name: Get the database login
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          if [ -n "$BACKUP_PG_PASSWORD" ]; then
+            echo "DUMP_USER=bos_backup" >> "$GITHUB_ENV"
+            echo "PGPASSWORD=$BACKUP_PG_PASSWORD" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          pw=$(flyctl ssh console -a "$DB_APP" -C "printenv OPERATOR_PASSWORD" 2>/dev/null | tr -d '\r\n' || true)
+          if [ -z "$pw" ]; then
+            echo "::error::Couldn't read the database login from $DB_APP. Set the BACKUP_PG_PASSWORD secret instead (docs/BACKUPS.md)."
+            exit 1
+          fi
+          echo "::add-mask::$pw"
+          echo "DUMP_USER=postgres" >> "$GITHUB_ENV"
+          echo "PGPASSWORD=$pw" >> "$GITHUB_ENV"
 
       # pg_dump must be at least as new as the server. 17 reads every server
       # version Fly runs, so pin the client there rather than trusting whatever
@@ -113,7 +138,7 @@ jobs:
           stamp="$(date -u +%Y-%m-%dT%H%MZ)"
           file="${DB_NAME}-${stamp}.dump"
           # Custom format is compressed and lets pg_restore pick single tables.
-          pg_dump -h 127.0.0.1 -p 15432 -U "$DB_USER" -d "$DB_NAME" \
+          pg_dump -h 127.0.0.1 -p 15432 -U "$DUMP_USER" -d "$DB_NAME" \
             --format=custom --compress=9 --no-owner --no-privileges \
             --file="$file"
           echo "FILE=$file" >> "$GITHUB_ENV"
