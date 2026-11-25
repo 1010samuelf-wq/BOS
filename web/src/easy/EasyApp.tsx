@@ -31,9 +31,10 @@ import {
   type Cart,
   type Customer,
 } from "./cart";
-import { groupByDay, timeOf } from "./upcoming";
+import { parseAmount, unpaidBills, vendorsByOwed } from "./books";
+import { dayLabel, groupByDay, timeOf } from "./upcoming";
 
-type Screen = "home" | "order" | "today" | "clock" | "ask";
+type Screen = "home" | "order" | "today" | "books" | "ask";
 
 /** A PIN this long signs in without pressing ✓ (admin and manager PINs are 6). */
 const AUTO_PIN = 6;
@@ -57,16 +58,17 @@ export default function EasyApp() {
       {screen === "home" && <Home go={setScreen} />}
       {screen === "order" && <NewOrder onDone={back} />}
       {screen === "today" && <Today onBack={back} />}
-      {screen === "clock" && <Clock onBack={back} />}
+      {screen === "books" && <Books onBack={back} />}
       {screen === "ask" && <Ask onBack={back} />}
     </div>
   );
 }
 
-function TopBar({ title, onBack }: { title: string; onBack: () => void }) {
+/** `sub` for a screen inside a screen: its button goes back a step, not home. */
+function TopBar({ title, onBack, sub = false }: { title: string; onBack: () => void; sub?: boolean }) {
   return (
     <div className="easy-top">
-      <button className="easy-back" onClick={onBack}>← Home</button>
+      <button className="easy-back" onClick={onBack}>{sub ? "← Back" : "← Home"}</button>
       <h1>{title}</h1>
     </div>
   );
@@ -162,17 +164,12 @@ function Home({ go }: { go: (s: Screen) => void }) {
   const { user, logout } = useAuth();
   const sections = user?.sections ?? [];
   const ai = useQuery({ queryKey: ["assistant-status"], queryFn: api.assistantStatus });
-  const hours = useQuery({ queryKey: ["hours"], queryFn: api.myHours, enabled: sections.includes("time") });
-  const clockedIn = !!hours.data?.open_entry;
 
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   const tiles: { screen: Screen; icon: string; label: string; color: string; show: boolean }[] = [
     { screen: "order", icon: "🛒", label: "New order", color: "#ff7a59", show: sections.includes("orders") },
     { screen: "today", icon: "📋", label: "Orders", color: "#4f8cff", show: sections.includes("orders") },
-    {
-      screen: "clock", icon: "⏰", label: clockedIn ? "Clock out" : "Clock in",
-      color: clockedIn ? "#e5484d" : "#2bb673", show: sections.includes("time"),
-    },
+    { screen: "books", icon: "📒", label: "Bookkeeping", color: "#2bb673", show: sections.includes("bookkeeping") },
     { screen: "ask", icon: "💬", label: "Ask Claude", color: "#a35cff", show: !!ai.data?.enabled },
   ];
 
@@ -210,7 +207,9 @@ function ProductPicture({ p, size }: { p: Product; size: number }) {
   );
 }
 
-const blankCustomer = (): Customer => ({ name: "", phone: "", when: "today", delivery: false, address: "", paying: "later" });
+const blankCustomer = (): Customer => ({
+  name: "", phone: "", when: "today", delivery: false, address: "", paying: "later", expect: null,
+});
 
 function NewOrder({ onDone }: { onDone: () => void }) {
   const client = useQueryClient();
@@ -270,7 +269,7 @@ function NewOrder({ onDone }: { onDone: () => void }) {
   if (step === "who") {
     return (
       <div className="easy-screen">
-        <TopBar title="Who is it for?" onBack={() => setStep("pick")} />
+        <TopBar title="Who is it for?" onBack={() => setStep("pick")} sub />
         <div className="easy-form">
           <label>Name<input value={customer.name} onChange={(e) => set({ name: e.target.value })} autoFocus /></label>
           <label>Phone<input value={customer.phone} inputMode="tel" onChange={(e) => set({ phone: e.target.value })} /></label>
@@ -301,6 +300,17 @@ function NewOrder({ onDone }: { onDone: () => void }) {
             <Choice on={customer.paying === "card"} onClick={() => set({ paying: "card" })}>💳 Card now</Choice>
             <Choice on={customer.paying === "later"} onClick={() => set({ paying: "later" })}>⏳ Later</Choice>
           </div>
+          {customer.paying === "later" && (
+            <>
+              <div className="easy-label">How will they pay?</div>
+              <div className="easy-choice">
+                <Choice on={customer.expect === "cash"} onClick={() => set({ expect: "cash" })}>💵 Cash</Choice>
+                <Choice on={customer.expect === "card"} onClick={() => set({ expect: "card" })}>💳 Card</Choice>
+                <Choice on={customer.expect === "etransfer"} onClick={() => set({ expect: "etransfer" })}>📲 E-transfer</Choice>
+                <Choice on={customer.expect === null} onClick={() => set({ expect: null })}>🤷 Not sure</Choice>
+              </div>
+            </>
+          )}
         </div>
         <div className="easy-bar">
           <span>🧺 {count(cart)} · <b>{dollars(totalCents(cart))}</b> · {dayOf(customer.when)}</span>
@@ -505,41 +515,165 @@ function rank(o: Order): number {
 }
 
 // ---------------------------------------------------------------------------
-// clock in / out
+// bookkeeping: vendor bills and expenses
 // ---------------------------------------------------------------------------
-function Clock({ onBack }: { onBack: () => void }) {
-  const client = useQueryClient();
-  const hours = useQuery({ queryKey: ["hours"], queryFn: api.myHours });
-  const open = hours.data?.open_entry ?? null;
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const punch = useMutation({
-    mutationFn: () => (open ? api.clockOut() : api.clockIn()),
-    onSuccess: () => client.invalidateQueries({ queryKey: ["hours"] }),
-  });
+type BooksView = { kind: "list" } | { kind: "vendor"; id: number } | { kind: "expense" };
 
-  let elapsed = "";
-  if (open) {
-    const s = Math.max(0, Math.floor((now - new Date(open.clock_in).getTime()) / 1000));
-    elapsed = `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
-  }
+function Books({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
+  const canExpense = (user?.sections ?? []).includes("reports");
+  const [view, setView] = useState<BooksView>({ kind: "list" });
+  const companies = useQuery({ queryKey: ["companies"], queryFn: () => api.listCompanies() });
+
+  if (view.kind === "vendor") return <Vendor id={view.id} onBack={() => setView({ kind: "list" })} />;
+  if (view.kind === "expense") return <AddExpense onBack={() => setView({ kind: "list" })} />;
+
+  const vendors = vendorsByOwed(companies.data ?? []);
   return (
     <div className="easy-screen">
-      <TopBar title="My time" onBack={onBack} />
-      <div className="easy-clock">
-        {hours.isError && <p className="easy-error">{errorText(hours.error)}</p>}
-        <p className="easy-clock-state">
-          {open ? `You've been working ${elapsed}` : "You're not clocked in."}
-        </p>
-        <button className="easy-clock-btn" style={{ background: open ? "#e5484d" : "#2bb673" }}
-          disabled={punch.isPending || hours.isLoading} onClick={() => punch.mutate()}>
-          {open ? "⏹ Clock out" : "▶ Clock in"}
+      <TopBar title="Bookkeeping" onBack={onBack} />
+      <div className="easy-scroll">
+        {canExpense && (
+          <button className="easy-btn wide" style={{ background: "#ff7a59" }} onClick={() => setView({ kind: "expense" })}>
+            💸 Add an expense
+          </button>
+        )}
+        <h2 className="easy-day">Vendors <span>tap one to see and pay its bills</span></h2>
+        {companies.isError && (
+          <p className="easy-error">{errorText(companies.error)} <button className="easy-link" onClick={() => companies.refetch()}>Try again</button></p>
+        )}
+        {companies.isLoading && <p className="easy-wait">Loading…</p>}
+        {companies.data && vendors.length === 0 && <p className="easy-wait">No vendors yet — add them on the dashboard.</p>}
+        <div className="easy-vendors">
+          {vendors.map((c) => {
+            const owed = Number(c.balance) > 0;
+            return (
+              <button key={c.id} className="easy-vendor" onClick={() => setView({ kind: "vendor", id: c.id })}>
+                <span className="easy-vendor-name">🏭 {c.name}</span>
+                <span className={owed ? "easy-owes" : "easy-paid"}>{owed ? `We owe $${c.balance}` : "✅ All paid"}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Vendor({ id, onBack }: { id: number; onBack: () => void }) {
+  const client = useQueryClient();
+  const vendor = useQuery({ queryKey: ["company", id], queryFn: () => api.getCompany(id) });
+  const [adding, setAdding] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [invoice, setInvoice] = useState("");
+  const [day, setDay] = useState(dayOf("today"));
+  const [problem, setProblem] = useState<string | null>(null);
+  const refresh = () => {
+    client.invalidateQueries({ queryKey: ["company", id] });
+    client.invalidateQueries({ queryKey: ["companies"] });
+  };
+  const pay = useMutation({
+    mutationFn: (entryId: number) => api.markLedgerPaid(id, entryId, dayOf("today")),
+    onSuccess: () => { setProblem(null); refresh(); },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  const addBill = useMutation({
+    mutationFn: (amt: string) =>
+      api.addLedgerEntry(id, { entry_date: day, type: "charge", amount: amt, invoice_number: invoice.trim() || null }),
+    onSuccess: () => { setAdding(false); setAmount(""); setInvoice(""); setProblem(null); refresh(); },
+    onError: (e) => setProblem(errorText(e)),
+  });
+
+  const bills = unpaidBills(vendor.data?.entries ?? []);
+  return (
+    <div className="easy-screen">
+      <TopBar title={vendor.data?.name ?? "Vendor"} onBack={onBack} sub />
+      <div className="easy-scroll">
+        {vendor.isError && <p className="easy-error">{errorText(vendor.error)}</p>}
+        {vendor.data && (
+          <p className="easy-total">
+            {Number(vendor.data.balance) > 0 ? <>We owe <b className="easy-owes">${vendor.data.balance}</b></> : "✅ Nothing owed"}
+          </p>
+        )}
+        {problem && <p className="easy-error">{problem}</p>}
+        {!adding ? (
+          <button className="easy-btn wide" style={{ background: "#4f8cff" }} onClick={() => setAdding(true)}>➕ New bill from them</button>
+        ) : (
+          <div className="easy-form inline">
+            <label>Amount<input value={amount} inputMode="decimal" placeholder="$" onChange={(e) => setAmount(e.target.value)} autoFocus /></label>
+            <label>Invoice number<input value={invoice} onChange={(e) => setInvoice(e.target.value)} /></label>
+            <label>Date on the bill<input type="date" value={day} onChange={(e) => setDay(e.target.value || dayOf("today"))} /></label>
+            <div className="easy-row">
+              <button className="easy-btn go" disabled={addBill.isPending}
+                onClick={() => {
+                  const amt = parseAmount(amount);
+                  if (!amt) setProblem("Type the amount, like 120 or 45.50.");
+                  else addBill.mutate(amt);
+                }}>
+                ✓ Save bill
+              </button>
+              <button className="easy-btn" style={{ background: "#8a8f98" }} onClick={() => { setAdding(false); setProblem(null); }}>✖ Cancel</button>
+            </div>
+          </div>
+        )}
+        <h2 className="easy-day">Not paid yet <span>{bills.length}</span></h2>
+        {vendor.data && bills.length === 0 && <p className="easy-wait">No unpaid bills. 🎉</p>}
+        <div className="easy-orders">
+          {bills.map((b) => (
+            <div key={b.id} className="easy-order" style={{ borderColor: "#ff7a59" }}>
+              <div className="easy-order-head" style={{ background: "#ff7a59" }}>
+                <span>{b.invoice_number ? `Invoice ${b.invoice_number}` : "Bill"}</span>
+                <span>${b.amount}</span>
+              </div>
+              <div className="easy-order-foot" style={{ paddingTop: 10 }}>
+                <span>🗓 {dayLabel(b.entry_date)}</span>
+              </div>
+              <div className="easy-row">
+                <TwoTap label={`💵 Paid $${b.amount}`} confirm="Tap again: paid today?" color="#2bb673"
+                  disabled={pay.isPending} onConfirm={() => pay.mutate(b.id)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddExpense({ onBack }: { onBack: () => void }) {
+  const client = useQueryClient();
+  const [what, setWhat] = useState("");
+  const [amount, setAmount] = useState("");
+  const [day, setDay] = useState(dayOf("today"));
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (amt: string) => api.createExpense({ description: what.trim(), amount: amt, spent_on: day }),
+    onSuccess: (_, amt) => {
+      setSaved(`${what.trim()} — $${amt}`);
+      setWhat(""); setAmount(""); setProblem(null);
+      client.invalidateQueries({ queryKey: ["expenses"] });
+    },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  return (
+    <div className="easy-screen">
+      <TopBar title="Add an expense" onBack={onBack} sub />
+      <div className="easy-form">
+        {saved && <p className="easy-saved">✅ Saved: {saved}</p>}
+        <label>What was it for?<input value={what} onChange={(e) => setWhat(e.target.value)} placeholder="Eggs from the market" autoFocus /></label>
+        <label>How much?<input value={amount} inputMode="decimal" placeholder="$" onChange={(e) => setAmount(e.target.value)} /></label>
+        <label>When?<input type="date" value={day} onChange={(e) => setDay(e.target.value || dayOf("today"))} /></label>
+        {problem && <p className="easy-error">{problem}</p>}
+        <button className="easy-btn go" disabled={save.isPending}
+          onClick={() => {
+            const amt = parseAmount(amount);
+            if (!what.trim()) setProblem("Say what it was for.");
+            else if (!amt) setProblem("Type the amount, like 25 or 12.50.");
+            else save.mutate(amt);
+          }}>
+          {save.isPending ? "Saving…" : "✓ Save expense"}
         </button>
-        {punch.isError && <p className="easy-error">{errorText(punch.error)}</p>}
-        {hours.data && <p className="easy-wait">This week: {hours.data.total_hours.toFixed(1)} hours</p>}
       </div>
     </div>
   );

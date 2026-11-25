@@ -46,6 +46,8 @@ export interface Customer {
   delivery: boolean;
   address: string;
   paying: Paying;
+  /** Paying later: how they said they'll pay, so "Paid" records it without asking. */
+  expect: PaymentMethod | null;
 }
 
 /** yyyy-mm-dd in the tablet's own clock: "today" is the shop's today. */
@@ -77,6 +79,7 @@ export function toPayload(cart: Cart, c: Customer, idempotencyKey: string): Orde
     delivery_address: c.delivery ? c.address.trim() : null,
     payment_timing: paidNow ? "now" : "later",
     payment_method: paidNow ? (c.paying as PaymentMethod) : null,
+    expected_payment_method: paidNow ? null : c.expect,
     items: cart.map((l) => ({ product_id: l.product.id, quantity: l.quantity })),
     notes: [],
   };

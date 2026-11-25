@@ -7,7 +7,7 @@ const product = (id: number, price: string, category: string | null = "Cakes"): 
   ({ id, name: `P${id}`, price, category, photo_url: null }) as Product;
 
 const customer = (over: Partial<Customer> = {}): Customer => ({
-  name: "Mrs Cohen", phone: "", when: "today", delivery: false, address: "", paying: "later", ...over,
+  name: "Mrs Cohen", phone: "", when: "today", delivery: false, address: "", paying: "later", expect: null, ...over,
 });
 
 describe("the basket", () => {
@@ -52,10 +52,14 @@ describe("the order it becomes", () => {
       payment_timing: "now", payment_method: "cash", delivery_address: null,
       items: [{ product_id: 7, quantity: 2 }],
     });
-    const later = toPayload(cart, customer({ delivery: true, address: "12 Main" }), "easy-key-2");
+    const later = toPayload(cart, customer({ delivery: true, address: "12 Main", expect: "etransfer" }), "easy-key-2");
     expect(later).toMatchObject({
       fulfillment_type: "delivery", delivery_address: "12 Main",
-      payment_timing: "later", payment_method: null,
+      payment_timing: "later", payment_method: null, expected_payment_method: "etransfer",
+    });
+    // Paid now: the method is the real one, and nothing is "expected".
+    expect(toPayload(cart, customer({ paying: "card", expect: "cash" }), "easy-key-3")).toMatchObject({
+      payment_method: "card", expected_payment_method: null,
     });
   });
 });
