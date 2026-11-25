@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Company, LedgerEntry } from "../api/types";
-import { parseAmount, unpaidBills, vendorsByOwed } from "./books";
+import { customersByOwed, parseAmount, recentEntries, unpaidBills, vendorsByOwed } from "./books";
 
 const entry = (id: number, date: string, type: "charge" | "payment", paid_on: string | null = null): LedgerEntry =>
   ({ id, entry_date: date, type, amount: "10.00", invoice_number: null, paid_on }) as LedgerEntry;
@@ -29,6 +29,25 @@ describe("bookkeeping", () => {
       company(5, "Butcher", "0.00"),
     ]);
     expect(list.map((c) => c.name)).toEqual(["Flour Mill", "Costco", "Butcher"]);
+  });
+
+  it("lists customers who owe us, most first", () => {
+    const list = customersByOwed([
+      company(1, "Costco", "120.00"),
+      company(2, "Shul kiddush", "250.00", "receivable"),
+      company(3, "Caterer", "900.00", "receivable"),
+      company(4, "Old client", "10.00", "receivable", false),
+    ]);
+    expect(list.map((c) => c.name)).toEqual(["Caterer", "Shul kiddush"]);
+  });
+
+  it("shows the newest account lines first", () => {
+    const lines = recentEntries([
+      entry(1, "2026-11-01", "charge"),
+      entry(2, "2026-11-20", "payment"),
+      entry(3, "2026-11-20", "charge"),
+    ], 2);
+    expect(lines.map((e) => e.id)).toEqual([3, 2]);
   });
 
   it("reads amounts the way people type them", () => {

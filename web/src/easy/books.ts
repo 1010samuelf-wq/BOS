@@ -17,6 +17,20 @@ export function vendorsByOwed(companies: Company[]): Company[] {
     .sort((a, b) => Number(b.balance) - Number(a.balance) || a.name.localeCompare(b.name));
 }
 
+/** Customers on account (they owe us), most owed first, then by name. */
+export function customersByOwed(companies: Company[]): Company[] {
+  return companies
+    .filter((c) => c.type === "receivable" && c.active)
+    .sort((a, b) => Number(b.balance) - Number(a.balance) || a.name.localeCompare(b.name));
+}
+
+/** The account's lines, newest first — what a person checks against their paper. */
+export function recentEntries(entries: LedgerEntry[], limit = 15): LedgerEntry[] {
+  return [...entries]
+    .sort((a, b) => b.entry_date.localeCompare(a.entry_date) || b.id - a.id)
+    .slice(0, limit);
+}
+
 /** A money amount typed on a tablet: "12", "12.5", "$12.50". Null when it isn't one. */
 export function parseAmount(text: string): string | null {
   const t = text.trim().replace(/^\$/, "");

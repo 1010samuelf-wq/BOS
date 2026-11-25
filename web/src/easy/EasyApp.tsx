@@ -14,7 +14,7 @@ import remarkGfm from "remark-gfm";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
-import type { AssistantProposal, Order, Product, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
+import type { AssistantProposal, Company, Order, Product, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
 import { stablePrefix } from "../assistant/partial";
 import { matchesSearch } from "../settings/catalogView";
 import { streamChat } from "../assistant/stream";
@@ -32,7 +32,7 @@ import {
   type Cart,
   type Customer,
 } from "./cart";
-import { parseAmount, unpaidBills, vendorsByOwed } from "./books";
+import { customersByOwed, parseAmount, recentEntries, unpaidBills, vendorsByOwed } from "./books";
 import { blankForm, changes, formOf, formProblem, toCreate, type ProductForm } from "./products";
 import { orderFromScan, type OrderStart } from "./scanned";
 import { dayLabel, groupByDay, timeOf } from "./upcoming";
@@ -542,33 +542,42 @@ function rank(o: Order): number {
 // ---------------------------------------------------------------------------
 // bookkeeping: vendor bills and expenses
 // ---------------------------------------------------------------------------
-type BooksView = { kind: "list" } | { kind: "vendor"; id: number } | { kind: "expense" };
+type BooksView =
+  | { kind: "list" }
+  | { kind: "vendor"; id: number }
+  | { kind: "customer"; id: number }
+  | { kind: "add" }
+  | { kind: "expense" };
 
 function Books({ onBack }: { onBack: () => void }) {
   const { user } = useAuth();
   const canExpense = (user?.sections ?? []).includes("reports");
   const [view, setView] = useState<BooksView>({ kind: "list" });
   const companies = useQuery({ queryKey: ["companies"], queryFn: () => api.listCompanies() });
+  const list = () => setView({ kind: "list" });
 
-  if (view.kind === "vendor") return <Vendor id={view.id} onBack={() => setView({ kind: "list" })} />;
-  if (view.kind === "expense") return <AddExpense onBack={() => setView({ kind: "list" })} />;
+  if (view.kind === "vendor") return <Vendor id={view.id} onBack={list} />;
+  if (view.kind === "customer") return <CustomerAccount id={view.id} onBack={list} />;
+  if (view.kind === "add") return <AddCompany onBack={list} onAdded={(c) =>
+    setView(c.type === "payable" ? { kind: "vendor", id: c.id } : { kind: "customer", id: c.id })} />;
+  if (view.kind === "expense") return <AddExpense onBack={list} />;
 
   const vendors = vendorsByOwed(companies.data ?? []);
+  const customers = customersByOwed(companies.data ?? []);
   return (
     <div className="easy-screen">
       <TopBar title="Bookkeeping" onBack={onBack} />
       <div className="easy-scroll">
-        {canExpense && (
-          <button className="easy-btn wide" style={{ background: "#ff7a59" }} onClick={() => setView({ kind: "expense" })}>
-            💸 Add an expense
-          </button>
-        )}
-        <h2 className="easy-day">Vendors <span>tap one to see and pay its bills</span></h2>
+        <button className="easy-btn wide" style={{ background: "#4f8cff" }} onClick={() => setView({ kind: "add" })}>
+          ➕ Add a vendor or customer
+        </button>
         {companies.isError && (
           <p className="easy-error">{errorText(companies.error)} <button className="easy-link" onClick={() => companies.refetch()}>Try again</button></p>
         )}
         {companies.isLoading && <p className="easy-wait">Loading…</p>}
-        {companies.data && vendors.length === 0 && <p className="easy-wait">No vendors yet — add them on the dashboard.</p>}
+
+        <h2 className="easy-day">🏭 We owe them <span>vendors — tap one to see and pay its bills</span></h2>
+        {companies.data && vendors.length === 0 && <p className="easy-wait">No vendors yet.</p>}
         <div className="easy-vendors">
           {vendors.map((c) => {
             const owed = Number(c.balance) > 0;
@@ -579,6 +588,138 @@ function Books({ onBack }: { onBack: () => void }) {
               </button>
             );
           })}
+        </div>
+
+        <h2 className="easy-day">🤝 They owe us <span>customers on account — tap one to record what they paid</span></h2>
+        {companies.data && customers.length === 0 && <p className="easy-wait">Nobody owes us on account.</p>}
+        <div className="easy-vendors">
+          {customers.map((c) => {
+            const owed = Number(c.balance) > 0;
+            return (
+              <button key={c.id} className="easy-vendor" onClick={() => setView({ kind: "customer", id: c.id })}>
+                <span className="easy-vendor-name">🤝 {c.name}</span>
+                <span className={owed ? "easy-owes" : "easy-paid"}>{owed ? `Owes us $${c.balance}` : "✅ Paid up"}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {canExpense && (
+          <>
+            <h2 className="easy-day">💸 Expenses <span>money spent — it shows in Reports on the day you pick</span></h2>
+            <button className="easy-btn" style={{ background: "#ff7a59", alignSelf: "flex-start" }} onClick={() => setView({ kind: "expense" })}>
+              💸 Add an expense
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AddCompany({ onBack, onAdded }: { onBack: () => void; onAdded: (c: Company) => void }) {
+  const client = useQueryClient();
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"payable" | "receivable" | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const add = useMutation({
+    mutationFn: () => api.createCompany({ name: name.trim().replace(/\s+/g, " "), type: type! }),
+    onSuccess: (c) => { client.invalidateQueries({ queryKey: ["companies"] }); onAdded(c); },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  return (
+    <div className="easy-screen">
+      <TopBar title="Add a vendor or customer" onBack={onBack} sub />
+      <div className="easy-form">
+        <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Flour Mill" autoFocus /></label>
+        <div className="easy-label">Who pays who?</div>
+        <div className="easy-choice">
+          <Choice on={type === "payable"} onClick={() => setType("payable")}>🏭 We pay them (a vendor)</Choice>
+          <Choice on={type === "receivable"} onClick={() => setType("receivable")}>🤝 They pay us (a customer on account)</Choice>
+        </div>
+        {problem && <p className="easy-error">{problem}</p>}
+        <button className="easy-btn go" disabled={add.isPending}
+          onClick={() => {
+            if (!name.trim()) setProblem("Type the name.");
+            else if (!type) setProblem("Tap who pays who.");
+            else { setProblem(null); add.mutate(); }
+          }}>
+          ✓ Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CustomerAccount({ id, onBack }: { id: number; onBack: () => void }) {
+  const client = useQueryClient();
+  const account = useQuery({ queryKey: ["company", id], queryFn: () => api.getCompany(id) });
+  const [mode, setMode] = useState<"paid" | "charge" | null>(null);
+  const [amount, setAmount] = useState("");
+  const [invoice, setInvoice] = useState("");
+  const [day, setDay] = useState(dayOf("today"));
+  const [problem, setProblem] = useState<string | null>(null);
+  const add = useMutation({
+    mutationFn: (amt: string) =>
+      api.addLedgerEntry(id, {
+        entry_date: day,
+        type: mode === "paid" ? "payment" : "charge",
+        amount: amt,
+        invoice_number: mode === "charge" ? invoice.trim() || null : null,
+      }),
+    onSuccess: () => {
+      setMode(null); setAmount(""); setInvoice(""); setProblem(null);
+      client.invalidateQueries({ queryKey: ["company", id] });
+      client.invalidateQueries({ queryKey: ["companies"] });
+    },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  const owed = Number(account.data?.balance ?? 0);
+  return (
+    <div className="easy-screen">
+      <TopBar title={account.data?.name ?? "Customer"} onBack={onBack} sub />
+      <div className="easy-scroll">
+        {account.isError && <p className="easy-error">{errorText(account.error)}</p>}
+        {account.data && (
+          <p className="easy-total">{owed > 0 ? <>They owe us <b className="easy-owes">${account.data.balance}</b></> : "✅ Paid up"}</p>
+        )}
+        {!mode ? (
+          <div className="easy-row" style={{ justifyContent: "center" }}>
+            <button className="easy-btn" style={{ background: "#2bb673" }} onClick={() => setMode("paid")}>💵 They paid us</button>
+            <button className="easy-btn" style={{ background: "#ff7a59" }} onClick={() => setMode("charge")}>➕ They owe more</button>
+          </div>
+        ) : (
+          <div className="easy-form inline">
+            <div className="easy-label">{mode === "paid" ? "💵 Money they paid us" : "➕ A new amount they owe"}</div>
+            <label>Amount<input value={amount} inputMode="decimal" placeholder="$" onChange={(e) => setAmount(e.target.value)} autoFocus /></label>
+            {mode === "charge" && (
+              <label>Invoice number<input value={invoice} onChange={(e) => setInvoice(e.target.value)} /></label>
+            )}
+            <label>Date<input type="date" value={day} onChange={(e) => setDay(e.target.value || dayOf("today"))} /></label>
+            {problem && <p className="easy-error">{problem}</p>}
+            <div className="easy-row">
+              <button className="easy-btn go" disabled={add.isPending}
+                onClick={() => {
+                  const amt = parseAmount(amount);
+                  if (!amt) setProblem("Type the amount, like 120 or 45.50.");
+                  else add.mutate(amt);
+                }}>
+                ✓ Save
+              </button>
+              <button className="easy-btn" style={{ background: "#8a8f98" }} onClick={() => { setMode(null); setProblem(null); }}>✖ Cancel</button>
+            </div>
+          </div>
+        )}
+        <h2 className="easy-day">History</h2>
+        {account.data && account.data.entries.length === 0 && <p className="easy-wait">Nothing yet.</p>}
+        <div className="easy-ledger">
+          {recentEntries(account.data?.entries ?? []).map((e) => (
+            <div key={e.id} className="easy-ledger-row">
+              <span>🗓 {dayLabel(e.entry_date)}</span>
+              <span>{e.type === "payment" ? "💵 Paid us" : `➕ Owed${e.invoice_number ? ` · ${e.invoice_number}` : ""}`}</span>
+              <b className={e.type === "payment" ? "easy-paid" : "easy-owes"}>${e.amount}</b>
+            </div>
+          ))}
         </div>
       </div>
     </div>
