@@ -8,7 +8,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
-import type { Ingredient, Product } from "../api/types";
+import type { Ingredient, Product, ProductFlag } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { LoadFailed, Loading, PageHead, Switch, Tabs, isStalled } from "../components/ui";
 import { resolveTab, visibleTabs } from "../settings/tabs";
@@ -178,9 +178,11 @@ function PhotoCell({
 
 function ProductRow({
   p, invalidate, onErr, onToggleActive, onToggleMenu, onDelete, onManagePhotos,
-  onUploadPhoto, uploadingId,
+  onUploadPhoto, uploadingId, flag,
 }: {
   p: Product;
+  /** Set when the name looks like a double or has a number in it. */
+  flag?: ProductFlag;
   invalidate: () => void;
   onErr: (e: unknown) => void;
   onToggleActive: (p: Product) => void;
@@ -195,6 +197,11 @@ function ProductRow({
   const [price, setPrice] = useState(p.price);
   const [category, setCategory] = useState(p.category ?? "");
 
+  const markOk = useMutation({
+    mutationFn: () => api.updateProduct(p.id, { name_ok: true }),
+    onSuccess: invalidate,
+    onError: onErr,
+  });
   const save = useMutation({
     mutationFn: () => api.updateProduct(p.id, {
       name: name.trim(), price: price.trim(), category: category.trim() || null,
@@ -231,7 +238,20 @@ function ProductRow({
   return (
     <tr style={{ opacity: p.active ? 1 : 0.5 }}>
       <td><PhotoCell p={p} onUpload={onUploadPhoto} onManage={onManagePhotos} uploading={uploadingId === p.id} /></td>
-      <td>{p.name}</td>
+      <td>
+        {p.name}
+        {flag && (
+          <div className="row" style={{ gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="pill" title={flag.message} style={{ background: "#fff1d6", color: "#8a4b00", fontSize: 12 }}>
+              {flag.reasons.includes("duplicate") ? "⚠️ Double?" : "🔢 Number in name"}
+            </span>
+            <button className="btn neutral sm" title={`${flag.message}. Mark the name as right.`}
+              disabled={markOk.isPending} onClick={() => markOk.mutate()}>
+              Name is fine
+            </button>
+          </div>
+        )}
+      </td>
       <td className="muted">{p.category ?? "—"}</td>
       <td className="num">${p.price}</td>
       <td>
@@ -345,10 +365,14 @@ function Products() {
     queryKey: ["products", true],
     queryFn: () => api.listProducts(true),
   });
+  // Doubles and names with a number in them, tagged on their rows.
+  const flagged = useQuery({ queryKey: ["product-flags"], queryFn: api.listProductFlags });
+  const flags = new Map((flagged.data ?? []).map((f) => [f.product_id, f]));
   // Saving a product may have introduced a category, so refresh that list too.
   const invalidate = () => {
     client.invalidateQueries({ queryKey: ["products"] });
     client.invalidateQueries({ queryKey: ["product-categories"] });
+    client.invalidateQueries({ queryKey: ["product-flags"] });
   };
 
   const [name, setName] = useState("");
@@ -467,7 +491,7 @@ function Products() {
                 </tr>
               )}
               {g.products.map((p) => (
-                <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr}
+                <ProductRow key={p.id} p={p} invalidate={invalidate} onErr={onErr} flag={flags.get(p.id)}
                   onToggleActive={(x) => toggleActive.mutate(x)}
                   onToggleMenu={(x) => toggleMenu.mutate(x)}
                   onManagePhotos={(x) => setManaging(x.id)}

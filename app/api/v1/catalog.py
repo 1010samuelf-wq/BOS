@@ -27,12 +27,14 @@ from app.schemas.catalog import (
     IngredientOut,
     IngredientUpdate,
     ProductCreate,
+    ProductFlagOut,
     ProductOut,
     ProductUpdate,
     RecipeCreate,
     RecipeOut,
     merge_categories,
 )
+from app.services import product_flags
 from app.services import photos as photos_service
 from app.services import product_photos
 from app.services import trash as trash_service
@@ -110,6 +112,22 @@ def list_product_categories(
     return merge_categories(rows)
 
 
+@router.get("/products/flags", response_model=list[ProductFlagOut])
+def product_name_flags(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_any_section("orders", "settings")),
+):
+    """Products on sale that look like a double of another, or have a number
+    in the name. Declared above /products/{product_id} like categories."""
+    return [
+        ProductFlagOut(
+            product_id=f.product_id, name=f.name, reasons=f.reasons,
+            duplicate_of=f.duplicate_of, message=f.describe(),
+        )
+        for f in product_flags.find(db)
+    ]
+
+
 @router.put("/products/{product_id}", response_model=ProductOut)
 def update_product(
     product_id: int,
@@ -120,7 +138,12 @@ def update_product(
     product = db.get(Product, product_id)
     if product is None:
         raise not_found(f"Product {product_id} not found")
-    for k, v in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # A new name hasn't been looked at: an earlier "this name is fine" was
+    # about the old one.
+    if "name" in data and data["name"] != product.name and "name_ok" not in data:
+        data["name_ok"] = False
+    for k, v in data.items():
         setattr(product, k, v)
     db.commit()
     db.refresh(product)

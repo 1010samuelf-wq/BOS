@@ -39,6 +39,7 @@ import type {
   ProductionReport,
   Recipe,
   Problem,
+  ProductFlag,
   RosterEntry,
   StaffEntry,
   SalesReport,
@@ -172,6 +173,8 @@ export const listProductsByCategory = (category: string) =>
   api<Product[]>("/products", { query: { category, active: true } });
 // Presets plus any category staff have added; also readable by cashiers.
 export const listCategories = () => api<string[]>("/products/categories");
+/** Doubles and names with a number in them (GET /products/flags). */
+export const listProductFlags = () => api<ProductFlag[]>("/products/flags");
 export const createProduct = (body: { name: string; price: string; category?: string | null; photo_url?: string | null }) =>
   api<Product>("/products", { method: "POST", body });
 export const updateProduct = (id: number, body: Partial<Product>) =>

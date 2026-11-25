@@ -14,7 +14,7 @@ import remarkGfm from "remark-gfm";
 
 import { ApiRequestError } from "../api/client";
 import * as api from "../api/endpoints";
-import type { AssistantProposal, Company, Order, Product, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
+import type { AssistantProposal, Company, Order, Product, ProductFlag, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
 import { stablePrefix } from "../assistant/partial";
 import { matchesSearch } from "../settings/catalogView";
 import { streamChat } from "../assistant/stream";
@@ -41,6 +41,9 @@ type Screen = "home" | "order" | "today" | "books" | "scan" | "products" | "ask"
 
 /** A PIN this long signs in without pressing ✓ (admin and manager PINs are 6). */
 const AUTO_PIN = 6;
+
+/** The Products filter for flagged names; can't clash with a real category. */
+const TO_CHECK = "\u0000to-check";
 
 const PEOPLE_COLORS = ["#ff7a59", "#4f8cff", "#2bb673", "#a35cff", "#ffb020", "#ff5c8a", "#14b8c4", "#8a6b4f"];
 
@@ -1005,17 +1008,27 @@ function ScannedBill({ bill, onDone }: { bill: ScannedVendorInvoice; onDone: () 
 // ---------------------------------------------------------------------------
 function Products({ onBack }: { onBack: () => void }) {
   const products = useQuery({ queryKey: ["products", true], queryFn: () => api.listProducts(true) });
+  const flagged = useQuery({ queryKey: ["product-flags"], queryFn: api.listProductFlags });
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string | null>(null);
 
+  const flags = new Map((flagged.data ?? []).map((f) => [f.product_id, f]));
   if (editing) {
-    return <ProductEditor start={editing === "new" ? null : editing} onBack={() => setEditing(null)} />;
+    return (
+      <ProductEditor
+        start={editing === "new" ? null : editing}
+        flag={editing === "new" ? undefined : flags.get(editing.id)}
+        onBack={() => setEditing(null)}
+      />
+    );
   }
   const all = products.data ?? [];
   const categories = [...new Set(all.map((p) => p.category ?? "Other"))].sort();
+  const inView = (p: Product) =>
+    category === TO_CHECK ? flags.has(p.id) : !category || (p.category ?? "Other") === category;
   const shown = all
-    .filter((p) => (!category || (p.category ?? "Other") === category) && matchesSearch(p, search))
+    .filter((p) => inView(p) && matchesSearch(p, search))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   return (
     <div className="easy-screen">
@@ -1025,11 +1038,22 @@ function Products({ onBack }: { onBack: () => void }) {
         <input type="search" value={search} placeholder="🔎 Find a product" onChange={(e) => setSearch(e.target.value)} />
       </div>
       <div className="easy-cats">
+        {flags.size > 0 && (
+          <button className={`easy-choice-btn warn${category === TO_CHECK ? " on" : ""}`} onClick={() => setCategory(TO_CHECK)}>
+            ⚠️ To check ({flags.size})
+          </button>
+        )}
         <Choice on={category === null} onClick={() => setCategory(null)}>⭐ Everything</Choice>
         {categories.map((c) => (
           <Choice key={c} on={category === c} onClick={() => setCategory(c)}>{emojiFor(c)} {c}</Choice>
         ))}
       </div>
+      {category === TO_CHECK && (
+        <div className="easy-note">
+          These look like a <b>double</b> of another product, or have a <b>number</b> in the name.
+          Tap one to fix the name, stop selling the extra one, or mark the name fine.
+        </div>
+      )}
       {products.isError && <p className="easy-error">{errorText(products.error)}</p>}
       {products.isLoading && <p className="easy-wait">Loading…</p>}
       {products.data && shown.length === 0 && <p className="easy-wait">Nothing found.</p>}
@@ -1040,6 +1064,11 @@ function Products({ onBack }: { onBack: () => void }) {
             <span className="easy-product-name">{p.name}</span>
             <span className="easy-price">${p.price}</span>
             <span className="easy-badge">{p.show_on_menu ? "🌐 On website" : "🏪 Shop only"}</span>
+            {flags.has(p.id) && (
+              <span className="easy-flag">
+                {flags.get(p.id)!.reasons.includes("duplicate") ? "⚠️ Double?" : "🔢 Number in name"}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -1047,7 +1076,7 @@ function Products({ onBack }: { onBack: () => void }) {
   );
 }
 
-function ProductEditor({ start, onBack }: { start: Product | null; onBack: () => void }) {
+function ProductEditor({ start, flag, onBack }: { start: Product | null; flag?: ProductFlag; onBack: () => void }) {
   const client = useQueryClient();
   const known = useQuery({ queryKey: ["product-categories"], queryFn: api.listCategories });
   const [product, setProduct] = useState<Product | null>(start);
@@ -1061,6 +1090,7 @@ function ProductEditor({ start, onBack }: { start: Product | null; onBack: () =>
   const refresh = () => {
     client.invalidateQueries({ queryKey: ["products"] });
     client.invalidateQueries({ queryKey: ["product-categories"] });
+    client.invalidateQueries({ queryKey: ["product-flags"] });
   };
 
   const save = useMutation({
@@ -1079,6 +1109,11 @@ function ProductEditor({ start, onBack }: { start: Product | null; onBack: () =>
       setSaved(isNew ? "Saved! Now add a photo 📷" : "Saved ✓");
       refresh();
     },
+    onError: (e) => setProblem(errorText(e)),
+  });
+  const markOk = useMutation({
+    mutationFn: () => api.updateProduct(product!.id, { name_ok: true }),
+    onSuccess: (p) => { setProduct(p); setSaved("Marked fine ✓"); refresh(); },
     onError: (e) => setProblem(errorText(e)),
   });
   const photo = useMutation({
@@ -1115,6 +1150,18 @@ function ProductEditor({ start, onBack }: { start: Product | null; onBack: () =>
           )}
         </div>
         {saved && <p className="easy-saved">✅ {saved}</p>}
+        {flag && product && !product.name_ok && product.name === flag.name && (
+          <div className="easy-note" style={{ margin: 0 }}>
+            <p style={{ margin: "0 0 10px" }}>
+              ⚠️ {flag.reasons.includes("duplicate") && <>This looks like a double of <b>{flag.duplicate_of.map((d) => d.name).join(", ")}</b>. </>}
+              {flag.reasons.includes("number") && <>The name has a number in it. </>}
+              Change the name below{flag.reasons.includes("duplicate") ? ", or switch Selling off on the extra one" : ""} — or, if it's right:
+            </p>
+            <button className="easy-btn" style={{ background: "#2bb673" }} disabled={markOk.isPending} onClick={() => markOk.mutate()}>
+              👍 The name is fine
+            </button>
+          </div>
+        )}
         <label>Name<input value={form.name} onChange={(e) => set({ name: e.target.value })} autoFocus={!product} /></label>
         <label>Price<input value={form.price} inputMode="decimal" placeholder="$" onChange={(e) => set({ price: e.target.value })} /></label>
 

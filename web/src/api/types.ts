@@ -52,6 +52,16 @@ export interface Product {
   /** Every photo, cover first. photo_url mirrors photos[0]. */
   photos: ProductPhoto[];
   photo_url: string | null;
+  /** A person checked this product's flagged name and it's meant to be that way. */
+  name_ok?: boolean;
+}
+/** A product on sale whose name needs a look: a double of another, or a number in it. */
+export interface ProductFlag {
+  product_id: number;
+  name: string;
+  reasons: ("duplicate" | "number")[];
+  duplicate_of: { id: number; name: string }[];
+  message: string;
 }
 /** A photo uploaded but not yet matched to a product. */
 export interface InboxPhoto {

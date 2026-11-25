@@ -269,6 +269,20 @@ def _website_gaps(db: Session) -> Problem | None:
     )
 
 
+def _product_names(db: Session) -> Problem | None:
+    from app.services import product_flags
+
+    flags = product_flags.find(db)
+    if not flags:
+        return None
+    return Problem(
+        "product_name_flags", "low",
+        f"{len(flags)} product name{'s' if len(flags) != 1 else ''} to check",
+        _first([f.describe() for f in flags]) + ". Fix the name, retire the double, or mark it fine.",
+        len(flags), [], "products",
+    )
+
+
 # (section the person needs, check). A check that needs the person themself
 # takes `user` too.
 _CHECKS = [
@@ -282,6 +296,7 @@ _CHECKS = [
     ("tasks", _overdue_tasks),
     ("bookkeeping", _old_invoices),
     ("settings", _website_gaps),
+    ("settings", _product_names),
 ]
 
 _ORDER = {"high": 0, "medium": 1, "low": 2}

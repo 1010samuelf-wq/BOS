@@ -141,6 +141,9 @@ input { font: inherit; }
 /* products */
 .easy-search { display: flex; gap: 12px; padding: 14px 20px 0; flex-wrap: wrap; }
 .easy-search input { flex: 1; min-width: 220px; font-size: 24px; padding: 14px 18px; border-radius: 18px; border: 3px solid #e6d8cb; }
+.easy-flag { font-size: 16px; font-weight: 800; color: #8a4b00; background: #fff1d6; border-radius: 999px; padding: 4px 10px; }
+.easy-choice-btn.warn { border-color: #ffb020; }
+.easy-choice-btn.warn.on { background: #ffb020; border-color: #ffb020; color: #2a2420; }
 .easy-badge { font-size: 16px; color: #6b5d52; font-weight: 700; }
 .easy-photo-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
 .easy-col { display: flex; flex-direction: column; gap: 12px; }

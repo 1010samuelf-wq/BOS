@@ -47,6 +47,8 @@ class ProductUpdate(BaseModel):
     active: bool | None = None
     show_on_menu: bool | None = None
     photo_url: str | None = None
+    # "This flagged name is fine." Renaming clears it unless sent again.
+    name_ok: bool | None = None
 
 
 class ProductPhotoOut(BaseModel):
@@ -69,6 +71,17 @@ class ProductOut(BaseModel):
     # The cover, kept mirroring photos[0] — see services/product_photos.py.
     photo_url: str | None
     photos: list[ProductPhotoOut] = []
+    name_ok: bool = False
+
+
+class ProductFlagOut(BaseModel):
+    """A product on sale whose name needs a look (services/product_flags.py)."""
+
+    product_id: int
+    name: str
+    reasons: list[str]  # "duplicate" | "number"
+    duplicate_of: list[dict]
+    message: str
 
 
 class PublicProductOut(BaseModel):

@@ -10,6 +10,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    false as sa_false,
     true as sa_true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -45,6 +46,11 @@ class Product(Base, TimestampMixin):
     # It's what ties a product saved under a nicer name back to its row, so the
     # list in Settings stops offering it once it's in the catalog.
     baker_name: Mapped[str | None] = mapped_column(String(300))
+    # A person looked at a flagged name (a double, or a number in it) and it's
+    # meant to be that way. Cleared on rename — see services/product_flags.py.
+    name_ok: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa_false(), nullable=False
+    )
 
     photos: Mapped[list["ProductPhoto"]] = relationship(
         back_populates="product",
