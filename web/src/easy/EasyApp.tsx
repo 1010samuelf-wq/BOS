@@ -31,8 +31,12 @@ import {
   type Cart,
   type Customer,
 } from "./cart";
+import { groupByDay, timeOf } from "./upcoming";
 
 type Screen = "home" | "order" | "today" | "clock" | "ask";
+
+/** A PIN this long signs in without pressing ✓ (admin and manager PINs are 6). */
+const AUTO_PIN = 6;
 
 const PEOPLE_COLORS = ["#ff7a59", "#4f8cff", "#2bb673", "#a35cff", "#ffb020", "#ff5c8a", "#14b8c4", "#8a6b4f"];
 
@@ -122,7 +126,7 @@ function SignIn() {
     <div className="easy easy-signin">
       <h1 className="easy-hello">Hi {who.name}! Your PIN:</h1>
       <div className="easy-dots">
-        {Array.from({ length: Math.max(4, pin.length) }).map((_, i) => (
+        {Array.from({ length: Math.max(AUTO_PIN, pin.length) }).map((_, i) => (
           <span key={i} className={i < pin.length ? "on" : ""} style={i < pin.length ? { background: who.color } : undefined} />
         ))}
       </div>
@@ -134,7 +138,13 @@ function SignIn() {
             onClick={() => {
               if (k === "⌫") setPin(pin.slice(0, -1));
               else if (k === "✓") { if (pin) void enter(pin); }
-              else if (pin.length < 8) setPin(pin + k);
+              else if (pin.length < 8) {
+                const next = pin + k;
+                setPin(next);
+                // Six digits is a whole PIN for everyone, so go straight in;
+                // a shorter one (bakers can keep four) still uses ✓.
+                if (next.length === AUTO_PIN) void enter(next);
+              }
             }}>
             {k}
           </button>
@@ -158,7 +168,7 @@ function Home({ go }: { go: (s: Screen) => void }) {
   const today = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
   const tiles: { screen: Screen; icon: string; label: string; color: string; show: boolean }[] = [
     { screen: "order", icon: "🛒", label: "New order", color: "#ff7a59", show: sections.includes("orders") },
-    { screen: "today", icon: "📋", label: "Today's orders", color: "#4f8cff", show: sections.includes("orders") },
+    { screen: "today", icon: "📋", label: "Orders", color: "#4f8cff", show: sections.includes("orders") },
     {
       screen: "clock", icon: "⏰", label: clockedIn ? "Clock out" : "Clock in",
       color: clockedIn ? "#e5484d" : "#2bb673", show: sections.includes("time"),
@@ -375,13 +385,26 @@ function TwoTap({ label, confirm, color, onConfirm, disabled }: {
   );
 }
 
+type OrdersView = "today" | "tomorrow" | "upcoming";
+
 function Today({ onBack }: { onBack: () => void }) {
   const client = useQueryClient();
-  const [which, setWhich] = useState<"today" | "tomorrow">("today");
-  const day = dayOf(which);
+  const [which, setWhich] = useState<OrdersView>("today");
+  const today = dayOf("today");
   const orders = useQuery({
-    queryKey: ["orders", "easy-day", day],
-    queryFn: () => api.listOrders({ from: day, to: day, exclude_cancelled: true, limit: 200 }),
+    queryKey: ["orders", "easy", which, today],
+    // date_field "needed": these are orders *due* on the day, not ones taken
+    // on it — the list filters on the order date unless told otherwise.
+    queryFn: () =>
+      which === "upcoming"
+        ? api.listOrders({
+            from: today, date_field: "needed", sort: "needed_asc",
+            fulfillment_status: "pending", exclude_cancelled: true, limit: 200,
+          })
+        : api.listOrders({
+            from: dayOf(which), to: dayOf(which), date_field: "needed",
+            exclude_cancelled: true, limit: 200,
+          }),
     refetchInterval: 30_000,
   });
   const [problem, setProblem] = useState<string | null>(null);
@@ -391,65 +414,86 @@ function Today({ onBack }: { onBack: () => void }) {
     onError: (e) => setProblem(errorText(e)),
   });
 
-  const list = [...(orders.data?.items ?? [])].sort((a, b) => rank(a) - rank(b));
+  const items = orders.data?.items ?? [];
+  const card = (o: Order) => <OrderCard key={o.id} o={o} busy={act.isPending} act={(fn) => act.mutate(fn)} />;
+  const empty = { today: "No orders today. 🎉", tomorrow: "No orders tomorrow.", upcoming: "Nothing coming up. 🎉" }[which];
   return (
     <div className="easy-screen">
       <TopBar title="Orders" onBack={onBack} />
       <div className="easy-choice" style={{ padding: "0 20px" }}>
         <Choice on={which === "today"} onClick={() => setWhich("today")}>📅 Today</Choice>
         <Choice on={which === "tomorrow"} onClick={() => setWhich("tomorrow")}>⏭ Tomorrow</Choice>
+        <Choice on={which === "upcoming"} onClick={() => setWhich("upcoming")}>🗓 Coming up</Choice>
       </div>
       {problem && <p className="easy-error">{problem}</p>}
       {orders.isError && (
         <p className="easy-error">{errorText(orders.error)} <button className="easy-link" onClick={() => orders.refetch()}>Try again</button></p>
       )}
       {orders.isLoading && <p className="easy-wait">Loading…</p>}
-      {orders.data && list.length === 0 && <p className="easy-wait">No orders {which}. 🎉</p>}
-      <div className="easy-orders">
-        {list.map((o) => {
-          const done = o.fulfillment_status === "fulfilled";
-          const ready = o.status === "ready";
-          const unpaid = o.paid_status === "unpaid";
-          const color = done ? "#2bb673" : ready ? "#4f8cff" : "#ff7a59";
-          return (
-            <div key={o.id} className="easy-order" style={{ borderColor: color }}>
-              <div className="easy-order-head" style={{ background: color }}>
-                <span>#{o.id} {o.client_name}</span>
-                <span>{done ? "✅ Done" : ready ? "📦 Ready" : "🥣 Not ready"}</span>
-              </div>
-              <ul>
-                {o.items.map((i) => <li key={i.id}><b>{i.quantity}×</b> {i.product_name}</li>)}
-              </ul>
-              <div className="easy-order-foot">
-                <span>{o.fulfillment_type === "delivery" ? "🚚 Delivery" : "🏪 Pickup"}</span>
-                <span className={unpaid ? "easy-owes" : "easy-paid"}>
-                  {unpaid ? `💰 Owes $${o.balance_due}` : "💵 Paid"}
-                </span>
-              </div>
-              {!done && (
-                <div className="easy-row">
-                  {!ready && (
-                    <button key="ready" className="easy-btn small" style={{ background: "#4f8cff" }} disabled={act.isPending}
-                      onClick={() => act.mutate(() => api.updateOrderStatus(o.id, "ready"))}>
-                      📦 Ready
-                    </button>
-                  )}
-                  {unpaid && (
-                    <TwoTap key="paid" label={`💵 Paid $${o.balance_due}`} confirm="Tap again: paid?" color="#2bb673"
-                      disabled={act.isPending}
-                      onConfirm={() => act.mutate(() => api.markPaid(o.id))} />
-                  )}
-                  {/* Keyed: when Ready disappears the others shift left, and an
-                      unkeyed TwoTap would be rebuilt and forget its first tap. */}
-                  <TwoTap key="done" label={o.fulfillment_type === "delivery" ? "🚚 Delivered" : "🙌 Picked up"}
-                    confirm="Tap again: done?" color="#a35cff" disabled={act.isPending}
-                    onConfirm={() => act.mutate(() => api.fulfillOrder(o.id))} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+      {orders.data && items.length === 0 && <p className="easy-wait">{empty}</p>}
+      {which === "upcoming" ? (
+        <div className="easy-days">
+          {groupByDay(items).map((g) => (
+            <section key={g.day}>
+              <h2 className="easy-day">
+                {g.label} <span>{g.orders.length} order{g.orders.length === 1 ? "" : "s"}</span>
+              </h2>
+              <div className="easy-orders">{g.orders.map(card)}</div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="easy-orders scroll">
+          {[...items]
+            .sort((a, b) => rank(a) - rank(b) || (a.needed_for_date ?? "").localeCompare(b.needed_for_date ?? ""))
+            .map(card)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrderCard({ o, busy, act }: { o: Order; busy: boolean; act: (fn: () => Promise<unknown>) => void }) {
+  const done = o.fulfillment_status === "fulfilled";
+  const ready = o.status === "ready";
+  const unpaid = o.paid_status === "unpaid";
+  const color = done ? "#2bb673" : ready ? "#4f8cff" : "#ff7a59";
+  const time = timeOf(o.needed_for_date);
+  return (
+    <div className="easy-order" style={{ borderColor: color }}>
+      <div className="easy-order-head" style={{ background: color }}>
+        <span>{time && <>🕑 {time} · </>}#{o.id} {o.client_name}</span>
+        <span>{done ? "✅ Done" : ready ? "📦 Ready" : "🥣 Not ready"}</span>
       </div>
+      <ul>
+        {o.items.map((i) => <li key={i.id}><b>{i.quantity}×</b> {i.product_name}</li>)}
+      </ul>
+      <div className="easy-order-foot">
+        <span>{o.fulfillment_type === "delivery" ? "🚚 Delivery" : "🏪 Pickup"}</span>
+        <span className={unpaid ? "easy-owes" : "easy-paid"}>
+          {unpaid ? `💰 Owes $${o.balance_due}` : "💵 Paid"}
+        </span>
+      </div>
+      {!done && (
+        <div className="easy-row">
+          {!ready && (
+            <button key="ready" className="easy-btn small" style={{ background: "#4f8cff" }} disabled={busy}
+              onClick={() => act(() => api.updateOrderStatus(o.id, "ready"))}>
+              📦 Ready
+            </button>
+          )}
+          {unpaid && (
+            <TwoTap key="paid" label={`💵 Paid $${o.balance_due}`} confirm="Tap again: paid?" color="#2bb673"
+              disabled={busy}
+              onConfirm={() => act(() => api.markPaid(o.id))} />
+          )}
+          {/* Keyed: when Ready disappears the others shift left, and an
+              unkeyed TwoTap would be rebuilt and forget its first tap. */}
+          <TwoTap key="done" label={o.fulfillment_type === "delivery" ? "🚚 Delivered" : "🙌 Picked up"}
+            confirm="Tap again: done?" color="#a35cff" disabled={busy}
+            onConfirm={() => act(() => api.fulfillOrder(o.id))} />
+        </div>
+      )}
     </div>
   );
 }
