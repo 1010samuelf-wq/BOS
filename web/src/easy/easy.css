@@ -183,3 +183,12 @@ input { font: inherit; }
   .easy-pad { grid-template-columns: repeat(3, 90px); }
   .easy-pad button { height: 80px; }
 }
+
+/* The flyer: on screen a preview inside the app; on paper only the sheets.
+   The app is one screen tall with its own scrolling box, which on paper
+   would clip everything after the first sheet — so it flows instead. */
+.easy-brochure { align-items: stretch; }
+@media print {
+  .easy-screen, .easy-scroll { height: auto !important; overflow: visible !important; display: block !important; padding: 0 !important; }
+  body { background: #fff; }
+}

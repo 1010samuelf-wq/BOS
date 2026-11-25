@@ -8,11 +8,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import * as api from "../api/endpoints";
-import type { PublicProduct } from "../api/types";
 import { LoadFailed, Loading, PageHead, isStalled } from "../components/ui";
-import { flyerCategories, flyerPages, flyerPrice } from "../flyer/flyer";
-
-const WEBSITE = "justcakeskosher.com";
+import { flyerCategories, flyerPages } from "../flyer/flyer";
+import FlyerPage from "../flyer/FlyerPage";
 
 export default function Flyers() {
   const products = useQuery({
@@ -85,54 +83,5 @@ export default function Flyers() {
         </>
       )}
     </div>
-  );
-}
-
-function FlyerPage({
-  category, items, page, pages, phone, address, date,
-}: {
-  category: string;
-  items: PublicProduct[];
-  page: number;
-  pages: number;
-  phone: string | null;
-  address: string | null;
-  date: string;
-}) {
-  return (
-    <section className="flyer-page" aria-label={`${category} flyer, page ${page}`}>
-      <div className="flyer-band" />
-      <div className="flyer-body">
-      <header className="flyer-head">
-        <img src="/logo.png" alt="Just Cake" className="flyer-logo" />
-        <h1 className="flyer-title">{category}</h1>
-        <div className="flyer-rule" />
-        {pages > 1 && <div className="flyer-pageno">Page {page} of {pages}</div>}
-      </header>
-
-      <div className={`flyer-grid n${Math.min(items.length, 3)}`}>
-        {items.map((p) => (
-          <div key={p.id} className="flyer-item">
-            {p.photo_url ? (
-              <img src={p.photo_url} alt={p.name} className="flyer-photo" />
-            ) : (
-              <div className="flyer-photo flyer-nophoto">🍰</div>
-            )}
-            <div className="flyer-name">{p.name}</div>
-            <div className="flyer-price">{flyerPrice(p.price)}</div>
-          </div>
-        ))}
-      </div>
-
-      <footer className="flyer-foot">
-        <div className="flyer-contact">
-          {phone && <span>{phone}</span>}
-          {address && <span>{address}</span>}
-          <span>{WEBSITE}</span>
-        </div>
-        <div className="flyer-date">Prices as of {date}</div>
-      </footer>
-      </div>
-    </section>
   );
 }

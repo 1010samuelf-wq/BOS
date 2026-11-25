@@ -35,10 +35,34 @@ export function flyerCategories(products: PublicProduct[]): FlyerCategory[] {
 export function flyerPages(products: PublicProduct[], category: string, perPage = PER_PAGE): PublicProduct[][] {
   const mine = products
     .filter((p) => categoryOf(p) === category)
-    .sort((a, b) => a.name.localeCompare(b.name));
+    // Number-aware: "Cake 4" before "Cake 39", "6 Pack" before "12 Pack".
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
   const pages: PublicProduct[][] = [];
   for (let i = 0; i < mine.length; i += perPage) pages.push(mine.slice(i, i + perPage));
   return pages;
+}
+
+/** Printed at the bottom of every flyer sheet. */
+export const WEBSITE = "justcakeskosher.com";
+
+/** The easy app's brochure: 4 × 3 on a Letter page. */
+export const BROCHURE_PER_PAGE = 12;
+
+export interface BrochurePage {
+  category: string;
+  items: PublicProduct[];
+  /** Page within this category, and how many it has. */
+  page: number;
+  pages: number;
+}
+
+/** Every category in one document, each starting on its own sheet, in the
+ *  same order and A–Z as the single-category flyers. */
+export function brochurePages(products: PublicProduct[], perPage = BROCHURE_PER_PAGE): BrochurePage[] {
+  return flyerCategories(products).flatMap(({ category }) => {
+    const pages = flyerPages(products, category, perPage);
+    return pages.map((items, i) => ({ category, items, page: i + 1, pages: pages.length }));
+  });
 }
 
 /** "$48" for whole dollars, "$5.50" otherwise — cleaner on a flyer. */

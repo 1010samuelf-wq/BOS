@@ -17,6 +17,8 @@ import * as api from "../api/endpoints";
 import type { AssistantProposal, Company, Order, Product, ProductFlag, ScannedOrder, ScannedVendorInvoice, ScanResult } from "../api/types";
 import { stablePrefix } from "../assistant/partial";
 import { matchesSearch } from "../settings/catalogView";
+import { brochurePages } from "../flyer/flyer";
+import FlyerPage from "../flyer/FlyerPage";
 import { streamChat } from "../assistant/stream";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -1010,10 +1012,12 @@ function Products({ onBack }: { onBack: () => void }) {
   const products = useQuery({ queryKey: ["products", true], queryFn: () => api.listProducts(true) });
   const flagged = useQuery({ queryKey: ["product-flags"], queryFn: api.listProductFlags });
   const [editing, setEditing] = useState<Product | "new" | null>(null);
+  const [showFlyer, setShowFlyer] = useState(false);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string | null>(null);
 
   const flags = new Map((flagged.data ?? []).map((f) => [f.product_id, f]));
+  if (showFlyer) return <Brochure onBack={() => setShowFlyer(false)} />;
   if (editing) {
     return (
       <ProductEditor
@@ -1035,6 +1039,7 @@ function Products({ onBack }: { onBack: () => void }) {
       <TopBar title="Products" onBack={onBack} />
       <div className="easy-search">
         <button className="easy-btn go" onClick={() => setEditing("new")}>➕ New product</button>
+        <button className="easy-btn" style={{ background: "#8a6b4f" }} onClick={() => setShowFlyer(true)}>📰 Flyer</button>
         <input type="search" value={search} placeholder="🔎 Find a product" onChange={(e) => setSearch(e.target.value)} />
       </div>
       <div className="easy-cats">
@@ -1111,6 +1116,30 @@ function ProductEditor({ start, flag, onBack }: { start: Product | null; flag?: 
     },
     onError: (e) => setProblem(errorText(e)),
   });
+  const [removed, setRemoved] = useState<string | null>(null);
+  const remove = useMutation({
+    // Never-sold products are deleted (to the Deleted page). One that's on an
+    // order can't be — the order needs it — so it's taken off sale instead.
+    mutationFn: async () => {
+      try {
+        await api.deleteProduct(product!.id);
+        return "removed";
+      } catch (e) {
+        if (e instanceof ApiRequestError && e.code === "product_in_use") {
+          await api.updateProduct(product!.id, { active: false });
+          return "retired";
+        }
+        throw e;
+      }
+    },
+    onSuccess: (how) => {
+      refresh();
+      setRemoved(how === "removed"
+        ? "Removed. It's on the dashboard's Deleted page if you need it back."
+        : "It's been sold before, so it was taken off sale instead. It can be put back from the dashboard's Deleted page.");
+    },
+    onError: (e) => setProblem(errorText(e)),
+  });
   const markOk = useMutation({
     mutationFn: () => api.updateProduct(product!.id, { name_ok: true }),
     onSuccess: (p) => { setProduct(p); setSaved("Marked fine ✓"); refresh(); },
@@ -1128,6 +1157,16 @@ function ProductEditor({ start, flag, onBack }: { start: Product | null; flag?: 
   };
 
   const categories = [...new Set([...(known.data ?? []), ...(form.category ? [form.category] : [])])];
+  if (removed) {
+    return (
+      <div className="easy-done">
+        <div className="easy-big-icon">🗑</div>
+        <h1>{product?.name}</h1>
+        <p>{removed}</p>
+        <button className="easy-btn" style={{ background: "#4f8cff" }} onClick={onBack}>← Back to products</button>
+      </div>
+    );
+  }
   return (
     <div className="easy-screen">
       <TopBar title={product ? product.name : "New product"} onBack={onBack} sub />
@@ -1192,6 +1231,12 @@ function ProductEditor({ start, flag, onBack }: { start: Product | null; flag?: 
           }}>
           {save.isPending ? "Saving…" : product ? "✓ Save changes" : "✓ Save new product"}
         </button>
+        {product && (
+          <div className="easy-row" style={{ marginTop: 12 }}>
+            <TwoTap label="🗑 Remove this product" confirm="Tap again to remove it" color="#e5484d"
+              disabled={remove.isPending} onConfirm={() => remove.mutate()} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1204,6 +1249,45 @@ function Toggle({ on, onChange, yes, no }: { on: boolean; onChange: (v: boolean)
       <span className="easy-knob" />
       <span>{on ? yes : no}</span>
     </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// the flyer: every category, twelve to a page, to share with customers
+// ---------------------------------------------------------------------------
+function Brochure({ onBack }: { onBack: () => void }) {
+  // The website's own feed: what's on sale AND switched on for the website,
+  // so a shop-only item never ends up in a customer's hands. Re-read on open,
+  // so the flyer is never older than the catalog.
+  const products = useQuery({ queryKey: ["public-products"], queryFn: api.listPublicProducts, refetchOnMount: "always" });
+  const profile = useQuery({ queryKey: ["business"], queryFn: api.getBusinessProfile });
+  const pages = brochurePages(products.data ?? []);
+  const date = new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
+  return (
+    <div className="easy-screen flyers-root">
+      <div className="no-print"><TopBar title="Flyer" onBack={onBack} sub /></div>
+      <div className="easy-scroll easy-brochure">
+        <div className="no-print easy-note" style={{ margin: 0 }}>
+          📰 Made from the products switched on for the website, by category, 12 to a page. It
+          updates by itself. <b>Export</b> saves it as a PDF you can send to customers.
+        </div>
+        {pages.length > 0 && (
+          <button className="no-print easy-btn wide go" onClick={() => window.print()}>⬇️ Export / share as PDF</button>
+        )}
+        {products.isError && <p className="easy-error no-print">{errorText(products.error)}</p>}
+        {products.isLoading && <p className="easy-wait no-print">Loading…</p>}
+        {products.data && pages.length === 0 && (
+          <p className="easy-wait no-print">Nothing is on the website yet — switch products on to put them on the flyer.</p>
+        )}
+        <div className="flyer-stack">
+          {pages.map((pg) => (
+            <FlyerPage key={`${pg.category}-${pg.page}`} category={pg.category} items={pg.items}
+              page={pg.page} pages={pg.pages} date={date} dense
+              phone={profile.data?.business_phone ?? null} address={profile.data?.business_address ?? null} />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

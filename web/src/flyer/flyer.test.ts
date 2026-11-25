@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PublicProduct } from "../api/types";
-import { UNCATEGORISED, flyerCategories, flyerPages, flyerPrice } from "./flyer";
+import { UNCATEGORISED, brochurePages, flyerCategories, flyerPages, flyerPrice } from "./flyer";
 
 const p = (id: number, name: string, category: string | null, price = "10.00"): PublicProduct => ({
   id, name, price, category, photo_url: null, photos: [],
@@ -46,5 +46,27 @@ describe("prices on paper", () => {
     expect(flyerPrice("48.00")).toBe("$48");
     expect(flyerPrice("5.50")).toBe("$5.50");
     expect(flyerPrice("5.5")).toBe("$5.50");
+  });
+});
+
+describe("the brochure", () => {
+  it("puts every category in, each starting its own page, twelve to a page", () => {
+    const products = [
+      ...Array.from({ length: 14 }, (_, i) => p(i + 1, `Cake ${String(i + 1).padStart(2, "0")}`, "Cakes")),
+      p(100, "Challah", "Bread"),
+      p(101, "Rum truffles", null),
+    ];
+    const pages = brochurePages(products);
+    expect(pages.map((pg) => [pg.category, pg.items.length, pg.page, pg.pages])).toEqual([
+      ["Bread", 1, 1, 1],
+      ["Cakes", 12, 1, 2],
+      ["Cakes", 2, 2, 2],
+      [UNCATEGORISED, 1, 1, 1],
+    ]);
+    expect(pages[1].items[0].name).toBe("Cake 01");
+  });
+
+  it("is empty when nothing is on the website", () => {
+    expect(brochurePages([])).toEqual([]);
   });
 });
